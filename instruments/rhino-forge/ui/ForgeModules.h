@@ -40,7 +40,7 @@ inline std::vector<Row> completeFxRows(std::vector<Row> rows)
             controls.push_back({id("Level"), "LEVEL"});
             controls.push_back({id("Bypass"), "BYP", Style::chip});
         }
-        rows.push_back({1, std::move(controls), rackCount, fxDisplayWeight, 3});
+        rows.push_back({1, std::move(controls), rackCount});
     }
     return rows;
 }
@@ -160,7 +160,7 @@ inline std::vector<Row> oscillatorRows(const char* mode, const char* octave, con
         // title it sits with the other answer to "what am I looking at", and
         // the display gets its strip back. Serum puts it in the same place
         // (p. 104).
-        {headerSelectorHeight, {{mode, "MODE", Style::selector}}, 1, 0, 0, Seat::header},
+        {headerSelectorHeight, {{mode, "MODE", Style::selector}}, 1, Seat::header},
         {16, {{octave, "OCT", Style::stepper}, {semitone, "SEMI", Style::stepper},
               {fine, "FINE", Style::stepper}}},
         {27, {wt(position, "POSITION"), sp(scan, "SCAN"),
@@ -184,7 +184,7 @@ inline std::vector<Row> oscillatorRows(const char* mode, const char* octave, con
         // what it is putting them on; a pair of numeric fields beside them was
         // the same setting twice. See displayParameters.
         {spectralStripHeight, {strip(loopMode, "LOOP", Style::selector, 1)},
-         1, 0, 0, Seat::displayFoot, mode, static_cast<int>(OscMode::spectral)},
+         1, Seat::displayFoot, mode, static_cast<int>(OscMode::spectral)},
         // The table the oscillator reads, along the top edge of its tube: a
         // field that steps through the wavetables on disk and opens them as a
         // menu of their folders. It names the picture under it, as the
@@ -198,7 +198,7 @@ inline std::vector<Row> oscillatorRows(const char* mode, const char* octave, con
         // field of its own here (see tableStripRow); the row is declared so the
         // picture is carved around it by the same walk as every other strip,
         // and held to the same rules by the layout test.
-        {tableStripHeight, {}, 1, 0, 0, Seat::displayTop, mode, static_cast<int>(OscMode::wavetable)}};
+        {tableStripHeight, {}, 1, Seat::displayTop, mode, static_cast<int>(OscMode::wavetable)}};
 }
 
 // The parameters a module's display is the control for, rather than a cell in
@@ -418,12 +418,12 @@ inline const std::vector<Module>& modules()
         // keyboard rather than a letter.
         {"filter", "FILTER", "", "filterEnable", false, Display::filter, 0, 20, 4, false,
          {{displaySelectorHeight, {{"filterType", "TYPE", Style::selector}},
-           1, 0, 0, Seat::displayTop},
+           1, Seat::displayTop},
           {displayButtonHeight, {{"routeA", "A", Style::chip}, {"routeB", "B", Style::chip},
                                  {"routeC", "C", Style::chip}, {"routeSub", "S", Style::chip},
                                  {"routeNoise", "N", Style::chip},
                                  {"filterKeyTrack", "KEY", Style::chip}},
-           1, 0, 0, Seat::displayFoot},
+           1, Seat::displayFoot},
           {50, {{"cutoff", "CUTOFF"}, {"resonance", "RES"}, {"drive", "DRIVE"}}},
           {50, {{"filterFreq", "FREQ"}, {"filterPan", "PAN"}, {"filterMix", "MIX"}}}},
          0, everyPageBut(Page::mix, Page::fx), 1, 0, 0, filterDisplayPercent},
@@ -574,7 +574,7 @@ inline const std::vector<Module>& modules()
                 {"fx3s1Knob4", "KNOB 4"}, {"fx3s1Knob5", "KNOB 5"}, {"fx3s1Knob6", "KNOB 6"},
                 {"fx3s1Mix", "MIX"}, {"fx3s1Level", "LEVEL"},
                 {"fx3s1Bypass", "BYP", Style::chip}},
-           rackCount, fxDisplayWeight, 3},
+           rackCount},
           {25, {{"fx1s2Type", "TYPE", Style::plate, nullptr, 2},
                 {"fx1s2ModeA", "MODE", Style::selector, nullptr, 2},
                 {"fx1s2ModeB", "MODE", Style::selector, nullptr, 2},
@@ -598,7 +598,7 @@ inline const std::vector<Module>& modules()
                 {"fx3s2Knob4", "KNOB 4"}, {"fx3s2Knob5", "KNOB 5"}, {"fx3s2Knob6", "KNOB 6"},
                 {"fx3s2Mix", "MIX"}, {"fx3s2Level", "LEVEL"},
                 {"fx3s2Bypass", "BYP", Style::chip}},
-           rackCount, fxDisplayWeight, 3},
+           rackCount},
           {25, {{"fx1s3Type", "TYPE", Style::plate, nullptr, 2},
                 {"fx1s3ModeA", "MODE", Style::selector, nullptr, 2},
                 {"fx1s3ModeB", "MODE", Style::selector, nullptr, 2},
@@ -622,7 +622,7 @@ inline const std::vector<Module>& modules()
                 {"fx3s3Knob4", "KNOB 4"}, {"fx3s3Knob5", "KNOB 5"}, {"fx3s3Knob6", "KNOB 6"},
                 {"fx3s3Mix", "MIX"}, {"fx3s3Level", "LEVEL"},
                 {"fx3s3Bypass", "BYP", Style::chip}},
-           rackCount, fxDisplayWeight, 3},
+           rackCount},
           {25, {{"fx1s4Type", "TYPE", Style::plate, nullptr, 2},
                 {"fx1s4ModeA", "MODE", Style::selector, nullptr, 2},
                 {"fx1s4ModeB", "MODE", Style::selector, nullptr, 2},
@@ -646,7 +646,7 @@ inline const std::vector<Module>& modules()
                 {"fx3s4Knob4", "KNOB 4"}, {"fx3s4Knob5", "KNOB 5"}, {"fx3s4Knob6", "KNOB 6"},
                 {"fx3s4Mix", "MIX"}, {"fx3s4Level", "LEVEL"},
                 {"fx3s4Bypass", "BYP", Style::chip}},
-           rackCount, fxDisplayWeight, 3}
+           rackCount}
          }),
          0, only(Page::fx), 1, 0, 0, 0, fxBankWidth},
 

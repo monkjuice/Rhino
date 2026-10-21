@@ -432,8 +432,8 @@ void fxDisplaySuite()
     using rhino::forge::FxType;
 
     // Every active strip keeps its common controls. A type with only three
-    // named knobs still needs MIX, LEVEL and BYP; hiding unused general knobs
-    // must not make the common tail of the row disappear with them.
+    // named knobs still needs MIX, LEVEL and its card, which is its bypass;
+    // hiding unused general knobs must not make the frame disappear with them.
     {
         rhino::forge::Processor processor;
         const std::array<FxType, 6> types {FxType::chorus, FxType::distortion, FxType::reverb,
@@ -447,15 +447,22 @@ void fxDisplaySuite()
             if (auto* tab = dynamic_cast<rhino::forge::ui::PageTab*>(child))
                 if (tab->getButtonText() == "FX" && tab->onClick) tab->onClick();
 
-        auto mixes = 0, bypasses = 0;
+        auto mixes = 0, cards = 0, chips = 0;
+        ui::FxPlate* chorusCard = nullptr;
         const auto countControls = [&] (auto&& self, juce::Component& parent) -> void
         {
             for (auto* child : parent.getChildren())
             {
                 if (auto* label = dynamic_cast<juce::Label*>(child))
                     if (label->isVisible() && label->getText() == "MIX") ++mixes;
-                if (auto* chip = dynamic_cast<rhino::forge::ui::ToggleChip*>(child))
-                    if (chip->isVisible() && chip->getButtonText() == "BYP") ++bypasses;
+                if (auto* plate = dynamic_cast<ui::FxPlate*>(child))
+                    if (plate->isVisible())
+                    {
+                        ++cards;
+                        if (plate->type == static_cast<int>(FxType::chorus)) chorusCard = plate;
+                    }
+                if (auto* chip = dynamic_cast<ui::ToggleChip*>(child))
+                    if (chip->isVisible() && chip->getButtonText() == "BYP") ++chips;
                 self(self, *child);
             }
         };
@@ -475,8 +482,23 @@ void fxDisplaySuite()
                 "the rack control test includes a row crossing the viewport edge");
         require(mixes == visible,
                 "every fully or partly visible effect strip keeps its common MIX control");
-        require(bypasses == visible,
-                "every fully or partly visible effect strip keeps its common bypass control");
+        require(cards == visible,
+                "every fully or partly visible effect strip keeps its identity card, which is its bypass");
+        require(chips == 0, "a rack slot's bypass is its card, not a chip beside it");
+
+        // The card is the switch: a click bypasses the effect and the card
+        // goes dark; a second click brings it back and lights it again.
+        require(chorusCard != nullptr && chorusCard->lit, "an effect that is in has a lit card");
+        if (chorusCard != nullptr && chorusCard->onPlateClick)
+        {
+            const auto bypassId = rhino::forge::fxParameterId(0, 0, "Bypass");
+            chorusCard->onPlateClick();
+            require(value(processor, bypassId.toRawUTF8()) >= 0.5f, "clicking an effect's card bypasses it");
+            require(!chorusCard->lit, "a bypassed effect's card goes dark");
+            chorusCard->onPlateClick();
+            require(value(processor, bypassId.toRawUTF8()) < 0.5f, "clicking it again brings the effect back in");
+            require(chorusCard->lit, "and lights its card again");
+        }
     }
 
     // The list and the rack scroll separately. A full chain is eight rows of
@@ -824,6 +846,9 @@ void fxDisplaySuite()
         rhino::forge::Processor processor;
         for (const auto& module : rhino::forge::ui::modules())
         {
+            // The rack's fields are laid out per type and are checked in its
+            // strip sweep (tests/ForgeTestsLayout.cpp).
+            if (juce::String(module.id) == "fx") continue;
             const auto area = rhino::forge::ui::moduleBounds(tightest, module);
             for (int r = 0; r < static_cast<int>(module.rows.size()); ++r)
             {
@@ -991,30 +1016,24 @@ void fxDisplaySuite()
         }
     }
 
-    // --- The strip they are drawn in -------------------------------------------
+    // --- The pictures they are drawn in -----------------------------------------
     //
-    // Every rack row reserves one, and nothing else on the panel does. A module
-    // that grew a display strip without meaning to would be caught here.
+    // Every type's strip has a picture, at the size the panel opens at; where
+    // they stand is the type's own and is swept in the layout tests.
     {
         const auto bounds = juce::Rectangle<int>(0, 0, rhino::forge::ui::defaultPanelWidth,
                                                  rhino::forge::ui::defaultPanelHeight);
-        auto strips = 0;
-        for (const auto& module : rhino::forge::ui::modules())
+        const auto strip = juce::Rectangle<int>(0, 0, 1174, rhino::forge::ui::fxSlotHeight);
+        for (int type = 1; type < rhino::forge::fxTypeCount; ++type)
         {
-            const auto area = rhino::forge::ui::moduleBounds(bounds, module);
-            for (int r = 0; r < static_cast<int>(module.rows.size()); ++r)
-            {
-                const auto strip = rhino::forge::ui::rowDisplayBounds(area, module, r);
-                if (strip.isEmpty()) continue;
-                ++strips;
-                require(strip.getWidth() > 40 && strip.getHeight() > 20,
-                        "a display strip is big enough to draw a curve in");
-                require(juce::String(module.id) == "fx",
-                        "only the rack reserves a strip of a row for a display");
-            }
+            const auto layout = rhino::forge::ui::fxStripLayout(type, strip,
+                                                                rhino::forge::ui::fxKnobSizesFor(bounds));
+            require(layout.wellCount >= 1, "every type's strip draws a picture");
+            for (int well = 0; well < layout.wellCount; ++well)
+                require(layout.wells[static_cast<size_t>(well)].area.getWidth() > 40
+                            && layout.wells[static_cast<size_t>(well)].area.getHeight() > 20,
+                        "a picture is big enough to draw a curve in");
         }
-        require(strips == rhino::forge::fxSlotCount,
-                "every slot of the rack has a display strip and no row has two");
     }
 }
 }

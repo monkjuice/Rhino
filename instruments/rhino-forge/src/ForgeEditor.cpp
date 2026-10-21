@@ -455,12 +455,21 @@ void Editor::buildModules()
                     control->plate = std::make_unique<ui::FxPlate>();
                     control->plate->setTooltip(ui::tooltipFor(declared.id));
                     auto* held = control.get();
+                    // The card is the slot's bypass switch. It writes the same
+                    // parameter the list's power glyph and the host do, and
+                    // follows it back in applyEnableStates.
                     control->plate->onPlateClick = [this, held]
                     {
                         int rack = 0, slot = 0;
-                        if (fxControlAt(held->id, rack, slot)) fxSelectedSlot = slot;
-                        showFxTypeMenu(*held);
-                        repaintFxDisplays();
+                        if (!fxControlAt(held->id, rack, slot)) return;
+                        fxSelectedSlot = slot;
+                        setFxSlotBypassed(rack, slot, !fxOn(value(fxParameterId(rack, slot, "Bypass"))));
+                        applyEnableStates();
+                    };
+                    control->plate->onPlateMenu = [this, held]
+                    {
+                        int rack = 0, slot = 0;
+                        if (fxControlAt(held->id, rack, slot)) showControlMenu(fxParameterId(rack, slot, "Bypass"));
                     };
                     // The slider is never shown and never added as a child: it
                     // is here for its attachment, which is what a host reads
@@ -638,6 +647,17 @@ void Editor::buildModules()
         moduleUis.push_back(std::move(module));
     }
     buildBankButtons();
+
+    // Every rack control by rack, slot and role, for the shelf painter.
+    for (auto& module : moduleUis)
+        if (isFxModule(*module.descriptor))
+            for (auto& control : module.controls)
+            {
+                int rack = 0, slot = 0;
+                if (!fxControlAt(control->id, rack, slot)) continue;
+                fxControls[static_cast<size_t>((rack * fxSlotCount + slot) * ui::fxRoleCount
+                                               + ui::fxRoleIndex(ui::fxRoleOf(control->index)))] = control.get();
+            }
 }
 
 // A module declared in banks carries one numbered button per bank in its

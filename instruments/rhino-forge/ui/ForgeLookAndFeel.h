@@ -234,7 +234,13 @@ public:
         const auto centre = knob.getCentre();
         const auto radius = knob.getWidth() * 0.5f;
         const auto angle = juce::jmap(position, startAngle, endAngle);
-        const auto accent = slider.findColour(juce::Slider::rotarySliderFillColourId);
+        const auto& properties = slider.getProperties();
+        // A rack knob that is not its strip's hero wears its type's colour
+        // turned down: the colour is spent on the one knob the strip is about.
+        // See ForgeFxStrips.h.
+        const auto accent = static_cast<bool>(properties.getWithDefault("fxDim", false))
+            ? slider.findColour(juce::Slider::rotarySliderFillColourId).interpolatedWith(mutedText, 0.42f)
+            : slider.findColour(juce::Slider::rotarySliderFillColourId);
         const auto enabled = slider.isEnabled();
         const auto polar = [centre] (float distance, float polarAngle)
         {
@@ -291,6 +297,26 @@ public:
             }
             g.setColour(plateEdgeLit.withAlpha(enabled ? 0.55f : 0.18f));
             g.strokePath(ticks, juce::PathStrokeType(1.0f));
+
+            // A strip's hero: its collar lit in the type's colour from the
+            // start of the travel to where it points, over a faint track of the
+            // whole travel. Inside the collar's edge, so the modulation ring
+            // outside it is still the only thing at that radius.
+            if (static_cast<bool>(properties.getWithDefault("fxHero", false)))
+            {
+                const auto rim = radius * 0.785f;
+                juce::Path track, lit;
+                track.addCentredArc(centre.x, centre.y, rim, rim, 0.0f, startAngle, endAngle, true);
+                g.setColour(accent.withAlpha(enabled ? 0.18f : 0.06f));
+                g.strokePath(track, juce::PathStrokeType(2.0f));
+                if (angle - startAngle > 0.01f)
+                {
+                    lit.addCentredArc(centre.x, centre.y, rim, rim, 0.0f, startAngle, angle, true);
+                    g.setColour(accent.withAlpha(enabled ? 0.95f : 0.3f));
+                    g.strokePath(lit, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved,
+                                                           juce::PathStrokeType::rounded));
+                }
+            }
 
             // The cap. A machined rim lit along its top edge and black along its
             // foot — the same bevel a plate has, bent into a circle — with an
@@ -365,7 +391,6 @@ public:
         // Live is asked of the panel rather than inferred from the offset: an
         // LFO passes through zero twice a cycle, and a marker that blinked out
         // each time it did would read as a fault rather than as a crossing.
-        const auto& properties = slider.getProperties();
         const auto depth = static_cast<float>(properties.getWithDefault("modDepth", 0.0));
         const auto offset = static_cast<float>(properties.getWithDefault("modOffset", 0.0));
         const auto live = static_cast<bool>(properties.getWithDefault("modLive", false));

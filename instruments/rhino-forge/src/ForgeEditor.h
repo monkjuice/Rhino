@@ -79,6 +79,9 @@ private:
         std::unique_ptr<ui::MacroName> macroName;
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
         std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> buttonAttachment;
+        // A rack control's caption is shown only where its slot's strip gives
+        // it a place. Decided at layout, honoured by applyEnableStates.
+        bool fxCaptionShown = true;
     };
 
     // One of these per declared module. Controls are held by pointer because
@@ -338,9 +341,10 @@ private:
     // is the part that works out which slot and which knob is being asked
     // about. Everything that is not a rack knob answers true.
     bool fxKnobLive(const Control&) const;
-    // The list of types, opened by clicking a slot's plate. This is how a slot
-    // is filled and emptied.
-    void showFxTypeMenu(Control&, juce::Rectangle<int> target = {});
+    // The list of types, opened by the list's add action over `target`. This
+    // is how an empty slot is filled; a filled one is emptied by the list's
+    // remove action, and is never changed into another type in place.
+    void showFxTypeMenu(Control&, juce::Rectangle<int> target);
     // Sets one slot's knobs and its wet/dry to what its type opens on. Called
     // only when a type is chosen on the panel.
     void initialiseFxSlot(int rack, int slot);
@@ -437,6 +441,8 @@ private:
     float markerDragFrom = 0.0f, markerDragLoopStart = 0.0f, markerDragLoopEnd = 1.0f;
     // The shelves the slots sit on, drawn behind their controls.
     void paintFxShelves(juce::Graphics&, juce::Rectangle<int> area, const ui::Module&);
+    void paintFxFrame(juce::Graphics&, const ui::FxStrip&, int rack, int slot, bool bypassed);
+    void paintFxReadings(juce::Graphics&, const ui::FxStrip&, int rack, int slot, int type, bool bypassed);
     // The compact signal-flow overview at the left of the rack. It is a
     // painted view of the same slot parameters, not another component
     // tree or a cached copy of the rack.
@@ -473,6 +479,10 @@ private:
     // The strip a rack slot is shown in, laid out for the type it holds.
     ui::FxStrip fxStripFor(juce::Rectangle<int> moduleArea, const ui::Module&, int rack, int slot,
                            const ui::FxKnobSizes&) const;
+    // A rack slot's control in a given role, found without walking the panel:
+    // the shelf painter asks for every visible slot's readings every frame.
+    Control* fxControl(int rack, int slot, ui::FxRole) const;
+    std::array<Control*, rackCount * fxSlotCount * ui::fxRoleCount> fxControls {};
     void placeFxControl(Control&, const ui::FxSpot&, juce::Point<int> offset);
     int fxActiveSlotCount(int rack) const;
     int fxDisplayRow(int rack, int slot) const;

@@ -438,51 +438,112 @@ private:
     float wheelTravel = 0.0f;
 };
 
-// One slot's name plate: the type's mark, its name, and the colour both are in.
-// It is the control that sets the type as well as the thing that says what it
-// is — clicking it opens the list, which is how a rack slot is filled
-// everywhere else that has one, and it means a slot's identity and its one
-// structural choice are the same object rather than a badge beside a field.
+// The red a bypassed effect's power light turns, in the list and on its card.
+// The same red whatever the effect, so a bypass reads as a bypass rather than
+// as one more type colour.
+inline const juce::Colour fxBypassedColour {0xffff6f4a};
+
+// The power glyph, centred in `box`: a ring and a stem from its top to its
+// middle. The list draws it beside every row and the card in its corner, so
+// the two read as the same switch.
+inline void drawFxPowerGlyph(juce::Graphics& g, juce::Rectangle<float> box, juce::Colour colour)
+{
+    const auto centre = box.getCentre();
+    const auto size = juce::jmin(box.getWidth(), box.getHeight());
+    g.setColour(colour);
+    g.drawEllipse(juce::Rectangle<float>(size, size).withCentre(centre), 1.25f);
+    g.fillRect(centre.x - 0.75f, centre.y - size * 7.0f / 11.0f, 1.5f, size * 7.0f / 11.0f);
+}
+
+// One slot's identity card: the type's mark, its name, and the switch that
+// bypasses it. Clicking anywhere on it takes the effect out or puts it back:
+// the card is lit while the effect is heard and dark while it is bypassed,
+// with the list's power glyph in its corner saying the same thing.
+//
+// It no longer chooses the type. Effects are added and removed in the list;
+// what is in a slot is not something to change by accident while reaching for
+// a knob beside it.
 class FxPlate final : public juce::Button
 {
 public:
     FxPlate() : juce::Button("FX") {}
 
     int type = 0;
+    // Whether the effect is in. Follows the slot's bypass parameter, which is
+    // what the card switches.
+    bool lit = true;
     std::function<void()> onPlateClick;
+    // A right-click: the bypass parameter's own menu, for MIDI learn.
+    std::function<void()> onPlateMenu;
+
+    // Where the power light sits, in the card's own coordinates.
+    juce::Rectangle<float> powerBounds() const
+    {
+        const auto area = getLocalBounds().toFloat();
+        return {area.getRight() - 20.0f, area.getY() + 4.0f, 15.0f, 15.0f};
+    }
 
     void paintButton(juce::Graphics& g, bool highlighted, bool held) override
     {
         const auto area = getLocalBounds().toFloat().reduced(1.0f);
         const auto colour = fxTypeColour(type);
         const auto filled = type != 0;
+        const auto on = filled && lit;
         const auto enabled = isEnabled();
         const auto alpha = enabled ? 1.0f : 0.4f;
 
         g.setColour(fieldFloor.withAlpha(enabled ? 1.0f : 0.5f));
         g.fillRoundedRectangle(area, 4.0f);
-        if (filled)
+        if (on)
         {
-            // A wash of the type's own colour, so a filled slot reads as
-            // occupied across the width of the rack without being read.
-            g.setGradientFill(juce::ColourGradient(colour.withAlpha(alpha * 0.22f), area.getTopLeft(),
+            // Lit: a wash of the type's own colour, and the edge glowing.
+            g.setGradientFill(juce::ColourGradient(colour.withAlpha(alpha * 0.24f), area.getTopLeft(),
                                                    colour.withAlpha(alpha * 0.04f), area.getBottomRight(),
                                                    false));
             g.fillRoundedRectangle(area, 4.0f);
+            g.setColour(colour.withAlpha(alpha * 0.16f));
+            g.drawRoundedRectangle(area.reduced(1.5f), 3.0f, 3.0f);
         }
-        g.setColour((filled ? colour : line).withAlpha(alpha * (highlighted || held ? 1.0f : 0.75f)));
+        const auto edge = on ? colour.withAlpha(alpha * (highlighted || held ? 1.0f : 0.85f))
+                             : line.withAlpha(alpha * (highlighted || held ? 1.0f : 0.8f));
+        g.setColour(edge);
         g.drawRoundedRectangle(area, 4.0f, 1.0f);
 
-        // The mark takes the left third and the name the rest, so the names
-        // line up down the rack whatever the marks are.
-        auto body = area.reduced(7.0f, 5.0f);
-        const auto mark = body.removeFromLeft(juce::jmin(34.0f, body.getWidth() * 0.4f));
-        drawFxMark(g, mark, type, filled ? colour : mutedText, alpha * 0.9f);
-
-        body.removeFromLeft(6.0f);
-        g.setColour((filled ? colour : mutedText).withAlpha(alpha));
+        // The mark takes the left of the card and the name the rest, so the
+        // names line up down the rack whatever the marks are. The power
+        // light keeps the top right corner.
+        const auto power = powerBounds();
+        auto body = area.reduced(7.0f, 6.0f);
+        const auto mark = body.removeFromLeft(juce::jmin(28.0f, body.getWidth() * 0.3f))
+                              .withSizeKeepingCentre(juce::jmin(28.0f, body.getWidth() * 0.3f),
+                                                     juce::jmin(24.0f, body.getHeight() * 0.6f));
+        drawFxMark(g, mark, type, on ? colour : mutedText, alpha * (on ? 0.9f : 0.55f));
+        body.removeFromLeft(5.0f);
+        body.setRight(juce::jmin(body.getRight(), power.getX() + 4.0f));
+        g.setColour((on ? colour : mutedText).withAlpha(alpha * (on ? 1.0f : 0.75f)));
         g.setFont(panelFont(Face::emphasis, 13.0f));
-        g.drawText(getName(), body, juce::Justification::centredLeft);
+        g.drawFittedText(getName(), body.toNearestInt(), juce::Justification::centredLeft, 1, 0.85f);
+
+        if (filled)
+        {
+            if (on)
+            {
+                g.setColour(colour.withAlpha(alpha * 0.18f));
+                g.fillEllipse(power.expanded(2.0f));
+            }
+            drawFxPowerGlyph(g, power.withSizeKeepingCentre(11.0f, 11.0f),
+                             (on ? colour : fxBypassedColour).withAlpha(alpha * 0.95f));
+        }
+    }
+
+    void mouseDown(const juce::MouseEvent& event) override
+    {
+        if (event.mods.isPopupMenu())
+        {
+            if (onPlateMenu) onPlateMenu();
+            return;
+        }
+        juce::Button::mouseDown(event);
     }
 
     void clicked() override { if (onPlateClick) onPlateClick(); }
@@ -506,6 +567,25 @@ inline void drawFxShelf(juce::Graphics& g, juce::Rectangle<int> area, int type, 
 
     g.setColour(fxTypeColour(type).withAlpha(alpha));
     g.fillRoundedRectangle(box.withWidth(moduleEdgeHeight), 1.5f);
+}
+
+// The hatch that starts every strip's output tail: diagonal rules in the
+// identity plate's hatch colour, so MIX and LEVEL read as the same fixture on
+// every strip whatever the body before them is.
+inline void drawFxHatch(juce::Graphics& g, juce::Rectangle<int> area, float alpha)
+{
+    if (area.isEmpty()) return;
+    juce::Graphics::ScopedSaveState clip(g);
+    g.reduceClipRegion(area);
+    juce::Path rules;
+    const auto box = area.toFloat();
+    for (auto x = box.getX() - box.getHeight(); x < box.getRight(); x += 5.0f)
+    {
+        rules.startNewSubPath(x, box.getBottom());
+        rules.lineTo(x + box.getHeight(), box.getY());
+    }
+    g.setColour(identityHatch.withAlpha(alpha * 0.45f));
+    g.strokePath(rules, juce::PathStrokeType(1.0f));
 }
 
 // The list at the left of the rack is deliberately quieter than the editors
@@ -558,11 +638,9 @@ inline void drawFxListItem(juce::Graphics& g, juce::Rectangle<int> area, int typ
     g.drawFittedText(fxTypeName(type), body.toNearestInt(), juce::Justification::centredLeft, 1, 0.8f);
 
     const auto bypass = fxListBypassBounds(area).toFloat();
-    const auto centre = bypass.getCentre();
-    const auto powerColour = bypassed ? juce::Colour(0xffff6f4a) : (filled ? colour : line);
-    g.setColour(powerColour.withAlpha(filled ? 0.9f : 0.35f));
-    g.drawEllipse(juce::Rectangle<float>(11.0f, 11.0f).withCentre(centre), 1.25f);
-    g.fillRect(centre.x - 0.75f, centre.y - 7.0f, 1.5f, 7.0f);
+    const auto powerColour = bypassed ? fxBypassedColour : (filled ? colour : line);
+    drawFxPowerGlyph(g, juce::Rectangle<float>(11.0f, 11.0f).withCentre(bypass.getCentre()),
+                     powerColour.withAlpha(filled ? 0.9f : 0.35f));
 
     const auto remove = fxListRemoveBounds(area).toFloat().reduced(6.0f);
     g.setColour((filled ? mutedText : line).withAlpha(filled ? 0.75f : 0.3f));

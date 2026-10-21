@@ -269,12 +269,30 @@ ui::FxStrip Editor::fxStripFor(juce::Rectangle<int> moduleArea, const ui::Module
     return ui::fxStripLayout(fxTypesShown[static_cast<size_t>(rack * fxSlotCount + slot)], strip, sizes);
 }
 
+Editor::Control* Editor::fxControl(int rack, int slot, ui::FxRole role) const
+{
+    if (rack < 0 || rack >= rackCount || slot < 0 || slot >= fxSlotCount) return nullptr;
+    return fxControls[static_cast<size_t>((rack * fxSlotCount + slot) * ui::fxRoleCount + ui::fxRoleIndex(role))];
+}
+
 // One rack control into the spot its slot's strip gave it. `offset` moves the
 // spot from the editor's coordinates into the viewport the control lives in.
 void Editor::placeFxControl(Control& control, const ui::FxSpot& spot, juce::Point<int> offset)
 {
     const auto component = spot.component.translated(offset.x, offset.y);
     const auto caption = spot.caption.translated(offset.x, offset.y);
+    control.fxCaptionShown = !spot.caption.isEmpty();
+    // What the look needs to know about this knob that the slider cannot say
+    // for itself: whether it is the strip's hero, which lights its collar, and
+    // otherwise that its LED is the type's colour turned down.
+    if (spot.knob != ui::FxKnobSize::none)
+    {
+        auto& knobProperties = control.slider.getProperties();
+        knobProperties.set("fxHero", spot.knob == ui::FxKnobSize::hero);
+        knobProperties.set("fxDim", spot.knob != ui::FxKnobSize::hero);
+    }
+    if (control.selector != nullptr)
+        control.selector->forceList = spot.presentation == ui::FxPresentation::list;
     switch (control.style)
     {
         case ui::Style::plate:

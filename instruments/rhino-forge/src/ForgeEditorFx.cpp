@@ -373,26 +373,25 @@ void Editor::initialiseFxSlot(int rack, int slot)
     repaint();
 }
 
-// Filling a slot. The list is the types in the order they are declared, with
-// OFF at the top as the way to empty a slot again — the same list the type
-// parameter holds, so nothing here can offer a type the engine does not have.
+// Filling an empty slot, from the list's add action. The menu is the types in
+// the order they are declared -- the same list the type parameter holds, so
+// nothing here can offer a type the engine does not have. There is no way to
+// change the type of a slot already filled: an effect is added and removed in
+// the list, and its card is its bypass switch.
 void Editor::showFxTypeMenu(Control& control, juce::Rectangle<int> target)
 {
     auto* parameter = processor.state.getParameter(control.id);
     if (parameter == nullptr) return;
 
     juce::PopupMenu menu;
-    const auto adding = !target.isEmpty();
-    menu.addSectionHeader(adding ? "Add effect" : "Replace effect");
-    const auto current = juce::roundToInt(control.slider.getValue());
-    for (int type = adding ? 1 : 0; type < fxTypeCount; ++type)
+    menu.addSectionHeader("Add effect");
+    for (int type = 1; type < fxTypeCount; ++type)
     {
         juce::PopupMenu::Item item(fxTypeName(type));
         item.itemID = type + 1;
-        item.isTicked = type == current;
         // The list is read by colour as much as by name, so it carries the same
-        // colours the plates do.
-        item.colour = type == 0 ? ui::mutedText : ui::fxTypeColour(type);
+        // colours the cards do.
+        item.colour = ui::fxTypeColour(type);
         menu.addItem(item);
     }
 
@@ -400,27 +399,16 @@ void Editor::showFxTypeMenu(Control& control, juce::Rectangle<int> target)
     if (!fxControlAt(control.id, rack, slot)) return;
 
     const auto safe = juce::Component::SafePointer<Editor>(this);
-    auto options = juce::PopupMenu::Options {};
-    if (target.isEmpty()) options = options.withTargetComponent(control.plate.get());
-    else options = options.withTargetScreenArea(localAreaToGlobal(target));
-    menu.showMenuAsync(options,
+    menu.showMenuAsync(juce::PopupMenu::Options {}.withTargetScreenArea(localAreaToGlobal(target)),
                        [safe, parameter, rack, slot] (int choice)
     {
-        if (safe == nullptr || choice == 0) return;
+        if (safe == nullptr || choice <= 1) return;
         const auto type = choice - 1;
-        if (type == 0)
-        {
-            safe->removeFxSlot(rack, slot);
-            return;
-        }
         parameter->setValueNotifyingHost(parameter->convertTo0to1(static_cast<float>(type)));
         // Putting an effect into a slot sets that effect up, the way adding a
         // module in Serum loads its default preset. Only from here: a type
         // arriving from a preset or from a host's automation lane must land
         // with the values that came with it, not with these on top.
-        //
-        // OFF is left alone deliberately, so emptying a slot and putting the
-        // same type back finds it as it was.
         safe->initialiseFxSlot(rack, slot);
         // A new effect lands at the end of the chain, which is often below
         // the fold of both views.

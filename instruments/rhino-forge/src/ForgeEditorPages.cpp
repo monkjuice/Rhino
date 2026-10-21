@@ -234,11 +234,14 @@ void Editor::applyEnableStates()
             const auto inMatrixWindow = control->row >= matrixWindowStart
                                      && control->row < matrixWindowEnd;
             auto inFxViewport = true;
+            auto inFxSlot = false, fxSlotBypassed = false;
             if (isFxModule(*module.descriptor))
             {
                 int rack = 0, slot = 0;
                 if (fxControlAt(control->id, rack, slot))
                 {
+                    inFxSlot = true;
+                    fxSlotBypassed = fxOn(value(fxParameterId(rack, slot, "Bypass")));
                     const auto row = fxDisplayRow(rack, slot);
                     const auto first = fxFirstVisibleSlots[static_cast<size_t>(rack)];
                     inFxViewport = row >= first
@@ -298,9 +301,20 @@ void Editor::applyEnableStates()
             // A control seated inside a display carries no label strip. It is
             // inside the thing it would have named — the filter's TYPE field
             // lies along the top edge of the response it chooses — and a
-            // caption over it would be a word where the curve should be.
+            // caption over it would be a word where the curve should be. A
+            // rack control has a caption only where its strip gave it one.
             control->label.setVisible(
-                shown && !ui::seatedOutsideBody(*module.descriptor, control->row));
+                shown && !ui::seatedOutsideBody(*module.descriptor, control->row) && control->fxCaptionShown);
+            // A bypassed effect's controls stay where they are and fade with
+            // it; its card goes dark, which is the switch saying so.
+            if (inFxSlot)
+            {
+                const auto faded = fxSlotBypassed ? 0.5f : 1.0f;
+                for (auto* component : {static_cast<juce::Component*>(&control->label),
+                                        static_cast<juce::Component*>(&control->slider),
+                                        static_cast<juce::Component*>(control->selector.get())})
+                    if (component != nullptr && component->getAlpha() != faded) component->setAlpha(faded);
+            }
             // A macro's name follows its knob on and off the panel, and is
             // never greyed with it: a name is not a setting, and a macro sitting
             // under a module that is switched off is still called what it is
@@ -310,6 +324,11 @@ void Editor::applyEnableStates()
             {
                 control->plate->setEnabled(on);
                 control->plate->setVisible(shown);
+                if (control->plate->lit == fxSlotBypassed)
+                {
+                    control->plate->lit = !fxSlotBypassed;
+                    control->plate->repaint();
+                }
                 continue;
             }
             if (control->selector != nullptr)
@@ -321,7 +340,9 @@ void Editor::applyEnableStates()
             if (control->chip != nullptr)
             {
                 control->chip->setEnabled(on);
-                control->chip->setVisible(shown);
+                // A rack slot's bypass is its card. The chip stays attached to
+                // the parameter and off the panel.
+                control->chip->setVisible(shown && !inFxSlot);
                 continue;
             }
             if (control->waves != nullptr)

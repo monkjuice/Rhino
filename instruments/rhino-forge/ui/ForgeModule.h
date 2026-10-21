@@ -176,15 +176,6 @@ struct Row
     // bank. The geometry divides the row between one bank's cells; the others
     // land on top and are hidden.
     int banks = 1;
-    // A strip of the row given over to a display, measured in the same weights
-    // the cells are divided by, and how many cells stand in front of it.
-    //
-    // A module's own display sits above its controls and there is one of it;
-    // a rack has several slots in one module and each wants its own, so this is
-    // per row rather than per module. Zero means the row is all controls,
-    // which every row but the rack's is.
-    int displayWeight = 0;
-    int displayAfter = 0;
     // Inside the module's display rather than under it. Last, so the rows that
     // are not seated need not mention it.
     Seat seat = Seat::body;
@@ -411,11 +402,6 @@ inline constexpr int maxSelectorWidth = 124;
 // panel merely because the matrix has that width to spend.
 // Wide enough for "BUS 1" rather than for a digit.
 inline constexpr int fxBankWidth = 56;
-
-// The share of a rack row given over to that slot's display. Three cells stand
-// in front of it — the name plate and the two mode fields — so it lands in the
-// same column down every slot, with the knobs to its right.
-inline constexpr int fxDisplayWeight = 3;
 
 // The FX page has a second reading of the slots down its left edge. At
 // full width it names every effect and exposes its bypass/remove actions; when

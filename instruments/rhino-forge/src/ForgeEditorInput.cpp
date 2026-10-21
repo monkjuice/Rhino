@@ -256,13 +256,6 @@ void Editor::mouseDown(const juce::MouseEvent& event)
                     fxDragSlot = fxDropSlot = slot;
                     fxDragStart = at;
                     repaintFxDisplays();
-                    // A single click selects/drags; a deliberate double-click
-                    // opens replacement choices for the module already here.
-                    if (event.getNumberOfClicks() >= 2)
-                    {
-                        fxDragSlot = fxDropSlot = -1;
-                        if (auto* control = fxTypeControl(rack, slot)) showFxTypeMenu(*control);
-                    }
                     return;
                 }
             }

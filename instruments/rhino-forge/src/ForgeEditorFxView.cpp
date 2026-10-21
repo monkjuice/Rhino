@@ -129,11 +129,15 @@ void Editor::paintFxShelves(juce::Graphics& g, juce::Rectangle<int> area, const 
             // read as the full width of the rack rather than as a box around the
             // knobs.
             ui::drawFxShelf(g, row.expanded(6, 1), juce::roundToInt(held.type), true);
+            const auto bypassed = fxOn(held.bypass);
+            paintFxFrame(g, strip, rack, slot, bypassed);
             // A slot that is bypassed still says what is in it, dimmed — the point
             // of a bypass is to hear a rack without it and put it straight back.
-            ui::drawFxDisplay(g, strip.wells[0].reduced(4, 6), held,
-                              processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 48000.0,
-                              processor.hostTempo(), fxOn(held.bypass) ? 0.3f : 1.0f);
+            for (int well = 0; well < strip.wellCount; ++well)
+                ui::drawFxDisplay(g, strip.wells[static_cast<size_t>(well)].area, held,
+                                  processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 48000.0,
+                                  processor.hostTempo(), bypassed ? 0.3f : 1.0f);
+            paintFxReadings(g, strip, rack, slot, juce::roundToInt(held.type), bypassed);
             if (slot == fxSelectedSlot)
             {
                 g.setColour(ui::fxTypeColour(juce::roundToInt(held.type)).withAlpha(0.65f));
@@ -143,6 +147,45 @@ void Editor::paintFxShelves(juce::Graphics& g, juce::Rectangle<int> area, const 
     }
     drawScrollThumb(g, ui::fxRackScrollBounds(area), fxFirstVisibleSlot(),
                     ui::fxVisibleSlotCount(area), fxActiveSlotCount(rack));
+}
+
+// What every strip draws round its body: the slot's automation name under its
+// card, and the hatch its output tail starts with.
+void Editor::paintFxFrame(juce::Graphics& g, const ui::FxStrip& strip, int rack, int slot, bool bypassed)
+{
+    // The name a host's automation lane and the matrix give this slot's
+    // controls: MAIN 2 Knob 3 is the third knob on the strip that says MAIN 2.
+    g.setFont(ui::panelFont(ui::Face::reading, 8.5f));
+    g.setColour(ui::mutedText.withAlpha(0.8f));
+    g.drawText(juce::String(rackName(rack)) + " " + juce::String(slot + 1), strip.automation,
+               juce::Justification::centredRight, false);
+    ui::drawFxHatch(g, strip.hatch, bypassed ? 0.5f : 1.0f);
+}
+
+// Every knob's value, printed under it at rest. The rack is the one place on
+// the panel that does this: a strip has the height for a line of figures under
+// its knobs, and a delay's time or a compressor's threshold is a number you set
+// by reading it. The text is the parameter's own, so it is what the bubble
+// says and what the DSP is doing.
+void Editor::paintFxReadings(juce::Graphics& g, const ui::FxStrip& strip, int rack, int slot, int type,
+                             bool bypassed)
+{
+    g.setFont(ui::panelFont(ui::Face::reading, 9.5f));
+    for (int role = ui::fxRoleIndex(ui::FxRole::knob1); role <= ui::fxRoleIndex(ui::FxRole::level); ++role)
+    {
+        const auto which = static_cast<ui::FxRole>(role);
+        const auto& spot = strip.spot(which);
+        if (!spot.placed || spot.reading.isEmpty()) continue;
+        auto* control = fxControl(rack, slot, which);
+        if (control == nullptr || !control->slider.isVisible()) continue;
+        const auto hero = spot.knob == ui::FxKnobSize::hero;
+        auto colour = hero ? ui::fxTypeColour(type) : ui::valueText.withAlpha(0.72f);
+        if (!control->slider.isEnabled()) colour = colour.withMultipliedAlpha(0.45f);
+        if (bypassed) colour = colour.withMultipliedAlpha(0.5f);
+        g.setColour(colour);
+        g.drawText(control->slider.getTextFromValue(control->slider.getValue()), spot.reading,
+                   spot.captionLeft ? juce::Justification::centredLeft : juce::Justification::centred, false);
+    }
 }
 
 void Editor::paintFxList(juce::Graphics& g, juce::Rectangle<int> area, const ui::Module&)

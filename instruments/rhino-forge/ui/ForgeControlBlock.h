@@ -65,9 +65,7 @@ inline juce::Rectangle<int> cellBounds(juce::Rectangle<int> moduleArea, const Mo
     // Divided between one bank's cells. The banks behind it declare the same
     // cells and land on top of them.
     const auto perBank = controlsPerBank(declared);
-    // The display takes its share of the row before the cells divide what is
-    // left, so it is counted in the same total they are.
-    auto total = juce::jmax(0, declared.displayWeight);
+    auto total = 0;
     for (int i = 0; i < perBank; ++i)
         if (!controls[static_cast<size_t>(i)].sharesCell)
             total += juce::jmax(1, controls[static_cast<size_t>(i)].weight);
@@ -79,37 +77,8 @@ inline juce::Rectangle<int> cellBounds(juce::Rectangle<int> moduleArea, const Mo
     for (int i = 0; i < owner; ++i)
         if (!controls[static_cast<size_t>(i)].sharesCell)
             x += row.getWidth() * juce::jmax(1, controls[static_cast<size_t>(i)].weight) / total;
-    // Everything past the display is pushed along by it.
-    if (declared.displayWeight > 0 && owner >= declared.displayAfter)
-        x += row.getWidth() * declared.displayWeight / total;
     const auto width = row.getWidth() * juce::jmax(1, controls[static_cast<size_t>(owner)].weight) / total;
     return {x, row.getY(), width, row.getHeight()};
-}
-
-// The strip a row has reserved for a display, or an empty rectangle when it has
-// reserved none. Worked out the same way the cells are, so the two cannot
-// disagree about where one ends and the other begins — which the layout test
-// checks by intersecting them.
-inline juce::Rectangle<int> rowDisplayBounds(juce::Rectangle<int> moduleArea, const Module& module,
-                                             int rowIndex)
-{
-    const auto& declared = module.rows[static_cast<size_t>(rowIndex)];
-    if (declared.displayWeight <= 0) return {};
-    const auto row = rowBounds(moduleArea, module, rowIndex);
-    const auto& controls = declared.controls;
-    const auto perBank = controlsPerBank(declared);
-
-    auto total = declared.displayWeight;
-    for (int i = 0; i < perBank; ++i)
-        if (!controls[static_cast<size_t>(i)].sharesCell)
-            total += juce::jmax(1, controls[static_cast<size_t>(i)].weight);
-    if (total <= 0) return {};
-
-    auto x = row.getX();
-    for (int i = 0; i < declared.displayAfter && i < perBank; ++i)
-        if (!controls[static_cast<size_t>(i)].sharesCell)
-            x += row.getWidth() * juce::jmax(1, controls[static_cast<size_t>(i)].weight) / total;
-    return {x, row.getY(), row.getWidth() * declared.displayWeight / total, row.getHeight()};
 }
 
 // Every knob on the panel is drawn at one diameter, taken from whichever cell

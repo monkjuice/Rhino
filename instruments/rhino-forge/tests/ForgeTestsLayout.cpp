@@ -7,11 +7,14 @@
 #include "../ui/ForgeNoteGuide.h"
 
 #include <algorithm>
+#include <optional>
 
 namespace rhino::forge::tests
 {
 namespace
 {
+void requireFxStripsHold(juce::Rectangle<int> strip, juce::Rectangle<int> rack,
+                         const rhino::forge::ui::FxKnobSizes& sizes);
 void noteGuideSuite()
 {
     using namespace rhino::forge::ui;
@@ -361,25 +364,6 @@ void layoutSuite()
         require(controls.getHeight() > 30, "a module leaves usable height for its controls");
         require(area.withTrimmedTop(rhino::forge::ui::headerHeight).contains(controls),
                 "controls stay clear of the module header, so labels cannot collide with the title");
-
-        // A row that has reserved a strip for a display must not have put a
-        // control on top of it. The strip and the cells are worked out from
-        // one total, so this is what holds that arithmetic honest — and it is
-        // checked at every size further down as well, because integer division
-        // is exactly where the two would drift apart.
-        for (int r = 0; r < static_cast<int>(modules[i].rows.size()); ++r)
-        {
-            const auto strip = rhino::forge::ui::rowDisplayBounds(area, modules[i], r);
-            if (strip.isEmpty()) continue;
-            require(rhino::forge::ui::rowBounds(area, modules[i], r).contains(strip),
-                    "a row's display strip stays inside that row");
-            const auto shared = rhino::forge::ui::uniformKnobDiameter(bounds);
-            const auto& rowControls = modules[i].rows[static_cast<size_t>(r)].controls;
-            for (int c = 0; c < static_cast<int>(rowControls.size()); ++c)
-                require(!strip.intersects(
-                            rhino::forge::ui::controlBlock(area, modules[i], r, c, shared)),
-                        "no control sits on top of its row's display strip");
-        }
 
         // A row seated inside a display is laid out in the display rather than
         // in the body, so what holds it is the plot's own arithmetic: it has to
@@ -767,6 +751,9 @@ void layoutSuite()
             const auto& row = module.rows[static_cast<size_t>(r)];
             for (int i = 0; i < static_cast<int>(row.controls.size()); ++i)
             {
+                // The rack lays its slots out per type, and they are checked
+                // as strips in the sweep below.
+                if (juce::String(module.id) == "fx") continue;
                 const auto block = rhino::forge::ui::controlBlock(area, module, r, i, diameter);
                 require(!block.isEmpty(), "every control gets a non-empty rectangle");
                 // The rack's rows and the matrix's run on past their windows
@@ -912,6 +899,7 @@ void layoutSuite()
     for (const auto& module : modules)
         if (juce::String(module.id) == "fx") fxModule = &module;
     require(fxModule != nullptr, "the panel declares its effects rack");
+    auto fxStripsChecked = 0;
     if (fxModule != nullptr)
         for (int width = rhino::forge::ui::minPanelWidth; width <= rhino::forge::ui::maxPanelWidth; width += 40)
             for (int height = rhino::forge::ui::minPanelHeight; height <= rhino::forge::ui::maxPanelHeight; height += 40)
@@ -977,29 +965,16 @@ void layoutSuite()
                                 require(slots.contains(strip), "every whole FX strip stays in the rack's window");
                                 require(strip.getHeight() == rhino::forge::ui::fxSlotHeight,
                                         "an FX slot keeps its fixed height in every view");
-                                for (int control = 0; control < static_cast<int>(row.controls.size()); ++control)
-                                {
-                                    const auto block = rhino::forge::ui::controlBlock(
-                                        scrolledRack, *fxModule, slot, control,
-                                        rhino::forge::ui::uniformKnobDiameter(panel));
-                                    require(rack.contains(block), "every visible FX control stays beside the list");
-                                    require(strip.contains(block), "every FX control stays inside its own strip");
-                                    if (row.controls[static_cast<size_t>(control)].style
-                                        == rhino::forge::ui::Style::selector)
-                                    {
-                                        require(strip.reduced(0, 4).contains(block),
-                                                "an FX selector leaves padding above and below its choices");
-                                        const auto choices = block.withTrimmedTop(
-                                            rhino::forge::ui::stepperLabelHeight);
-                                        for (const auto count : {2, 3})
-                                            require(choices.getHeight() / count
-                                                        >= rhino::forge::ui::selectorSegmentHeight,
-                                                    "two- and three-way FX choices stay readable");
-                                    }
-                                }
+                                juce::ignoreUnused(row);
+                                // What stands in a strip depends on the effect in
+                                // it, so every type is laid out in every strip.
+                                requireFxStripsHold(strip, rack, rhino::forge::ui::fxKnobSizesFor(panel));
+                                ++fxStripsChecked;
                             }
                         }
                     }
+
+    require(fxStripsChecked > 1000, "the FX sweep lays out every type in every visible strip");
 
     // The matrix is thirty rows under a window that shows some of them. The
     // rule for how many rows the table shows is checked first, at its corners;
@@ -1377,61 +1352,137 @@ void matrixGrowsWithRoutingsSuite()
             "clearing every routing takes the table back to its eight rows");
 }
 
-// A rack slot is laid out by the type it holds (ForgeFxStrips.h). Where a type
-// keeps the generic row, its strip has to land on exactly the rectangles the
-// declared row gives, at every size and in every view, so a type that has not
-// been given a strip of its own looks as it always did.
-void fxStripsMatchTheDeclaredRowSuite()
+// Every effect type laid out in one strip, held to what a strip promises:
+// exactly the controls the type has, each inside the strip and beside the
+// list, none on top of another or of a picture it is not seated in, every knob
+// usable and none larger than the panel's own, and the frame -- card, MIX,
+// LEVEL -- in the same place whatever the type.
+void requireFxStripsHold(juce::Rectangle<int> strip, juce::Rectangle<int> rack,
+                         const rhino::forge::ui::FxKnobSizes& sizes)
 {
-    using namespace rhino::forge;
-    const ui::Module* rack = nullptr;
-    for (const auto& module : ui::modules())
-        if (juce::String(module.id) == "fx") rack = &module;
-    require(rack != nullptr, "the panel declares its effects rack");
-    if (rack == nullptr) return;
-
-    auto checked = 0;
-    for (int width = ui::minPanelWidth; width <= ui::maxPanelWidth; width += 120)
-        for (int height = ui::minPanelHeight; height <= ui::maxPanelHeight; height += 120)
-            for (const auto listOpen : {false, true})
+    namespace ui = rhino::forge::ui;
+    using rhino::forge::fxTypeInfo;
+    std::optional<ui::FxStrip> first;
+    for (int type = 1; type < rhino::forge::fxTypeCount; ++type)
+    {
+        const auto layout = ui::fxStripLayout(type, strip, sizes);
+        const auto& info = fxTypeInfo(static_cast<float>(type));
+        require(layout.strip == strip && strip.contains(layout.card) && strip.contains(layout.body),
+                "a strip's frame stays inside the strip");
+        require(layout.wellCount >= 1 && layout.wellCount <= ui::maxFxWells,
+                "every strip draws one or two pictures");
+        for (int well = 0; well < layout.wellCount; ++well)
+        {
+            const auto& area = layout.wells[static_cast<size_t>(well)].area;
+            require(layout.body.contains(area), "a strip's pictures stay inside its body");
+            require(area.getWidth() > 40 && area.getHeight() > 20, "a picture is big enough to draw a curve in");
+        }
+        for (int role = 0; role < ui::fxRoleCount; ++role)
+        {
+            const auto which = static_cast<ui::FxRole>(role);
+            const auto& spot = layout.spot(which);
+            auto used = true;
+            if (which == ui::FxRole::modeA) used = info.modeA.count > 0;
+            else if (which == ui::FxRole::modeB) used = info.modeB.count > 0;
+            else if (role >= ui::fxRoleIndex(ui::FxRole::knob1) && role <= ui::fxRoleIndex(ui::FxRole::knob6))
+                used = info.knobs[static_cast<size_t>(role - ui::fxRoleIndex(ui::FxRole::knob1))] != nullptr;
+            require(spot.placed == used, "a strip places exactly the controls its type has");
+            if (!spot.placed) continue;
+            require(strip.contains(spot.component), "every FX control stays inside its own strip");
+            require(rack.contains(spot.component), "every visible FX control stays beside the list");
+            require(spot.caption.isEmpty() || strip.contains(spot.caption), "an FX caption stays inside its strip");
+            require(spot.reading.isEmpty() || strip.contains(spot.reading), "an FX reading stays inside its strip");
+            if (which == ui::FxRole::bypass)
             {
-                const auto panel = juce::Rectangle<int>(0, 0, width, height);
-                const auto area = ui::fxScrolledRackBounds(ui::fxModuleBounds(panel, *rack, false), listOpen, 0);
-                const auto shared = ui::uniformKnobDiameter(panel);
-                const auto sizes = ui::fxKnobSizesFor(panel);
-                for (int slot = 0; slot < fxSlotCount; ++slot)
-                {
-                    const auto strip = ui::rowBounds(area, *rack, slot);
-                    for (int type = 0; type < fxTypeCount; ++type)
-                    {
-                        const auto layout = ui::fxStripLayout(type, strip, sizes);
-                        require(layout.wellCount == 1 && layout.wells[0] == ui::rowDisplayBounds(area, *rack, slot),
-                                "a generic strip's display is the declared row's display strip");
-                        for (int index = 0; index < ui::fxRoleCount; ++index)
-                        {
-                            const auto& declared = rack->rows[static_cast<size_t>(slot)].controls[static_cast<size_t>(index)];
-                            auto block = ui::controlBlock(area, *rack, slot, index, shared);
-                            const auto cell = ui::cellBounds(area, *rack, slot, index);
-                            juce::Rectangle<int> component = block, caption;
-                            if (declared.style == ui::Style::selector)
-                            {
-                                caption = block.removeFromTop(ui::stepperLabelHeight);
-                                component = block;
-                            }
-                            else if (declared.style == ui::Style::knob)
-                            {
-                                caption = ui::knobLabelBounds(block, cell);
-                                component = block.withTrimmedTop(ui::knobLabelHeight);
-                            }
-                            const auto& spot = layout.spot(ui::fxRoleOf(index));
-                            require(spot.component == component && spot.caption == caption,
-                                    "a generic strip puts every control where the declared row does");
-                            ++checked;
-                        }
-                    }
-                }
+                require(layout.card.contains(spot.component), "a slot's bypass is its card");
+                continue;
             }
-    require(checked > 0, "the generic strips were checked");
+            for (int other = role + 1; other < ui::fxRoleCount; ++other)
+            {
+                const auto& next = layout.spots[static_cast<size_t>(other)];
+                if (!next.placed || static_cast<ui::FxRole>(other) == ui::FxRole::bypass) continue;
+                if (spot.component.intersects(next.component))
+                {
+                    require(false, "no two controls of a strip overlap");
+                    std::cerr << "       " << info.name << " roles " << role << " and " << other << '\n';
+                }
+                require(spot.caption.isEmpty() || !spot.caption.intersects(next.component),
+                        "a caption stays off the controls beside it");
+                require(next.caption.isEmpty() || !next.caption.intersects(spot.component),
+                        "a caption stays off the controls beside it");
+            }
+            for (int well = 0; well < layout.wellCount; ++well)
+                if (spot.well != well)
+                    require(!spot.component.intersects(layout.wells[static_cast<size_t>(well)].area),
+                            "no control stands on a picture it is not seated in");
+            if (spot.knob != ui::FxKnobSize::none)
+            {
+                require(spot.component.getWidth() == spot.component.getHeight(), "a rack knob is round");
+                require(spot.component.getWidth() >= 24, "a rack knob stays usable");
+                require(spot.component.getWidth() <= sizes.shared,
+                        "a rack knob is no larger than the shared diameter");
+            }
+            if (spot.presentation == ui::FxPresentation::stack)
+            {
+                const auto& mode = which == ui::FxRole::modeA ? info.modeA : info.modeB;
+                require(strip.reduced(0, 4).contains(spot.component.getUnion(spot.caption.isEmpty()
+                                                                             ? spot.component : spot.caption)),
+                        "an FX selector leaves padding above and below its choices");
+                require(mode.count > 0 && spot.component.getHeight() / mode.count >= 14,
+                        "a stacked FX choice stays tall enough to read");
+            }
+        }
+        if (!first.has_value()) first = layout;
+        else
+            require(layout.card == first->card && layout.spot(ui::FxRole::mix).component
+                                                      == first->spot(ui::FxRole::mix).component
+                        && layout.spot(ui::FxRole::level).component == first->spot(ui::FxRole::level).component,
+                    "the card, MIX and LEVEL stand in the same place on every strip");
+    }
+}
+
+// Every caption a strip shows, for every type, fits its box at the panel's one
+// caption size, at the smallest window and at the one the panel opens at.
+void rackCaptionsFitSuite()
+{
+    namespace ui = rhino::forge::ui;
+    rhino::forge::Processor processor;
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    for (auto* child : editor->getChildren())
+        if (auto* tab = dynamic_cast<ui::PageTab*>(child))
+            if (tab->getButtonText() == "FX" && tab->onClick) tab->onClick();
+    const auto captionHeight = ui::panelFont(ui::Face::label, ui::controlLabelSize).getHeight();
+    auto checked = 0;
+    for (int type = 1; type < rhino::forge::fxTypeCount; ++type)
+    {
+        setValue(processor, rhino::forge::fxParameterId(0, 0, "Type").toRawUTF8(), static_cast<float>(type));
+        for (const auto width : {ui::minPanelWidth, ui::defaultPanelWidth})
+        {
+            editor->setSize(width, width == ui::minPanelWidth ? ui::minPanelHeight : ui::defaultPanelHeight);
+            editor->resized();
+            const auto walk = [&] (auto&& self, juce::Component& parent) -> void
+            {
+                for (auto* child : parent.getChildren())
+                {
+                    if (!child->isVisible()) continue;
+                    self(self, *child);
+                    auto* label = dynamic_cast<juce::Label*>(child);
+                    if (label == nullptr || label->getText().isEmpty()) continue;
+                    if (std::abs(label->getFont().getHeight() - captionHeight) > 0.01f) continue;
+                    ++checked;
+                    const auto room = label->getBorderSize().subtractedFrom(label->getLocalBounds()).getWidth();
+                    const auto needed = juce::GlyphArrangement::getStringWidth(label->getFont(), label->getText());
+                    if (needed <= static_cast<float>(room)) continue;
+                    require(false, "every rack caption fits its box at the panel's one caption size");
+                    std::cerr << "       " << label->getText() << " on "
+                              << rhino::forge::fxTypeName(type) << " at " << width << ": needs " << needed
+                              << " px, has " << room << '\n';
+                }
+            };
+            walk(walk, *editor);
+        }
+    }
+    require(checked > 0, "the rack's captions were on screen to be read");
 }
 }
 
@@ -1443,6 +1494,6 @@ void layoutTests()
     switchedOffControlsStaySuite();
     captionsKeepTheirSizeSuite();
     matrixGrowsWithRoutingsSuite();
-    fxStripsMatchTheDeclaredRowSuite();
+    rackCaptionsFitSuite();
 }
 }

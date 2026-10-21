@@ -574,8 +574,9 @@ inline juce::String tooltipFor(const juce::String& id)
     // can be known. See Editor::refreshFxSlots.
     if (id.startsWith("fx"))
     {
-        if (id.endsWith("Type")) return "What this slot of the rack is: a reverb, a delay, "
-                                        "a chorus, a distortion, an equaliser, a filter, or nothing";
+        if (id.endsWith("Type")) return "The effect in this slot. Click the card to bypass it or bring it back in; "
+                                        "right-click to MIDI learn the bypass. Effects are added and removed "
+                                        "in the list on the left";
         if (id.endsWith("ModeA") || id.endsWith("ModeB"))
             return "A choice belonging to whichever effect is in this slot";
         if (id.contains("Knob")) return "A control of whichever effect is in this slot. "

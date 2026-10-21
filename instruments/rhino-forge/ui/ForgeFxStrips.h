@@ -145,7 +145,8 @@ enum class FxWellKind
     compressorCurve,  // what comes out for what goes in
     compressorMeter,  // the gain being taken off, on a needle
     chorusTaps,       // each tap's delay across a few seconds of its sweep
-    phaserComb        // the notches, where the sweep has them now
+    phaserComb,       // the notches, where the sweep has them now
+    flangerComb       // the comb, where the sweep has the tap now
 };
 
 // What lights a panel's lamp: nothing, one of the slot's knobs, or something
@@ -787,6 +788,40 @@ inline FxStrip fxPhaserStrip(juce::Rectangle<int> stripBounds, const FxKnobSizes
     return strip;
 }
 
+// --- FLANGER: the jet ---------------------------------------------------------------------
+//
+// MOTION as on the phaser: RATE the hero, its BPM chip, a lamp at the LFO's
+// pace. Then JET: the comb as it stands, with DELAY, where the sweep starts,
+// and DEPTH, how far it travels, beside it. FEEDBACK, bipolar, and SPREAD, the
+// two sides' LFOs set apart, close the body.
+inline FxStrip fxFlangerStrip(juce::Rectangle<int> stripBounds, const FxKnobSizes& sizes)
+{
+    FxStrip strip;
+    strip.strip = stripBounds;
+    placeFxFrame(strip, sizes);
+    const FxGrid grid {stripBounds};
+
+    auto& motion = addFxPanel(strip, grid.span(5.0f, 7.0f), "MOTION");
+    motion.lamp = FxLamp::rate;
+    const auto motionContent = fxPanelContent(strip, motion);
+    const auto rateRight = motionContent.getX() + motionContent.getWidth() * 62 / 100;
+    placeFxKnob(strip, FxRole::knob1, fxColumn(strip, motionContent.getX(), rateRight), FxKnobSize::hero, sizes);
+    placeFxChip(strip, FxRole::modeA, fxColumn(strip, rateRight, motionContent.getRight()));
+
+    auto& jet = addFxPanel(strip, grid.span(12.0f, 25.0f), "JET");
+    const auto jetContent = fxPanelContent(strip, jet);
+    addFxWell(strip, fxColumn(strip, jetContent.getX(), grid.x(31.0f)), FxWellKind::flangerComb);
+    placeFxKnob(strip, FxRole::knob4, fxColumn(strip, grid.x(31.0f), grid.x(34.0f)), FxKnobSize::normal, sizes);
+    placeFxKnob(strip, FxRole::knob2, fxColumn(strip, grid.x(34.0f), jetContent.getRight()), FxKnobSize::normal, sizes);
+
+    placeFxKnob(strip, FxRole::knob3, grid.span(37.0f, 3.0f), FxKnobSize::normal, sizes);
+    strip.spot(FxRole::knob3).bipolar = true;
+    placeFxKnob(strip, FxRole::knob5, grid.span(40.0f, 3.0f), FxKnobSize::normal, sizes);
+    strip.spot(FxRole::knob5).secondPointer = true;
+    strip.spot(FxRole::knob5).bipolar = true;
+    return strip;
+}
+
 // One slot's strip, for the effect type it holds. OFF is a slot with nothing in
 // it and is never shown; it gets the generic frame so that nothing asking for
 // it gets nothing.
@@ -802,6 +837,7 @@ inline FxStrip fxStripLayout(int type, juce::Rectangle<int> strip, const FxKnobS
         case FxType::compressor: return fxCompressorStrip(strip, sizes);
         case FxType::chorus:     return fxChorusStrip(strip, sizes);
         case FxType::phaser:     return fxPhaserStrip(strip, sizes);
+        case FxType::flanger:    return fxFlangerStrip(strip, sizes);
         case FxType::off:
             break;
     }

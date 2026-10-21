@@ -1466,6 +1466,22 @@ void rackCaptionsFitSuite()
                 {
                     if (!child->isVisible()) continue;
                     self(self, *child);
+                    // A slot's card says what is in it, and a name cut short
+                    // there is the one place a type's name is lost.
+                    if (auto* plate = dynamic_cast<ui::FxPlate*>(child); plate != nullptr && plate->type != 0)
+                    {
+                        ++checked;
+                        const auto needed = juce::GlyphArrangement::getStringWidth(ui::FxPlate::nameFont(),
+                                                                                    plate->getName())
+                                          * ui::FxPlate::nameSqueeze;
+                        if (needed > plate->nameBounds().getWidth())
+                        {
+                            require(false, "every effect's name fits its card without being cut short");
+                            std::cerr << "       " << plate->getName() << " at " << width << ": needs " << needed
+                                      << " px, has " << plate->nameBounds().getWidth() << '\n';
+                        }
+                        continue;
+                    }
                     auto* label = dynamic_cast<juce::Label*>(child);
                     if (label == nullptr || label->getText().isEmpty()) continue;
                     if (std::abs(label->getFont().getHeight() - captionHeight) > 0.01f) continue;

@@ -38,6 +38,7 @@ inline juce::Colour fxTypeColour(int type)
         case 6: return juce::Colour(0xff6fdc5a);   // FILTER
         case 7: return juce::Colour(0xfff09a55);   // COMP
         case 8: return juce::Colour(0xffb58cff);   // PHASER
+        case 9: return juce::Colour(0xffc9f24a);   // FLANGER, day-glo
         default: break;
     }
     return line;                                   // OFF: an empty shelf
@@ -183,6 +184,27 @@ inline void drawFxMark(juce::Graphics& g, juce::Rectangle<float> box, int type, 
                 if (i == 0) curve.startNewSubPath(x, y); else curve.lineTo(x, y);
             }
             g.strokePath(curve, juce::PathStrokeType(1.8f));
+            return;
+        }
+        // A swoop: a wave whose cycles crowd together across the box, the way
+        // a flanger's teeth race up the spectrum, and its echo behind it.
+        case 9:
+        {
+            for (int copy = 0; copy < 2; ++copy)
+            {
+                juce::Path wave;
+                for (int i = 0; i <= 48; ++i)
+                {
+                    const auto along = static_cast<float>(i) / 48.0f;
+                    const auto cycles = 1.2f * along + 2.4f * along * along + (copy == 0 ? 0.0f : 0.18f);
+                    const auto y = middle - std::sin(cycles * juce::MathConstants<float>::twoPi)
+                                          * height * 0.32f * std::sin(along * juce::MathConstants<float>::pi);
+                    const auto x = box.getX() + along * box.getWidth();
+                    if (i == 0) wave.startNewSubPath(x, y); else wave.lineTo(x, y);
+                }
+                g.setColour(colour.withAlpha(alpha * (copy == 0 ? 1.0f : 0.45f)));
+                g.strokePath(wave, juce::PathStrokeType(1.6f));
+            }
             return;
         }
         default: break;
@@ -723,6 +745,37 @@ public:
         return {area.getRight() - 20.0f, area.getY() + 4.0f, 15.0f, 15.0f};
     }
 
+    // The mark takes the left of the card and the name the rest, so the names
+    // line up down the rack whatever the marks are.
+    juce::Rectangle<float> markBounds() const
+    {
+        auto body = getLocalBounds().toFloat().reduced(8.0f, 7.0f);
+        const auto width = juce::jmin(28.0f, body.getWidth() * 0.3f);
+        return body.removeFromLeft(width).withSizeKeepingCentre(width, juce::jmin(24.0f, body.getHeight() * 0.6f));
+    }
+
+    // The name runs on under the power light when the card is tall enough to
+    // keep the two apart, which is what lets FLANGER fit the narrow card of
+    // the smallest window; on a shorter card it stops short of the light.
+    juce::Rectangle<float> nameBounds() const
+    {
+        auto body = getLocalBounds().toFloat().reduced(8.0f, 7.0f);
+        body.setLeft(markBounds().getRight() + 5.0f);
+        const auto power = powerBounds();
+        auto name = body.withSizeKeepingCentre(body.getWidth(), 16.0f);
+        if (name.getY() < power.getBottom())
+        {
+            if (power.getBottom() + name.getHeight() <= body.getBottom()) name.setY(power.getBottom());
+            else name.setRight(juce::jmin(name.getRight(), power.getX() + 4.0f));
+        }
+        return name;
+    }
+
+    // The face the name is set in, and the least it may be squeezed before it
+    // is cut short.
+    static juce::Font nameFont() { return panelFont(Face::emphasis, 13.0f); }
+    static constexpr float nameSqueeze = 0.85f;
+
     void paintButton(juce::Graphics& g, bool highlighted, bool held) override
     {
         const auto area = getLocalBounds().toFloat().reduced(1.0f);
@@ -749,23 +802,15 @@ public:
         g.setColour(edge);
         g.drawRoundedRectangle(area, 4.0f, 1.0f);
 
-        // The mark takes the left of the card and the name the rest, so the
-        // names line up down the rack whatever the marks are. The power
-        // light keeps the top right corner.
-        const auto power = powerBounds();
-        auto body = area.reduced(7.0f, 6.0f);
-        const auto mark = body.removeFromLeft(juce::jmin(28.0f, body.getWidth() * 0.3f))
-                              .withSizeKeepingCentre(juce::jmin(28.0f, body.getWidth() * 0.3f),
-                                                     juce::jmin(24.0f, body.getHeight() * 0.6f));
-        drawFxMark(g, mark, type, on ? colour : mutedText, alpha * (on ? 0.9f : 0.55f));
-        body.removeFromLeft(5.0f);
-        body.setRight(juce::jmin(body.getRight(), power.getX() + 4.0f));
+        // The power light keeps the top right corner.
+        drawFxMark(g, markBounds(), type, on ? colour : mutedText, alpha * (on ? 0.9f : 0.55f));
         g.setColour((on ? colour : mutedText).withAlpha(alpha * (on ? 1.0f : 0.75f)));
-        g.setFont(panelFont(Face::emphasis, 13.0f));
-        g.drawFittedText(getName(), body.toNearestInt(), juce::Justification::centredLeft, 1, 0.85f);
+        g.setFont(nameFont());
+        g.drawFittedText(getName(), nameBounds().toNearestInt(), juce::Justification::centredLeft, 1, nameSqueeze);
 
         if (filled)
         {
+            const auto power = powerBounds();
             if (on)
             {
                 g.setColour(colour.withAlpha(alpha * 0.18f));

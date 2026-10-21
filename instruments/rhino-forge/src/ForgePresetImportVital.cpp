@@ -13,8 +13,8 @@
 // Forge has one filter to Vital's two, four envelopes to six, six LFOs to
 // eight and eight macros to four. Vital's envelopes and LFOs are given Forge's
 // in the order the patch uses them, ENV 1 staying the amplitude; a second
-// filter, anything past what Forge has, the random sources and the flanger are
-// left out with a warning each. See ForgePresetImport.h.
+// filter, anything past what Forge has and the random sources are left out
+// with a warning each. See ForgePresetImport.h.
 #include "ForgePresetImportInternal.h"
 #include <optional>
 
@@ -885,11 +885,6 @@ private:
         {
             const juce::String name(names[static_cast<size_t>(effect)]);
             if (!on(name + "_on")) continue;
-            if (name == "flanger")
-            {
-                out.warn("FLANGER: Forge's racks have no flanger, so it is left out");
-                continue;
-            }
             if (slot >= fxSlotCount) break;
             const auto id = [slot] (const char* suffix) { return fxParameterId(0, slot, suffix); };
             const auto knob = [&id, this] (int which, float value)
@@ -1012,6 +1007,26 @@ private:
                 out.set(id("Mix"), get(key("mix"), 1.0f));
                 if (juce::roundToInt(get(key("enabled_bands"), 0.0f)) == 0)
                     out.warn("COMPRESSOR: Vital's three bands are folded into Forge's one, set from the middle band");
+            }
+            else if (name == "flanger")
+            {
+                // Vital's centre is a pitch whose period is the delay, and its
+                // sweep is in pitch around it; Forge's sweep is in time from
+                // DELAY up. The depth crosses as a share of each one's range,
+                // and DELAY is put half of it below the centre, so the sweep
+                // straddles the same place.
+                out.setIndex(id("Type"), static_cast<int>(FxType::flanger));
+                rate(2, true);
+                const auto depth = juce::jlimit(0.0f, 1.0f, get(key("mod_depth"), 0.5f));
+                knob(1, depth);
+                knob(2, fxUnit(juce::jlimit(-0.95f, 0.95f, get(key("feedback"), 0.5f)), -0.95f, 0.95f));
+                const auto centre = 1000.0f / noteToHz(get(key("center"), 64.0f));
+                knob(3, fxUnit(juce::jlimit(0.1f, 10.0f, centre - fxFlangerDepthMs(depth) * 0.5f), 0.1f, 10.0f, 2.0f));
+                auto degrees = get(key("phase_offset"), 0.333333f) * 360.0f;
+                if (degrees > 180.0f) degrees -= 360.0f;
+                knob(4, fxUnit(degrees, -180.0f, 180.0f));
+                knob(5, 0.5f);
+                out.set(id("Mix"), get(key("dry_wet"), 0.5f));
             }
             else if (name == "phaser")
             {

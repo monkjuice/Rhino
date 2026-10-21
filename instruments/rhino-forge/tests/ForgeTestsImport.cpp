@@ -218,20 +218,24 @@ void vitalSuite()
     require(warned(info, "VELOCITY"), "and the scaling is said to be fixed");
 
     require(juce::roundToInt(value(processor, fxParameterId(0, 0, "Type").toRawUTF8()))
+                == static_cast<int>(FxType::flanger),
+            "the flanger takes the first slot, where Vital's chain has it");
+    requireClose(value(processor, fxParameterId(0, 0, "Mix").toRawUTF8()), 0.5f, 0.001f, "at Vital's own wet/dry");
+    require(juce::roundToInt(value(processor, fxParameterId(0, 1, "Type").toRawUTF8()))
                 == static_cast<int>(FxType::reverb),
-            "the reverb takes the first slot; the flanger has none");
-    requireClose(value(processor, fxParameterId(0, 0, "Mix").toRawUTF8()), 0.4f, 0.001f, "at its own wet/dry");
+            "and the reverb the next");
+    requireClose(value(processor, fxParameterId(0, 1, "Mix").toRawUTF8()), 0.4f, 0.001f, "at its own wet/dry");
 
     require(warned(info, "FILTER 2"), "the second filter is said to be left out");
     require(warned(info, "RANDOM 1"), "a random source is said to be left out");
-    require(warned(info, "FLANGER"), "the flanger is said to be left out");
+    require(!warned(info, "FLANGER"), "the flanger is not said to be left out");
 
     // A conversion copied into the bank keeps what it lost.
     const auto copy = folder.getChildFile("Copied.forgepreset");
     require(processor.convertPreset(file, copy).wasOk(), "a Vital preset converts into a Forge preset file");
     Processor reopened;
     require(reopened.loadPreset(copy).wasOk(), "and that file opens as a Forge preset");
-    require(warned(reopened.presetInfo(), "FLANGER"), "still saying what the conversion lost");
+    require(warned(reopened.presetInfo(), "FILTER 2"), "still saying what the conversion lost");
     requireText(reopened.presetInfo().source, "Vital", "and where it came from");
 
     // A file that is not a preset changes nothing.
@@ -447,7 +451,10 @@ void serumSuite()
             "the reverb takes the main rack's first slot");
     requireClose(value(processor, fxParameterId(0, 0, "Mix").toRawUTF8()), 0.4f, 0.001f, "at its own wet");
     require(warned(info, "Lorenz"), "a chaos LFO is said to be left out");
-    require(warned(info, "flanger"), "and so is the flanger");
+    require(juce::roundToInt(value(processor, fxParameterId(0, 1, "Type").toRawUTF8())) == static_cast<int>(FxType::flanger),
+            "the flanger takes the next slot");
+    requireClose(value(processor, fxParameterId(0, 1, "Mix").toRawUTF8()), 0.5f, 0.001f, "at its own wet");
+    require(!warned(info, "flanger"), "and is not said to be left out");
 
     const auto damaged = folder.getChildFile("Damaged.SerumPreset");
     damaged.replaceWithText("XferJson");

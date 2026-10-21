@@ -451,6 +451,23 @@ inline float fxReverbRt60(const FxSlot& slot, float hz, double sampleRate)
     return fxReverbMeanTrip(slot) * std::log(0.001f) / std::log(juce::jlimit(0.01f, 0.9999f, perTrip));
 }
 
+// The flanger's gain at one frequency with its tap at one delay: the tap read
+// between two whole samples as the line reads it, fed back into its own line,
+// added to the dry signal and halved, exactly as the render does. Where the
+// sweep has put the tap is the caller's to say.
+inline float fxFlangerMagnitude(const FxSlot& slot, float hz, double sampleRate, float delayMs)
+{
+    using Complex = std::complex<float>;
+    const auto rate = static_cast<float>(juce::jmax(1000.0, sampleRate));
+    const auto samples = juce::jmax(1.0f, delayMs * 0.001f * rate);
+    const auto whole = std::floor(samples);
+    const auto fraction = samples - whole;
+    const auto w = juce::MathConstants<float>::twoPi * juce::jlimit(1.0f, rate * 0.49f, hz) / rate;
+    const auto tap = (1.0f - fraction) * std::polar(1.0f, -w * whole) + fraction * std::polar(1.0f, -w * (whole + 1.0f));
+    const auto wet = tap / (Complex(1.0f, 0.0f) - fxFlangerFeedback(slot.knobs[2]) * tap);
+    return std::abs((Complex(1.0f, 0.0f) + wet) * 0.5f);
+}
+
 // The whole rack, rendered. One of these per rack.
 class FxRack
 {
@@ -521,7 +538,7 @@ public:
             auto& state = states[static_cast<size_t>(index)];
             render(state, slot, type, bpm, wetLeft, wetRight);
             if (type == FxType::compressor) meter.reductionDb = juce::jmin(meter.reductionDb, state.compressorReductionDb);
-            else if (type == FxType::chorus) meter.phase = state.lfoPhase;
+            else if (type == FxType::chorus || type == FxType::flanger) meter.phase = state.lfoPhase;
             else if (type == FxType::phaser) meter.phase = state.phaserPhase;
             // And one a slot makes for itself - a filter driven unstable - is
             // cleared out of that slot rather than fed back.
@@ -558,6 +575,7 @@ private:
             case FxType::filter:     renderFilter(state, slot, left, right); return;
             case FxType::compressor: renderCompressor(state, slot, left, right); return;
             case FxType::phaser:     renderPhaser(state, slot, bpm, left, right); return;
+            case FxType::flanger:    renderFlanger(state, slot, bpm, left, right); return;
             case FxType::off:        break;
         }
     }
@@ -924,6 +942,38 @@ private:
         right = juce::jmap(width, mono, wet[1]);
         state.phaserPhase += rate / static_cast<float>(sampleRate);
         while (state.phaserPhase >= 1.0f) state.phaserPhase -= 1.0f;
+    }
+
+    // --- Flanger --------------------------------------------------------------
+    //
+    // One swept tap per side, off the chorus's two lines and with its LFO, so
+    // changing type never allocates. The tap is read before the sample is
+    // written, which keeps the loop to exactly the delay and so lets the
+    // picture be the transfer the slot runs, and is fed back into its own
+    // line. The wet path is dry plus tap, halved: the comb.
+    void renderFlanger(FxSlotState& state, const FxSlot& slot, double bpm, float& left, float& right)
+    {
+        const auto rate = fxFlangerRate(slot, bpm);
+        const auto base = fxFlangerDelayMs(slot.knobs[3]);
+        const auto depth = fxFlangerDepthMs(slot.knobs[1]);
+        const auto feedback = fxFlangerFeedback(slot.knobs[2]);
+        const auto spread = fxScaled(slot.knobs[4], -0.5f, 0.5f);
+        const auto perMillisecond = 0.001f * static_cast<float>(sampleRate);
+
+        std::array<float, 2> sample {left, right};
+        for (int channel = 0; channel < 2; ++channel)
+        {
+            const auto index = static_cast<size_t>(channel);
+            const auto sweep = fxFlangerSweep(state.lfoPhase, channel == 0 ? -spread : spread);
+            const auto tap = state.lines[index].read((base + depth * sweep) * perMillisecond);
+            state.lines[index].push(sample[index] + tap * feedback);
+            sample[index] = (sample[index] + tap) * 0.5f;
+        }
+        left = sample[0];
+        right = sample[1];
+
+        state.lfoPhase += rate / static_cast<float>(sampleRate);
+        while (state.lfoPhase >= 1.0f) state.lfoPhase -= 1.0f;
     }
 };
 }

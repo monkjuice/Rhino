@@ -1204,6 +1204,61 @@ inline void drawFxPhaserComb(juce::Graphics& g, juce::Rectangle<float> plot, con
     g.fillPath(diamond);
 }
 
+// --- FLANGER ---------------------------------------------------------------------------------
+//
+// The comb dry plus the swept tap make -- fxFlangerMagnitude, the line's
+// interpolation and the feedback included -- where the sweep has the left
+// side's tap now, over faint combs at the two ends of its travel. The fill
+// streaks toward white like a jet's exhaust, and the delay the tap stands at
+// is printed in the corner. On the log axis every picture here uses, so the
+// teeth crowd toward the top as they do to the ear.
+inline void drawFxFlangerComb(juce::Graphics& g, juce::Rectangle<float> plot, const FxSlot& slot, double sampleRate,
+                              juce::Colour colour, float alpha, const FxLive& live)
+{
+    const auto box = plot.reduced(4.0f, 3.0f);
+    const auto dbY = [box] (float db) { return box.getY() + (12.0f - juce::jlimit(-30.0f, 12.0f, db)) / 42.0f * box.getHeight(); };
+    const auto base = fxFlangerDelayMs(slot.knobs[3]);
+    const auto depth = fxFlangerDepthMs(slot.knobs[1]);
+    const auto spread = fxScaled(slot.knobs[4], -0.5f, 0.5f);
+    // Two points a pixel, because the teeth are a few pixels apart at the top.
+    const auto points = juce::jlimit(96, 640, juce::roundToInt(box.getWidth() * 2.0f));
+    const auto comb = [&] (float delayMs)
+    {
+        juce::Path path;
+        for (int i = 0; i <= points; ++i)
+        {
+            const auto x = box.getX() + box.getWidth() * static_cast<float>(i) / static_cast<float>(points);
+            const auto gain = fxFlangerMagnitude(slot, filterXToHz(box, x), sampleRate, delayMs);
+            const auto y = dbY(gain <= 1.0e-6f ? -30.0f : 20.0f * std::log10(gain));
+            if (i == 0) path.startNewSubPath(x, y); else path.lineTo(x, y);
+        }
+        return path;
+    };
+    g.setColour(colour.withAlpha(alpha * 0.18f));
+    g.strokePath(comb(base), juce::PathStrokeType(1.0f));
+    if (depth > 0.01f) g.strokePath(comb(base + depth), juce::PathStrokeType(1.0f));
+
+    const auto now = base + depth * (live.valid ? fxFlangerSweep(live.phase, -spread) : 0.5f);
+    const auto current = comb(now);
+    auto fill = current;
+    fill.lineTo(box.getRight(), box.getBottom());
+    fill.lineTo(box.getX(), box.getBottom());
+    fill.closeSubPath();
+    juce::ColourGradient jet(colour.withAlpha(alpha * 0.04f), box.getX(), 0.0f,
+                             juce::Colours::white.withAlpha(alpha * 0.4f), box.getRight(), 0.0f, false);
+    jet.addColour(0.6, colour.withAlpha(alpha * 0.35f));
+    g.setGradientFill(jet);
+    g.fillPath(fill);
+    g.setColour(colour.withAlpha(alpha));
+    g.strokePath(current, juce::PathStrokeType(1.6f));
+    g.setColour(line.withAlpha(alpha * 0.7f));
+    const float dashes[] {2.0f, 3.0f};
+    g.drawDashedLine({box.getX(), dbY(0.0f), box.getRight(), dbY(0.0f)}, dashes, 2, 1.0f);
+    g.setFont(panelFont(Face::reading, 7.5f));
+    g.setColour(colour.withAlpha(alpha));
+    g.drawText(juce::String(now, 2) + " ms", box.withHeight(10.0f), juce::Justification::topRight, false);
+}
+
 // One of a strip's wells: the well itself, and whichever picture its kind
 // names, clipped to it so a resonant peak cannot run over the controls.
 inline void drawFxWell(juce::Graphics& g, const FxWell& well, const FxSlot& slot, double sampleRate, double bpm,
@@ -1234,6 +1289,7 @@ inline void drawFxWell(juce::Graphics& g, const FxWell& well, const FxSlot& slot
         case FxWellKind::compressorMeter: drawFxCompressorMeter(g, well.area.toFloat(), alpha, live); return;
         case FxWellKind::chorusTaps:      drawFxChorusTaps(g, plot, slot, bpm, colour, alpha, live); return;
         case FxWellKind::phaserComb:      drawFxPhaserComb(g, plot, slot, sampleRate, colour, alpha, live); return;
+        case FxWellKind::flangerComb:     drawFxFlangerComb(g, plot, slot, sampleRate, colour, alpha, live); return;
         case FxWellKind::generic:         break;
     }
 }
@@ -1266,6 +1322,7 @@ inline void drawFxDisplay(juce::Graphics& g, juce::Rectangle<int> area, const Fx
         case FxType::filter:     drawFxFilter(g, box, slot, colour, alpha); return;
         case FxType::compressor: drawFxCompressor(g, box, slot, colour, alpha); return;
         case FxType::phaser:     drawFxPhaser(g, box, slot, sampleRate, colour, alpha); return;
+        case FxType::flanger:    drawFxFlangerComb(g, box, slot, sampleRate, colour, alpha, {}); return;
         case FxType::off:        break;
     }
 }

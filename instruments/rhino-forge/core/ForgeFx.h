@@ -49,8 +49,8 @@ inline const char* rackName(int rack)
 
 // The order is saved inside every patch, because a slot stores its type as an
 // index into it. Append; never insert.
-enum class FxType { off, reverb, delay, chorus, distortion, equaliser, filter, compressor, phaser };
-inline constexpr int fxTypeCount = 9;
+enum class FxType { off, reverb, delay, chorus, distortion, equaliser, filter, compressor, phaser, flanger };
+inline constexpr int fxTypeCount = 10;
 
 inline const char* fxTypeName(int type)
 {
@@ -64,6 +64,7 @@ inline const char* fxTypeName(int type)
         case 6: return "FILTER";
         case 7: return "COMP";
         case 8: return "PHASER";
+        case 9: return "FLANGER";
         default: break;
     }
     return "OFF";
@@ -200,6 +201,16 @@ inline const std::array<FxTypeInfo, fxTypeCount>& fxTypes()
          {"UNIT", {"HZ", "BPM"}, 2}, {"STAGES", {"4", "6", "8", "12"}, 4},
          // A slow six-stage sweep, broad enough to read without swallowing the source.
          {0.22f, 0.58f, 0.46f, 0.58f, 0.5f, 0.75f}, 0.7f},
+
+        // DELAY is where the sweep starts and DEPTH how far past it the tap
+        // travels; FEEDBACK is bipolar, its negative half hollowing the comb
+        // out where the positive half rings it. Fully wet, because the wet
+        // path is already the dry signal plus the swept tap, and less of it
+        // only fills the notches in.
+        {"FLANGER", {"RATE", "DEPTH", "FEEDBACK", "DELAY", "SPREAD", nullptr},
+         {"UNIT", {"HZ", "BPM"}, 2}, {},
+         // A slow jet around a millisecond, fed back enough to ring.
+         {0.2f, 0.5f, 0.72f, 0.3f, 0.6f, 0.5f}, 1.0f},
     }};
     return table;
 }
@@ -431,5 +442,29 @@ inline int fxPhaserStages(const FxSlot& slot)
     static constexpr std::array<int, 4> stages {4, 6, 8, 12};
     const auto& mode = fxTypes()[static_cast<size_t>(FxType::phaser)].modeB;
     return stages[static_cast<size_t>(fxModeOf(mode, slot.modeB))];
+}
+
+// The flanger's laws, read by its render, its picture and its readouts.
+inline float fxFlangerRate(const FxSlot& slot, double bpm)
+{
+    const auto& info = fxTypes()[static_cast<size_t>(FxType::flanger)];
+    if (fxModeOf(info.modeA, slot.modeA) == 1)
+    {
+        const auto tempo = bpm > 0.0 ? bpm : 120.0;
+        return static_cast<float>(tempo / 60.0) / juce::jmax(0.001f, fxDivisionAt(slot.knobs[0]).beats);
+    }
+    return fxScaled(slot.knobs[0], 0.02f, 8.0f, 2.0f);
+}
+inline float fxFlangerDepthMs(float knob) { return fxScaled(knob, 0.0f, 5.0f); }
+inline float fxFlangerFeedback(float knob) { return fxScaled(knob, -0.95f, 0.95f); }
+inline float fxFlangerDelayMs(float knob) { return fxScaled(knob, 0.1f, 10.0f, 2.0f); }
+
+// Where one side's tap is in its travel, 0 at DELAY and 1 at DELAY plus DEPTH,
+// at an LFO phase in turns and that side's half of SPREAD, which is the phaser's
+// arithmetic: SPREAD is the difference between the two sides.
+inline float fxFlangerSweep(float phase, float spreadHalf)
+{
+    return 0.5f + 0.5f * std::sin(phase * juce::MathConstants<float>::twoPi
+                                  + spreadHalf * juce::MathConstants<float>::pi);
 }
 }

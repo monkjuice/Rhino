@@ -295,6 +295,14 @@ void fxSuite()
         const auto hall = textFor(reading, rhino::forge::fxParameterId(0, 0, "Knob1").toRawUTF8(), 0.5f);
         require(hall.getFloatValue() > plate.getFloatValue(), "the same SIZE rings longer in a HALL");
     }
+    // A flanger's DEPTH and DELAY are milliseconds and its FEEDBACK is signed.
+    place(reading, 0, 0, FxType::flanger);
+    requireText(textFor(reading, rhino::forge::fxParameterId(0, 0, "Knob2").toRawUTF8(), 0.5f),
+                "2.50 ms", "a flanger's DEPTH reads how far the tap travels");
+    requireText(textFor(reading, rhino::forge::fxParameterId(0, 0, "Knob3").toRawUTF8(), 0.0f),
+                "-95 %", "a flanger's FEEDBACK reads its sign");
+    requireText(textFor(reading, rhino::forge::fxParameterId(0, 0, "Knob4").toRawUTF8(), 1.0f),
+                "10.00 ms", "a flanger's DELAY reads where the sweep starts");
     // A delay's feedback reads no higher than the loop lets it go.
     place(reading, 0, 0, FxType::delay);
     requireText(textFor(reading, rhino::forge::fxParameterId(0, 0, "Knob3").toRawUTF8(), 1.0f),
@@ -402,6 +410,51 @@ void fxSuite()
                 std::cerr << "       model " << model << " at " << hz << " Hz: heard " << measured
                           << " dB, drawn " << drawn << " dB" << '\n';
             require(agrees, "the filter's curve is the gain the slot actually applies");
+        }
+    }
+
+    // --- The flanger's comb, drawn from its own arithmetic -----------------------
+    //
+    // The JET well draws fxFlangerMagnitude. With no DEPTH the tap stands
+    // still, so the slot is a fixed comb, and a sine at a peak, a notch and
+    // between them is held to the curve. DELAY is not a whole number of
+    // samples here, so the line's interpolation is in what is compared.
+    {
+        rhino::forge::FxRack rack;
+        const auto sampleRate = 48000.0;
+        rack.prepare(sampleRate);
+        rhino::forge::Rack settings;
+        auto& slot = settings.slots[0];
+        slot.type = static_cast<float>(FxType::flanger);
+        slot.knobs = {0.2f, 0.0f, 0.72f, 0.3f, 0.5f, 0.5f};
+        const auto delayMs = rhino::forge::fxFlangerDelayMs(slot.knobs[3]);
+        for (const auto ratio : {0.2f, 0.5f, 0.75f, 1.0f, 2.6f})
+        {
+            const auto hz = ratio * 1000.0f / delayMs;
+            rack.reset();
+            double phase = 0.0;
+            auto in = 0.0, out = 0.0;
+            const auto sweepLength = 48000;
+            for (int i = 0; i < sweepLength; ++i)
+            {
+                const auto x = 0.2f * static_cast<float>(std::sin(phase));
+                phase += juce::MathConstants<double>::twoPi * hz / sampleRate;
+                auto left = x, right = x;
+                rack.process(settings, 120.0, left, right);
+                if (i >= sweepLength / 2)
+                {
+                    in += static_cast<double>(x) * x;
+                    out += static_cast<double>(left) * left;
+                }
+            }
+            const auto measured = 10.0 * std::log10(out / in);
+            const auto drawn = 20.0 * std::log10(juce::jmax(1.0e-9f,
+                rhino::forge::fxFlangerMagnitude(slot, hz, sampleRate, delayMs)));
+            const auto agrees = drawn < -30.0 ? measured < -24.0 : std::abs(measured - drawn) <= 0.5;
+            if (!agrees)
+                std::cerr << "       flanger at " << hz << " Hz: heard " << measured << " dB, drawn " << drawn
+                          << " dB" << '\n';
+            require(agrees, "the flanger's comb is the gain the slot actually applies");
         }
     }
 
@@ -1217,7 +1270,7 @@ void fxDisplaySuite()
 
         // Every other type leaves every knob alone, so a rule added by accident
         // to one of them is caught rather than merely unnoticed.
-        for (const auto type : {FxType::reverb, FxType::delay, FxType::chorus, FxType::phaser})
+        for (const auto type : {FxType::reverb, FxType::delay, FxType::chorus, FxType::phaser, FxType::flanger})
         {
             rhino::forge::FxSlot other;
             other.type = static_cast<float>(type);

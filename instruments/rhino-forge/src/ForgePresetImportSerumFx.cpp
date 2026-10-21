@@ -5,9 +5,9 @@
 // one module, processed in list order, with only the settings that differ from
 // its default stored; so each Forge slot starts from what its type opens on
 // and takes Serum's settings over it, converted through the knob laws the
-// serum2vital project measured. A module Forge has no type for — the flanger,
-// the Hyper/Dimension, the frequency shifter, the convolver, the utility and
-// the band splitters — is left out with a warning.
+// serum2vital project measured. A module Forge has no type for — the
+// Hyper/Dimension, the frequency shifter, the convolver, the utility and the
+// band splitters — is left out with a warning.
 #include "ForgePresetImportInternal.h"
 
 namespace rhino::forge::import
@@ -283,10 +283,30 @@ std::vector<SerumFxPlace> convertSerumFx(const juce::var& patch, PatchWriter& ou
                 }
                 mix(0.7f);
             }
+            else if (type == "FXFlanger")
+            {
+                // Serum's flanger has no centre delay, so DELAY keeps Forge's
+                // own. Its FEEDBACK is one-sided, the upper half of Forge's,
+                // and its PHASE, stored as a width in degrees, is the
+                // difference between the two sides' LFOs, which SPREAD is too.
+                startSlot(out, rack, slot, FxType::flanger);
+                mode("ModeA", synced ? 1 : 0, 2);
+                if (has("kParamRate"))
+                    knob(0, synced ? divisionKnob(1.0f) : unit(number(params, "kParamRate", 0.2f), 0.02f, 8.0f, 2.0f));
+                if (has("kParamDepth")) knob(1, number(params, "kParamDepth", 50.0f) / 100.0f);
+                if (has("kParamFeedback")) knob(2, 0.5f + number(params, "kParamFeedback", 50.0f) / 200.0f);
+                if (has("kParamWidth"))
+                {
+                    auto degrees = number(params, "kParamWidth", 180.0f);
+                    if (degrees > 180.0f) degrees -= 360.0f;
+                    knob(4, unit(degrees, -180.0f, 180.0f));
+                }
+                mix(1.0f);
+            }
             else
             {
                 static const std::map<juce::String, const char*> names {
-                    {"FXFlanger", "flanger"}, {"FXHyperD", "Hyper/Dimension"}, {"FXBode", "frequency shifter"},
+                    {"FXHyperD", "Hyper/Dimension"}, {"FXBode", "frequency shifter"},
                     {"FXConv", "convolution reverb"}, {"FXUtils", "utility"}, {"FXSplit", "band splitter"},
                     {"FXSplit3", "band splitter"}, {"FXSplitMS", "mid/side splitter"}};
                 const auto found = names.find(type);

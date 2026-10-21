@@ -620,6 +620,26 @@ juce::String Processor::fxKnobText(int rack, int slot, int knob, float value) co
                                  + juce::String::fromUTF8("\xc2\xb0");
             return percent();
 
+        case FxType::flanger:
+            if (knob == 0)
+            {
+                const auto synced = fxModeOf(fxTypes()[static_cast<size_t>(FxType::flanger)].modeA,
+                                             state.getRawParameterValue(
+                                                 fxParameterId(rack, slot, "ModeA"))->load()) == 1;
+                if (synced) return juce::String(fxDivisionAt(value).label);
+                return juce::String(fxScaled(value, 0.02f, 8.0f, 2.0f), 2) + " Hz";
+            }
+            if (knob == 1) return juce::String(fxFlangerDepthMs(value), 2) + " ms";
+            if (knob == 2)
+            {
+                const auto feedback = juce::roundToInt(fxFlangerFeedback(value) * 100.0f);
+                return (feedback > 0 ? "+" : "") + juce::String(feedback) + " %";
+            }
+            if (knob == 3) return juce::String(fxFlangerDelayMs(value), 2) + " ms";
+            if (knob == 4) return juce::String(fxScaled(value, -180.0f, 180.0f), 0)
+                                 + juce::String::fromUTF8("\xc2\xb0");
+            return percent();
+
         case FxType::off:
             break;
     }

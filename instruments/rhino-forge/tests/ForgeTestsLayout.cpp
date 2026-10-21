@@ -1376,6 +1376,63 @@ void matrixGrowsWithRoutingsSuite()
     require(rowsOnScreen() == ui::matrixDefaultRows,
             "clearing every routing takes the table back to its eight rows");
 }
+
+// A rack slot is laid out by the type it holds (ForgeFxStrips.h). Where a type
+// keeps the generic row, its strip has to land on exactly the rectangles the
+// declared row gives, at every size and in every view, so a type that has not
+// been given a strip of its own looks as it always did.
+void fxStripsMatchTheDeclaredRowSuite()
+{
+    using namespace rhino::forge;
+    const ui::Module* rack = nullptr;
+    for (const auto& module : ui::modules())
+        if (juce::String(module.id) == "fx") rack = &module;
+    require(rack != nullptr, "the panel declares its effects rack");
+    if (rack == nullptr) return;
+
+    auto checked = 0;
+    for (int width = ui::minPanelWidth; width <= ui::maxPanelWidth; width += 120)
+        for (int height = ui::minPanelHeight; height <= ui::maxPanelHeight; height += 120)
+            for (const auto listOpen : {false, true})
+            {
+                const auto panel = juce::Rectangle<int>(0, 0, width, height);
+                const auto area = ui::fxScrolledRackBounds(ui::fxModuleBounds(panel, *rack, false), listOpen, 0);
+                const auto shared = ui::uniformKnobDiameter(panel);
+                const auto sizes = ui::fxKnobSizesFor(panel);
+                for (int slot = 0; slot < fxSlotCount; ++slot)
+                {
+                    const auto strip = ui::rowBounds(area, *rack, slot);
+                    for (int type = 0; type < fxTypeCount; ++type)
+                    {
+                        const auto layout = ui::fxStripLayout(type, strip, sizes);
+                        require(layout.wellCount == 1 && layout.wells[0] == ui::rowDisplayBounds(area, *rack, slot),
+                                "a generic strip's display is the declared row's display strip");
+                        for (int index = 0; index < ui::fxRoleCount; ++index)
+                        {
+                            const auto& declared = rack->rows[static_cast<size_t>(slot)].controls[static_cast<size_t>(index)];
+                            auto block = ui::controlBlock(area, *rack, slot, index, shared);
+                            const auto cell = ui::cellBounds(area, *rack, slot, index);
+                            juce::Rectangle<int> component = block, caption;
+                            if (declared.style == ui::Style::selector)
+                            {
+                                caption = block.removeFromTop(ui::stepperLabelHeight);
+                                component = block;
+                            }
+                            else if (declared.style == ui::Style::knob)
+                            {
+                                caption = ui::knobLabelBounds(block, cell);
+                                component = block.withTrimmedTop(ui::knobLabelHeight);
+                            }
+                            const auto& spot = layout.spot(ui::fxRoleOf(index));
+                            require(spot.component == component && spot.caption == caption,
+                                    "a generic strip puts every control where the declared row does");
+                            ++checked;
+                        }
+                    }
+                }
+            }
+    require(checked > 0, "the generic strips were checked");
+}
 }
 
 void layoutTests()
@@ -1386,5 +1443,6 @@ void layoutTests()
     switchedOffControlsStaySuite();
     captionsKeepTheirSizeSuite();
     matrixGrowsWithRoutingsSuite();
+    fxStripsMatchTheDeclaredRowSuite();
 }
 }

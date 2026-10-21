@@ -3,6 +3,8 @@
 // handful of areas the paint and input paths ask for by name.
 #include "ForgeEditorInternal.h"
 
+#include <optional>
+
 namespace rhino::forge
 {
 bool Editor::moduleShown(const ui::Module& module) const
@@ -101,6 +103,9 @@ void Editor::resized()
                                                       descriptor));
 
     const auto diameter = ui::uniformKnobDiameter(getLocalBounds());
+    const auto fxSizes = ui::fxKnobSizesFor(getLocalBounds());
+    // Every control of a slot asks for the same strip, so each is laid out once.
+    std::array<std::optional<ui::FxStrip>, rackCount * fxSlotCount> fxStrips;
     for (auto& module : moduleUis)
     {
         const auto& descriptor = *module.descriptor;
@@ -160,13 +165,23 @@ void Editor::resized()
         for (auto& held : module.controls)
         {
             auto& control = *held;
-            auto controlsArea = area;
+            // A rack slot is laid out by the effect it holds rather than by
+            // its declared row: see ForgeFxStrips.h. Its rectangles are in the
+            // editor's coordinates and its controls are children of the
+            // clipping viewport, so they are moved into the viewport's.
             if (rackModule)
             {
                 int rack = 0, slot = 0;
                 if (fxControlAt(control.id, rack, slot))
-                    controlsArea = fxRackAreaFor(area, rack, slot);
+                {
+                    auto& strip = fxStrips[static_cast<size_t>(rack * fxSlotCount + slot)];
+                    if (!strip.has_value()) strip = fxStripFor(area, descriptor, rack, slot, fxSizes);
+                    placeFxControl(control, strip->spot(ui::fxRoleOf(control.index)),
+                                   -fxControlViewport.getPosition());
+                    continue;
+                }
             }
+            auto controlsArea = area;
             // Every row of the matrix is placed, the ones past its window
             // included: they land off the table and applyEnableStates keeps
             // them hidden, so scrolling moves rows rather than making them.
@@ -174,11 +189,6 @@ void Editor::resized()
                 controlsArea = ui::matrixScrolledBounds(area, descriptor, matrixFirstRow);
             auto block = ui::controlBlock(controlsArea, descriptor, control.row, control.index, diameter);
             auto cell = ui::cellBounds(controlsArea, descriptor, control.row, control.index);
-            if (rackModule)
-            {
-                block = block.translated(-fxControlViewport.getX(), -fxControlViewport.getY());
-                cell = cell.translated(-fxControlViewport.getX(), -fxControlViewport.getY());
-            }
 
             // A macro's cell is laid out as nothing else on the panel is: the
             // knob, the plate beside it carrying the number you drag and the
@@ -250,6 +260,43 @@ void Editor::resized()
         }
     }
     placeTableFields();
+}
+
+ui::FxStrip Editor::fxStripFor(juce::Rectangle<int> moduleArea, const ui::Module& module, int rack, int slot,
+                               const ui::FxKnobSizes& sizes) const
+{
+    const auto strip = ui::rowBounds(fxRackAreaFor(moduleArea, rack, slot), module, slot);
+    return ui::fxStripLayout(fxTypesShown[static_cast<size_t>(rack * fxSlotCount + slot)], strip, sizes);
+}
+
+// One rack control into the spot its slot's strip gave it. `offset` moves the
+// spot from the editor's coordinates into the viewport the control lives in.
+void Editor::placeFxControl(Control& control, const ui::FxSpot& spot, juce::Point<int> offset)
+{
+    const auto component = spot.component.translated(offset.x, offset.y);
+    const auto caption = spot.caption.translated(offset.x, offset.y);
+    switch (control.style)
+    {
+        case ui::Style::plate:
+            control.plate->setBounds(component);
+            break;
+        case ui::Style::chip:
+            control.chip->setBounds(component);
+            break;
+        case ui::Style::selector:
+            control.label.setBounds(caption);
+            control.selector->setBounds(component);
+            break;
+        case ui::Style::knob:
+        case ui::Style::bar:
+        case ui::Style::fader:
+        case ui::Style::stepper:
+        case ui::Style::rocker:
+        case ui::Style::wave:
+            control.label.setBounds(caption);
+            control.slider.setBounds(component);
+            break;
+    }
 }
 
 // The envelope module is painted straight onto the editor rather than being a

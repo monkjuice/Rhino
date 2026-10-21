@@ -470,6 +470,10 @@ private:
     ui::Page pageOf(const ui::Module&) const;
     juce::Rectangle<int> moduleAreaFor(const ui::Module&) const;
     juce::Rectangle<int> fxRackAreaFor(juce::Rectangle<int> moduleArea, int rack, int slot) const;
+    // The strip a rack slot is shown in, laid out for the type it holds.
+    ui::FxStrip fxStripFor(juce::Rectangle<int> moduleArea, const ui::Module&, int rack, int slot,
+                           const ui::FxKnobSizes&) const;
+    void placeFxControl(Control&, const ui::FxSpot&, juce::Point<int> offset);
     int fxActiveSlotCount(int rack) const;
     int fxDisplayRow(int rack, int slot) const;
     int fxSlotAtDisplayRow(int rack, int row) const;

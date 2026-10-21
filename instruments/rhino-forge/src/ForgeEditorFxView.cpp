@@ -114,6 +114,7 @@ void Editor::repaintFxDisplays()
 void Editor::paintFxShelves(juce::Graphics& g, juce::Rectangle<int> area, const ui::Module& module)
 {
     const auto rack = shownRack();
+    const auto sizes = ui::fxKnobSizesFor(getLocalBounds());
     {
         juce::Graphics::ScopedSaveState clipped(g);
         g.reduceClipRegion(ui::fxSlotViewportBounds(area, fxListOpen));
@@ -122,6 +123,7 @@ void Editor::paintFxShelves(juce::Graphics& g, juce::Rectangle<int> area, const 
             if (fxDisplayRow(rack, slot) < 0) continue;
             const auto rackArea = fxRackAreaFor(area, rack, slot);
             const auto row = ui::rowBounds(rackArea, module, slot);
+            const auto strip = fxStripFor(area, module, rack, slot, sizes);
             const auto held = fxSlotOf(rack, slot);
             // Widened past the controls by the module's own padding, so the shelves
             // read as the full width of the rack rather than as a box around the
@@ -129,7 +131,7 @@ void Editor::paintFxShelves(juce::Graphics& g, juce::Rectangle<int> area, const 
             ui::drawFxShelf(g, row.expanded(6, 1), juce::roundToInt(held.type), true);
             // A slot that is bypassed still says what is in it, dimmed — the point
             // of a bypass is to hear a rack without it and put it straight back.
-            ui::drawFxDisplay(g, ui::rowDisplayBounds(rackArea, module, slot).reduced(4, 6), held,
+            ui::drawFxDisplay(g, strip.wells[0].reduced(4, 6), held,
                               processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 48000.0,
                               processor.hostTempo(), fxOn(held.bypass) ? 0.3f : 1.0f);
             if (slot == fxSelectedSlot)

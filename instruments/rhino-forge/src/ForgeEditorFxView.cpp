@@ -104,6 +104,85 @@ void Editor::setFxFirstVisibleSlot(int slot)
 // declaration.
 // Only the rack's own box, rather than the whole panel: this runs for every
 // step of a knob being turned.
+// --- Dragging a picture by its node -----------------------------------------------
+//
+// The rack's pictures are painted by the editor rather than being components,
+// so a press on one arrives here. Only the rack on screen can be taken hold
+// of, and only where its viewport shows it; what a press takes and what a
+// drag sets is ForgeFxGestures.h's.
+bool Editor::fxWellAt(juce::Point<int> at, int& rack, int& slot, ui::FxWell& well, ui::FxWellGrab& grab) const
+{
+    if (page != ui::Page::fx) return false;
+    for (const auto& module : ui::modules())
+    {
+        if (!isFxModule(module)) continue;
+        const auto area = moduleAreaFor(module);
+        if (!ui::fxSlotViewportBounds(area, fxListOpen).contains(at)) continue;
+        rack = shownRack();
+        const auto sizes = ui::fxKnobSizesFor(getLocalBounds());
+        for (slot = 0; slot < static_cast<int>(module.rows.size()) && slot < fxSlotCount; ++slot)
+        {
+            if (fxDisplayRow(rack, slot) < 0) continue;
+            const auto strip = fxStripFor(area, module, rack, slot, sizes);
+            if (!strip.strip.contains(at)) continue;
+            const auto held = fxSlotOf(rack, slot);
+            for (int index = 0; index < strip.wellCount; ++index)
+            {
+                well = strip.wells[static_cast<size_t>(index)];
+                if (ui::fxWellGrabAt(well, held, at.toFloat(), grab)) return true;
+            }
+            return false;
+        }
+    }
+    return false;
+}
+
+bool Editor::beginFxWellDrag(juce::Point<int> at)
+{
+    FxWellDrag drag;
+    if (!fxWellAt(at, drag.rack, drag.slot, drag.well, drag.grab)) return false;
+    drag.active = true;
+    fxWellDrag = drag;
+    // A node goes to where it was pressed, as a slider's thumb does; a handle
+    // dragged by how far it travels waits for the pointer to move.
+    if (ui::fxWellFollowsPointer(drag.grab.kind)) dragFxWell(at);
+    return true;
+}
+
+void Editor::dragFxWell(juce::Point<int> at)
+{
+    if (!fxWellDrag.active) return;
+    const auto edit = ui::fxWellDragTo(fxWellDrag.well, fxWellDrag.grab, at.toFloat(),
+                                       processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 48000.0,
+                                       processor.hostTempo());
+    for (int index = 0; index < edit.count; ++index)
+    {
+        const auto knob = edit.knobs[static_cast<size_t>(index)];
+        auto* parameter = processor.state.getParameter(fxParameterId(fxWellDrag.rack, fxWellDrag.slot, "Knob")
+                                                       + juce::String(knob + 1));
+        if (parameter == nullptr) continue;
+        auto& touched = fxWellDrag.touched[static_cast<size_t>(knob)];
+        if (!touched)
+        {
+            parameter->beginChangeGesture();
+            touched = true;
+        }
+        parameter->setValueNotifyingHost(parameter->convertTo0to1(edit.values[static_cast<size_t>(index)]));
+    }
+    repaintFxDisplays();
+}
+
+void Editor::endFxWellDrag()
+{
+    if (!fxWellDrag.active) return;
+    for (int knob = 0; knob < fxKnobCount; ++knob)
+        if (fxWellDrag.touched[static_cast<size_t>(knob)])
+            if (auto* parameter = processor.state.getParameter(fxParameterId(fxWellDrag.rack, fxWellDrag.slot, "Knob")
+                                                               + juce::String(knob + 1)))
+                parameter->endChangeGesture();
+    fxWellDrag = {};
+}
+
 void Editor::takeFxMeters()
 {
     // Only the rack on screen is drawn, and only while the FX page shows, so

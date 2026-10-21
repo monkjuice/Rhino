@@ -419,6 +419,43 @@ inline void drawFxPhaser(juce::Graphics& g, juce::Rectangle<float> box, const Fx
     }
 }
 
+// Where each picture draws inside its well: the box its axes span. Shared with
+// the gestures in ForgeFxGestures.h, so a press lands on the value drawn under
+// it.
+inline juce::Rectangle<float> fxPictureBox(FxWellKind kind, juce::Rectangle<float> plot)
+{
+    switch (kind)
+    {
+        case FxWellKind::distortionTone:  return plot.reduced(4.0f, 4.0f);
+        case FxWellKind::distortionShape: return plot.reduced(5.0f, 4.0f);
+        case FxWellKind::filterResponse:  return plot.reduced(4.0f, 3.0f);
+        case FxWellKind::delayTape:       return plot.reduced(6.0f, 3.0f);
+        case FxWellKind::delayLoop:       return plot.reduced(4.0f, 4.0f);
+        case FxWellKind::reverbTail:      return plot.reduced(5.0f, 3.0f).withTrimmedBottom(9.0f);
+        case FxWellKind::reverbDecay:     return plot.reduced(4.0f, 4.0f);
+        case FxWellKind::eqResponse:      return plot.reduced(4.0f, 4.0f);
+        case FxWellKind::compressorCurve: return plot.reduced(5.0f, 4.0f);
+        case FxWellKind::chorusTaps:      return plot.reduced(4.0f, 4.0f).withTrimmedLeft(14.0f);
+        case FxWellKind::phaserComb:      return plot.reduced(4.0f, 3.0f);
+        case FxWellKind::flangerComb:     return plot.reduced(4.0f, 3.0f);
+        case FxWellKind::compressorMeter:
+        case FxWellKind::generic:         break;
+    }
+    return plot;
+}
+
+// How much time the delay's picture spans: every repeat still above -40 dB and
+// a little after, so the axis follows TIME and FEEDBACK. A drag holds the span
+// it was pressed on, or the axis would move under the pointer.
+inline float fxDelayTapeSpan(const FxSlot& slot, double bpm)
+{
+    const auto seconds = fxDelaySeconds(slot, bpm);
+    const auto feedback = juce::jlimit(0.0f, 0.95f, slot.knobs[2]);
+    const auto audible = feedback <= 0.01f ? 1
+        : juce::jlimit(1, 24, juce::roundToInt(std::log(0.01f) / std::log(feedback)));
+    return juce::jmax(0.05f, seconds * juce::jmax(1.0f, fxOffsetRatio(slot.knobs[1])) * (static_cast<float>(audible) + 0.6f));
+}
+
 // --- The distortion's two wells ---------------------------------------------------
 //
 // TONE: the filter's own response, from distortionFilterMagnitude -- the exact
@@ -430,7 +467,7 @@ inline void drawFxDistortionTone(juce::Graphics& g, juce::Rectangle<float> plot,
 {
     const auto placement = fxDistortionFilterPlacement(slot);
     const auto highPass = fxDistortionFilterHighPass(slot);
-    const auto box = plot.reduced(4.0f, 4.0f);
+    const auto box = fxPictureBox(FxWellKind::distortionTone, plot);
     const auto unity = filterDbToY(box, 0.0f);
     if (placement == 0)
     {
@@ -487,7 +524,7 @@ inline void drawFxDistortionShape(juce::Graphics& g, juce::Rectangle<float> plot
     const auto& info = fxTypes()[static_cast<size_t>(FxType::distortion)];
     const auto shape = fxModeOf(info.modeA, slot.modeA);
     const auto drive = juce::jlimit(0.0f, 1.0f, slot.knobs[0]);
-    const auto box = plot.reduced(5.0f, 4.0f);
+    const auto box = fxPictureBox(FxWellKind::distortionShape, plot);
     const auto middle = box.getCentreY();
     const auto yOf = [box, middle] (float value) { return middle - juce::jlimit(-1.0f, 1.0f, value) * box.getHeight() * 0.5f; };
 
@@ -603,7 +640,7 @@ inline void drawFxFilterResponse(juce::Graphics& g, juce::Rectangle<float> plot,
                                        "12 dB/OCT", "6 dB/OCT", "PEAK", "BAND"};
     const auto& info = fxTypes()[static_cast<size_t>(FxType::filter)];
     const auto model = fxModeOf(info.modeA, slot.modeA);
-    const auto box = plot.reduced(4.0f, 3.0f);
+    const auto box = fxPictureBox(FxWellKind::filterResponse, plot);
     const auto dbY = [box] (float db)
     {
         return box.getBottom() - (juce::jlimit(-36.0f, 18.0f, db) + 36.0f) / 54.0f * box.getHeight();
@@ -671,15 +708,13 @@ inline void drawFxDelayTape(juce::Graphics& g, juce::Rectangle<float> plot, cons
     const auto& info = fxTypes()[static_cast<size_t>(FxType::delay)];
     const auto pingPong = fxModeOf(info.modeA, slot.modeA) == 1;
     const auto synced = fxModeOf(info.modeB, slot.modeB) == 1;
-    const auto box = plot.reduced(6.0f, 3.0f);
+    const auto box = fxPictureBox(FxWellKind::delayTape, plot);
     const auto middle = box.getCentreY();
     const auto seconds = fxDelaySeconds(slot, bpm);
     const auto ratio = fxOffsetRatio(slot.knobs[1]);
     const auto feedback = juce::jlimit(0.0f, 0.95f, slot.knobs[2]);
     const auto tone = fxDelayLoopGain(slot, 4000.0f, sampleRate);
-    const auto audible = feedback <= 0.01f ? 1
-        : juce::jlimit(1, 24, juce::roundToInt(std::log(0.01f) / std::log(feedback)));
-    const auto span = juce::jmax(0.05f, seconds * juce::jmax(1.0f, ratio) * (static_cast<float>(audible) + 0.6f));
+    const auto span = fxDelayTapeSpan(slot, bpm);
     const auto xOf = [box, span] (float t) { return box.getX() + juce::jlimit(0.0f, 1.0f, t / span) * box.getWidth(); };
 
     if (synced)
@@ -746,7 +781,7 @@ inline void drawFxDelayTape(juce::Graphics& g, juce::Rectangle<float> plot, cons
 inline void drawFxDelayLoop(juce::Graphics& g, juce::Rectangle<float> plot, const FxSlot& slot,
                             double sampleRate, juce::Colour colour, float alpha)
 {
-    const auto box = plot.reduced(4.0f, 4.0f);
+    const auto box = fxPictureBox(FxWellKind::delayLoop, plot);
     const auto dbY = [box] (float db) { return box.getY() + juce::jlimit(0.0f, 1.0f, -db / 24.0f) * box.getHeight(); };
     juce::Path curve;
     const auto points = juce::jlimit(32, 160, juce::roundToInt(box.getWidth()));
@@ -784,7 +819,7 @@ inline constexpr float fxReverbAxisSeconds = 6.5f;
 inline void drawFxReverbTail(juce::Graphics& g, juce::Rectangle<float> plot, const FxSlot& slot,
                              double sampleRate, juce::Colour colour, float alpha)
 {
-    const auto box = plot.reduced(5.0f, 3.0f).withTrimmedBottom(9.0f);
+    const auto box = fxPictureBox(FxWellKind::reverbTail, plot);
     const auto tX = [box] (float t)
     {
         return box.getX() + std::sqrt(juce::jlimit(0.0f, 1.0f, t / fxReverbAxisSeconds)) * box.getWidth();
@@ -842,7 +877,7 @@ inline void drawFxReverbTail(juce::Graphics& g, juce::Rectangle<float> plot, con
 inline void drawFxReverbDecay(juce::Graphics& g, juce::Rectangle<float> plot, const FxSlot& slot,
                               double sampleRate, juce::Colour colour, float alpha)
 {
-    const auto box = plot.reduced(4.0f, 4.0f);
+    const auto box = fxPictureBox(FxWellKind::reverbDecay, plot);
     const auto rtY = [box] (float t)
     {
         return box.getBottom() - std::sqrt(juce::jlimit(0.0f, 1.0f, t / fxReverbAxisSeconds)) * box.getHeight();
@@ -891,7 +926,7 @@ inline void drawFxEqResponse(juce::Graphics& g, juce::Rectangle<float> plot, con
     setBand(high, highChoice == 0 ? BandShape::highShelf : highChoice == 1 ? BandShape::peak : BandShape::lowPass,
             fxHertz(slot.knobs[3], 500.0f, 18000.0f), fxScaled(slot.knobs[4], 0.2f, 6.0f),
             fxScaled(slot.knobs[5], -18.0f, 18.0f), sampleRate);
-    const auto box = plot.reduced(4.0f, 4.0f);
+    const auto box = fxPictureBox(FxWellKind::eqResponse, plot);
     const auto dbY = [box] (float db) { return box.getCentreY() - juce::jlimit(-24.0f, 24.0f, db) / 24.0f * box.getHeight() * 0.5f; };
     g.setColour(line.withAlpha(alpha * 0.5f));
     for (const auto hz : {100.0f, 1000.0f, 10000.0f}) g.fillRect(filterHzToX(box, hz), box.getY(), 1.0f, box.getHeight());
@@ -955,7 +990,7 @@ inline void drawFxCompressorCurve(juce::Graphics& g, juce::Rectangle<float> plot
     const auto knee = fxCompressorKnee(slot.knobs[5]);
     const auto automatic = fxModeOf(info.modeB, slot.modeB) == 1;
     const auto makeup = automatic ? fxCompressorAutoMakeup(threshold, ratio) : fxCompressorMakeup(slot.knobs[4]);
-    const auto box = plot.reduced(5.0f, 4.0f);
+    const auto box = fxPictureBox(FxWellKind::compressorCurve, plot);
     const auto xOf = [box] (float db) { return box.getX() + (juce::jlimit(-60.0f, 0.0f, db) + 60.0f) / 60.0f * box.getWidth(); };
     const auto yOf = [box] (float db) { return box.getBottom() - juce::jlimit(0.0f, 1.0f, (db + 60.0f) / 66.0f) * box.getHeight(); };
     const auto outAt = [&] (float in) { return juce::jmin(0.0f, fxCompressorOutputDb(in, threshold, ratio, knee) + makeup); };
@@ -1053,7 +1088,7 @@ inline void drawFxChorusTaps(juce::Graphics& g, juce::Rectangle<float> plot, con
                              juce::Colour colour, float alpha, const FxLive& live)
 {
     const auto right = juce::Colour(0xff9fe7ff);
-    const auto box = plot.reduced(4.0f, 4.0f).withTrimmedLeft(14.0f);
+    const auto box = fxPictureBox(FxWellKind::chorusTaps, plot);
     const auto msY = [box] (float ms) { return box.getBottom() - juce::jlimit(0.0f, 1.0f, ms / 42.0f) * box.getHeight(); };
     g.setFont(panelFont(Face::reading, 7.0f));
     for (const auto ms : {10.0f, 20.0f, 30.0f, 40.0f})
@@ -1130,7 +1165,7 @@ inline void drawFxPhaserComb(juce::Graphics& g, juce::Rectangle<float> plot, con
                              juce::Colour colour, float alpha, const FxLive& live)
 {
     using Complex = std::complex<float>;
-    const auto box = plot.reduced(4.0f, 3.0f);
+    const auto box = fxPictureBox(FxWellKind::phaserComb, plot);
     const auto dbY = [box] (float db) { return box.getY() + (12.0f - juce::jlimit(-30.0f, 12.0f, db)) / 42.0f * box.getHeight(); };
     const auto stages = fxPhaserStages(slot);
     const auto centre = fxHertz(slot.knobs[2], 80.0f, 8000.0f);
@@ -1215,7 +1250,7 @@ inline void drawFxPhaserComb(juce::Graphics& g, juce::Rectangle<float> plot, con
 inline void drawFxFlangerComb(juce::Graphics& g, juce::Rectangle<float> plot, const FxSlot& slot, double sampleRate,
                               juce::Colour colour, float alpha, const FxLive& live)
 {
-    const auto box = plot.reduced(4.0f, 3.0f);
+    const auto box = fxPictureBox(FxWellKind::flangerComb, plot);
     const auto dbY = [box] (float db) { return box.getY() + (12.0f - juce::jlimit(-30.0f, 12.0f, db)) / 42.0f * box.getHeight(); };
     const auto base = fxFlangerDelayMs(slot.knobs[3]);
     const auto depth = fxFlangerDepthMs(slot.knobs[1]);

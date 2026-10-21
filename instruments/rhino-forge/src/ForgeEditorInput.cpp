@@ -35,6 +35,17 @@ void Editor::mouseMove(const juce::MouseEvent& event)
 {
     if (event.eventComponent != this) return;
     const auto at = event.getEventRelativeTo(this).getPosition();
+    {
+        int rack = 0, slot = 0;
+        ui::FxWell well;
+        ui::FxWellGrab grab;
+        if (fxWellAt(at, rack, slot, well, grab))
+        {
+            setMouseCursor(ui::fxWellFollowsPointer(grab.kind) ? juce::MouseCursor::CrosshairCursor
+                                                               : juce::MouseCursor::UpDownResizeCursor);
+            return;
+        }
+    }
     if (envelopeNodeAt(at) != ui::EnvelopeNode::none)
     {
         setMouseCursor(juce::MouseCursor::PointingHandCursor);
@@ -73,6 +84,8 @@ void Editor::mouseDown(const juce::MouseEvent& event)
     if (event.eventComponent == this)
     {
         const auto at = event.getEventRelativeTo(this).getPosition();
+        // A rack picture taken by its node. See ForgeFxGestures.h.
+        if (!event.mods.isPopupMenu() && beginFxWellDrag(at)) return;
         if (!event.mods.isPopupMenu() && event.getNumberOfClicks() < 2)
         {
             const auto node = envelopeNodeAt(at);
@@ -434,6 +447,11 @@ void Editor::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWhee
 
 void Editor::mouseDrag(const juce::MouseEvent& event)
 {
+    if (fxWellDrag.active)
+    {
+        dragFxWell(event.getEventRelativeTo(this).getPosition());
+        return;
+    }
     if (markerDrag != SpectralMarker::none)
     {
         dragSpectralMarker(event.getEventRelativeTo(this).getPosition());
@@ -502,6 +520,11 @@ void Editor::mouseDrag(const juce::MouseEvent& event)
 
 void Editor::mouseUp(const juce::MouseEvent& event)
 {
+    if (fxWellDrag.active)
+    {
+        endFxWellDrag();
+        return;
+    }
     if (markerDrag != SpectralMarker::none)
     {
         endSpectralMarkerDrag();

@@ -6,7 +6,7 @@
 #include "../ui/ForgeVisuals.h"
 #include "../ui/ForgePerformanceWheel.h"
 #include "../ui/ForgeNoteGuide.h"
-#include "../ui/ForgeFxDisplay.h"
+#include "../ui/ForgeFxGestures.h"
 #include "../ui/ForgePresetPlate.h"
 #include "ForgePresetBrowser.h"
 #include <memory>
@@ -489,6 +489,22 @@ private:
     // A rack slot's control in a given role, found without walking the panel:
     // the shelf painter asks for every visible slot's readings every frame.
     Control* fxControl(int rack, int slot, ui::FxRole) const;
+    // A rack picture being dragged by its node: the slot, the well as it was
+    // laid out at the press, what the press took hold of, and which knobs the
+    // drag has opened a host gesture on, so each is closed once at the end.
+    struct FxWellDrag
+    {
+        bool active = false;
+        int rack = 0, slot = 0;
+        ui::FxWell well;
+        ui::FxWellGrab grab;
+        std::array<bool, fxKnobCount> touched {};
+    };
+    FxWellDrag fxWellDrag;
+    bool fxWellAt(juce::Point<int>, int& rack, int& slot, ui::FxWell&, ui::FxWellGrab&) const;
+    bool beginFxWellDrag(juce::Point<int>);
+    void dragFxWell(juce::Point<int>);
+    void endFxWellDrag();
     std::array<Control*, rackCount * fxSlotCount * ui::fxRoleCount> fxControls {};
     void placeFxControl(Control&, const ui::FxSpot&, juce::Point<int> offset);
     int fxActiveSlotCount(int rack) const;

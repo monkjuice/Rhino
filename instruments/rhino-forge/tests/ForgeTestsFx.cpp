@@ -2,7 +2,7 @@
 // of itself, and that the two are computed from the same functions.
 #include "ForgeTestSupport.h"
 #include "../core/ForgeFxDsp.h"
-#include "../ui/ForgeFxDisplay.h"
+#include "../ui/ForgeFxGestures.h"
 #include "../ui/ForgeLayout.h"
 #include "../ui/ForgeFxVisuals.h"
 
@@ -683,6 +683,212 @@ void fxDisplaySuite()
     namespace ui = rhino::forge::ui;
     using rhino::forge::FxType;
 
+    // --- Dragging a picture by its node ---------------------------------------
+    //
+    // A press lands on the value drawn under it, and a drag sets the knobs that
+    // put the node under the pointer. Each gesture is held to its picture's own
+    // axes: ask for a value, find where the picture draws it, drag there, and
+    // read back what the knob now means.
+    {
+        const auto sampleRate = 48000.0, bpm = 120.0;
+        ui::FxWell well;
+        well.area = {0, 0, 320, 64};
+        well.plot = well.area.reduced(2);
+        const auto slotOf = [] (FxType type)
+        {
+            rhino::forge::FxSlot slot;
+            slot.type = static_cast<float>(type);
+            slot.knobs = rhino::forge::fxTypes()[static_cast<size_t>(type)].init;
+            return slot;
+        };
+        const auto boxOf = [&well] (ui::FxWellKind kind) { return ui::fxPictureBox(kind, well.plot.toFloat()); };
+        const auto drag = [&] (ui::FxWellKind kind, const rhino::forge::FxSlot& slot, juce::Point<float> press,
+                               juce::Point<float> to, int part)
+        {
+            well.kind = kind;
+            ui::FxWellGrab grab;
+            require(ui::fxWellGrabAt(well, slot, press, grab), "a picture with a node takes a press");
+            require(grab.part == part, "a press takes the part of the picture nearest it");
+            auto moved = slot;
+            const auto edit = ui::fxWellDragTo(well, grab, to, sampleRate, bpm);
+            for (int i = 0; i < edit.count; ++i)
+                moved.knobs[static_cast<size_t>(edit.knobs[static_cast<size_t>(i)])] = edit.values[static_cast<size_t>(i)];
+            return moved;
+        };
+        const auto within = [] (float value, float wanted, float tolerance) { return std::abs(value - wanted) <= tolerance; };
+
+        // The filter: CUTOFF across, the resonant peak up.
+        {
+            const auto box = boxOf(ui::FxWellKind::filterResponse);
+            const auto to = juce::Point<float>(ui::filterHzToX(box, 1000.0f),
+                                               box.getBottom() - (6.0f + 36.0f) / 54.0f * box.getHeight());
+            const auto moved = drag(ui::FxWellKind::filterResponse, slotOf(FxType::filter), to, to, 0);
+            require(within(rhino::forge::fxHertz(moved.knobs[0], 30.0f, 18000.0f), 1000.0f, 15.0f),
+                    "dragging the filter's node across sets the cutoff under the pointer");
+            require(within(moved.knobs[1], (2.0f - 0.5f) / 1.96f, 0.02f),
+                    "and up, the resonance that peaks it six decibels there");
+        }
+
+        // The distortion's tone: FREQ across, Q as the node's height. Nothing
+        // is taken while its filter is out of the path.
+        {
+            auto slot = slotOf(FxType::distortion);
+            slot.modeB = 0.5f;   // PRE LP
+            const auto box = boxOf(ui::FxWellKind::distortionTone);
+            const auto to = juce::Point<float>(ui::filterHzToX(box, 1000.0f), ui::filterDbToY(box, 20.0f * std::log10(2.0f)));
+            const auto moved = drag(ui::FxWellKind::distortionTone, slot, to, to, 0);
+            require(within(rhino::forge::fxHertz(moved.knobs[1], 40.0f, 16000.0f), 1000.0f, 15.0f),
+                    "dragging the distortion's node across sets its filter's FREQ");
+            require(within(rhino::forge::fxScaled(moved.knobs[2], 0.4f, 8.0f), 2.0f, 0.03f), "and up, its Q");
+            slot.modeB = 0.0f;   // OFF
+            ui::FxWellGrab grab;
+            well.kind = ui::FxWellKind::distortionTone;
+            require(!ui::fxWellGrabAt(well, slot, to, grab), "a filter switched out of the path has no node to take");
+        }
+
+        // The distortion's shape is dragged by how far the pointer moves.
+        {
+            const auto slot = slotOf(FxType::distortion);
+            const auto at = boxOf(ui::FxWellKind::distortionShape).getCentre();
+            const auto moved = drag(ui::FxWellKind::distortionShape, slot, at, at.translated(0.0f, -30.0f), 0);
+            require(within(moved.knobs[0], juce::jmin(1.0f, slot.knobs[0] + 0.25f), 0.001f),
+                    "dragging the shape up drives it harder by how far it moved");
+        }
+
+        // The delay: TIME is the left side's first repeat, snapped to the
+        // nearest division when synced; OFFSET the right side's.
+        {
+            auto slot = slotOf(FxType::delay);
+            slot.modeB = 1.0f;          // BPM
+            slot.knobs[0] = 5.0f / 8.0f; // 1/4, half a second at 120
+            slot.knobs[2] = 0.5f;
+            const auto box = boxOf(ui::FxWellKind::delayTape);
+            const auto span = ui::fxDelayTapeSpan(slot, bpm);
+            const auto xOf = [&] (float seconds) { return box.getX() + seconds / span * box.getWidth(); };
+            const auto top = box.getY() + 2.0f;
+            auto moved = drag(ui::FxWellKind::delayTape, slot, {xOf(0.5f), top}, {xOf(0.5f), top}, ui::fxPart::time);
+            require(within(moved.knobs[0], 5.0f / 8.0f, 0.001f), "pressing a synced delay's repeat leaves it where it is");
+            moved = drag(ui::FxWellKind::delayTape, slot, {xOf(0.5f), top}, {xOf(0.97f), top}, ui::fxPart::time);
+            require(within(moved.knobs[0], 6.0f / 8.0f, 0.001f), "and dragging it out snaps to the division nearest the pointer");
+            const auto bottom = box.getBottom() - 2.0f;
+            moved = drag(ui::FxWellKind::delayTape, slot, {xOf(0.5f), bottom}, {xOf(0.75f), bottom}, ui::fxPart::offset);
+            require(within(rhino::forge::fxOffsetRatio(moved.knobs[1]), 1.5f, 0.01f),
+                    "the right side's repeat sets OFFSET as its share of TIME");
+        }
+
+        // The delay's loop: FREQ across, and Q as what the loop keeps there.
+        {
+            const auto box = boxOf(ui::FxWellKind::delayLoop);
+            const auto to = juce::Point<float>(ui::filterHzToX(box, 3000.0f), box.getY() + 2.0f / 24.0f * box.getHeight());
+            const auto moved = drag(ui::FxWellKind::delayLoop, slotOf(FxType::delay), to, to, 0);
+            require(within(rhino::forge::fxHertz(moved.knobs[3], 200.0f, 16000.0f), 3000.0f, 45.0f),
+                    "dragging the loop's node across sets its corner");
+            require(within(20.0f * std::log10(rhino::forge::fxDelayLoopGain(moved, 3000.0f, sampleRate)), -2.0f, 0.1f),
+                    "and up, the Q that keeps that much at the corner");
+        }
+
+        // The reverb: the tail's start is PRE-DLY, where it has fallen sixty
+        // decibels is SIZE.
+        {
+            const auto slot = slotOf(FxType::reverb);
+            const auto box = boxOf(ui::FxWellKind::reverbTail);
+            const auto tX = [&box] (float seconds) { return box.getX() + std::sqrt(seconds / ui::fxReverbAxisSeconds) * box.getWidth(); };
+            const auto pre = rhino::forge::fxScaled(slot.knobs[1], 0.0f, 0.2f);
+            const auto bottom = box.getBottom() - 2.0f;
+            const auto moved = drag(ui::FxWellKind::reverbTail, slot, {tX(pre + 1.0f), bottom}, {tX(pre + 2.0f), bottom},
+                                    ui::fxPart::size);
+            require(within(rhino::forge::fxReverbRt60(moved, 0.0f, sampleRate), 2.0f, 0.02f),
+                    "dragging the tail's end sets the SIZE that rings that long");
+            const auto top = box.getY() + 2.0f;
+            const auto early = drag(ui::FxWellKind::reverbTail, slot, {tX(0.1f), top}, {tX(0.1f), top}, ui::fxPart::preDelay);
+            require(within(rhino::forge::fxScaled(early.knobs[1], 0.0f, 0.2f), 0.1f, 0.002f),
+                    "and its start sets the pre-delay");
+        }
+
+        // The reverb's tone: whichever cut is nearer.
+        {
+            auto slot = slotOf(FxType::reverb);
+            slot.knobs[4] = 0.3f;
+            slot.knobs[5] = 0.7f;
+            const auto box = boxOf(ui::FxWellKind::reverbDecay);
+            const auto low = ui::filterHzToX(box, rhino::forge::fxHertz(slot.knobs[4], 20.0f, 1200.0f));
+            const auto moved = drag(ui::FxWellKind::reverbDecay, slot, {low + 3.0f, box.getCentreY()},
+                                    {ui::filterHzToX(box, 200.0f), box.getCentreY()}, ui::fxPart::lowCut);
+            require(within(rhino::forge::fxHertz(moved.knobs[4], 20.0f, 1200.0f), 200.0f, 3.0f),
+                    "dragging near LO CUT's line moves LO CUT");
+            require(moved.knobs[5] == slot.knobs[5], "and leaves HI CUT alone");
+        }
+
+        // The equaliser: the nearer band's frequency across and gain up.
+        {
+            const auto slot = slotOf(FxType::equaliser);
+            const auto box = boxOf(ui::FxWellKind::eqResponse);
+            const auto nodes = ui::fxEqNodes(box, slot);
+            const auto to = juce::Point<float>(ui::filterHzToX(box, 5000.0f), box.getCentreY() - 6.0f / 24.0f * box.getHeight() * 0.5f);
+            const auto moved = drag(ui::FxWellKind::eqResponse, slot, nodes[1].translated(2.0f, 1.0f), to, ui::fxPart::highBand);
+            require(within(rhino::forge::fxHertz(moved.knobs[3], 500.0f, 18000.0f), 5000.0f, 75.0f),
+                    "dragging the high band's node sets its frequency");
+            require(within(rhino::forge::fxScaled(moved.knobs[5], -18.0f, 18.0f), 6.0f, 0.2f), "and its gain");
+            require(moved.knobs[0] == slot.knobs[0] && moved.knobs[2] == slot.knobs[2], "and leaves the low band where it was");
+        }
+
+        // The compressor: THRESH where the curve bends, RATIO by its far end.
+        {
+            auto slot = slotOf(FxType::compressor);
+            slot.modeB = 0.0f;   // MANUAL
+            slot.knobs[4] = 0.0f;
+            slot.knobs[0] = ui::fxKnobForScaled(-24.0f, -60.0f, 0.0f);
+            const auto box = boxOf(ui::FxWellKind::compressorCurve);
+            const auto xOf = [&box] (float db) { return box.getX() + (db + 60.0f) / 60.0f * box.getWidth(); };
+            const auto yOf = [&box] (float db) { return box.getBottom() - (db + 60.0f) / 66.0f * box.getHeight(); };
+            auto moved = drag(ui::FxWellKind::compressorCurve, slot, {xOf(-30.0f), box.getCentreY()},
+                              {xOf(-24.0f), box.getCentreY()}, ui::fxPart::threshold);
+            require(within(rhino::forge::fxCompressorThreshold(moved.knobs[0]), -24.0f, 0.3f),
+                    "dragging the knot across sets the threshold");
+            moved = drag(ui::FxWellKind::compressorCurve, slot, {box.getRight() - 3.0f, yOf(-10.0f)},
+                         {box.getRight() - 3.0f, yOf(-18.0f)}, ui::fxPart::ratio);
+            require(within(rhino::forge::fxCompressorRatio(moved.knobs[1]), 4.0f, 0.1f),
+                    "and the far end, the ratio that brings full scale out there");
+        }
+
+        // The chorus: the nearer tap's delay, taken at the right.
+        {
+            auto slot = slotOf(FxType::chorus);
+            slot.knobs[1] = 0.1f;
+            slot.knobs[2] = 0.6f;
+            const auto box = boxOf(ui::FxWellKind::chorusTaps);
+            const auto msY = [&box] (float ms) { return box.getBottom() - ms / 42.0f * box.getHeight(); };
+            const auto second = msY(rhino::forge::fxScaled(slot.knobs[2], 0.5f, 30.0f));
+            const auto moved = drag(ui::FxWellKind::chorusTaps, slot, {box.getRight() - 4.0f, second + 1.0f},
+                                    {box.getRight() - 4.0f, msY(20.0f)}, ui::fxPart::secondTap);
+            require(within(rhino::forge::fxScaled(moved.knobs[2], 0.5f, 30.0f), 20.0f, 0.3f),
+                    "dragging the second tap sets DELAY 2");
+            ui::FxWellGrab grab;
+            well.kind = ui::FxWellKind::chorusTaps;
+            require(!ui::fxWellGrabAt(well, slot, {box.getX() + 4.0f, second}, grab),
+                    "the chorus's history, at the left, holds nothing to take");
+        }
+
+        // The phaser's centre follows the pointer across.
+        {
+            const auto box = boxOf(ui::FxWellKind::phaserComb);
+            const auto to = juce::Point<float>(ui::filterHzToX(box, 1000.0f), box.getCentreY());
+            const auto moved = drag(ui::FxWellKind::phaserComb, slotOf(FxType::phaser), to, to, 0);
+            require(within(rhino::forge::fxHertz(moved.knobs[2], 80.0f, 8000.0f), 1000.0f, 15.0f),
+                    "dragging the phaser's marker sets its FREQ");
+        }
+
+        // The gain-reduction meter and the flanger's comb show what is
+        // happening and take nothing.
+        for (const auto kind : {ui::FxWellKind::compressorMeter, ui::FxWellKind::flangerComb})
+        {
+            ui::FxWellGrab grab;
+            well.kind = kind;
+            require(!ui::fxWellGrabAt(well, slotOf(FxType::flanger), well.area.getCentre().toFloat(), grab),
+                    "a picture with nothing to set takes no press");
+        }
+    }
+
     // Every active strip keeps its common controls. A type with only three
     // named knobs still needs MIX, LEVEL and its card, which is its bypass;
     // hiding unused general knobs must not make the frame disappear with them.
@@ -830,6 +1036,64 @@ void fxDisplaySuite()
         editor->mouseWheelMove(eventAt(rackPoint, editor.get()), up);
         require(plateShown("DIST") && !plateShown("CHORUS"),
                 "the wheel over the rack itself scrolls the rack");
+    }
+
+    // A rack picture is dragged through the panel itself. The pointer over a
+    // node's picture turns to a crosshair, a press there puts the knob the node
+    // stands for under the pointer, and a drag carries it on. Found by moving
+    // the pointer, so the test knows nothing of where the strip puts the well.
+    {
+        auto owner = std::make_unique<rhino::forge::Processor>();
+        auto& processor = *owner;
+        setValue(processor, rhino::forge::fxParameterId(0, 0, "Type").toRawUTF8(), static_cast<float>(FxType::phaser));
+        std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+        editor->setSize(ui::defaultPanelWidth, ui::defaultPanelHeight);
+        for (auto* child : editor->getChildren())
+            if (auto* tab = dynamic_cast<ui::PageTab*>(child))
+                if (tab->getButtonText() == "FX" && tab->onClick) tab->onClick();
+        const ui::Module* fxModule = nullptr;
+        for (const auto& module : ui::modules())
+            if (juce::String(module.id) == "fx") fxModule = &module;
+        require(fxModule != nullptr, "the drag test finds the rack module");
+        const auto area = fxModule == nullptr ? juce::Rectangle<int>()
+            : ui::fxModuleBounds(editor->getLocalBounds(), *fxModule, false);
+        const auto viewport = ui::fxSlotViewportBounds(area, true);
+
+        const auto mouse = juce::Desktop::getInstance().getMainMouseSource();
+        const auto when = juce::Time::getCurrentTime();
+        const auto eventAt = [&] (juce::Point<int> at)
+        {
+            return juce::MouseEvent(mouse, at.toFloat(), juce::ModifierKeys(), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                                    editor.get(), editor.get(), when, at.toFloat(), when, 1, false);
+        };
+        const auto takes = [&] (juce::Point<int> at)
+        {
+            editor->mouseMove(eventAt(at));
+            return editor->getMouseCursor() == juce::MouseCursor(juce::MouseCursor::CrosshairCursor);
+        };
+        auto node = juce::Point<int>(-1, -1);
+        for (int y = viewport.getY() + 8; y < viewport.getY() + 70 && node.x < 0; y += 4)
+            for (int x = viewport.getX(); x < viewport.getRight() && node.x < 0; x += 4)
+                if (takes({x, y})) node = {x, y + 6};
+        require(node.x >= 0, "the pointer over the phaser's picture says it can be taken");
+        // Pressed in the middle of the picture, clear of both ends of FREQ's
+        // range, which is narrower than the picture's axis.
+        auto right = node.x;
+        while (right < viewport.getRight() && takes({right + 2, node.y})) right += 2;
+        node.x = (node.x + right) / 2;
+
+        const auto freq = rhino::forge::fxParameterId(0, 0, "Knob3");
+        editor->mouseDown(eventAt(node));
+        const auto pressed = value(processor, freq.toRawUTF8());
+        editor->mouseDrag(eventAt(node.translated(30, 0)));
+        const auto dragged = value(processor, freq.toRawUTF8());
+        editor->mouseUp(eventAt(node.translated(30, 0)));
+        if (!(dragged > pressed + 0.02f))
+            std::cerr << "       pressed at " << node.x << "," << node.y << " in " << viewport.toString()
+                      << ": FREQ " << pressed << " then " << dragged << std::endl;
+        require(dragged > pressed + 0.02f, "dragging the phaser's marker to the right raises its FREQ");
+        editor->mouseDrag(eventAt(node.translated(-30, 0)));
+        require(value(processor, freq.toRawUTF8()) == dragged, "and once let go, the pointer moves nothing");
     }
 
     // --- The equaliser ---------------------------------------------------------

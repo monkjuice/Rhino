@@ -149,6 +149,7 @@ set(forge_sources
     ui/ForgePlacement.h
     ui/ForgeControlBlock.h
     ui/ForgeFxStrips.h
+    ui/ForgeFxGestures.h
     ui/ForgeLayout.h
     ui/ForgePanels.h
     ui/ForgeArpPlate.h

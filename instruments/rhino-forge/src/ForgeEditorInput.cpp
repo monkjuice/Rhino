@@ -738,6 +738,7 @@ void Editor::timerCallback()
     // and a replaced spectral sample can be twenty megabytes.
     processor.tableStore().collect();
     processor.sampleStore().collect();
+    takeFxMeters();
     repaint();
 }
 }

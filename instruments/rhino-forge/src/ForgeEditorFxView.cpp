@@ -104,6 +104,25 @@ void Editor::setFxFirstVisibleSlot(int slot)
 // declaration.
 // Only the rack's own box, rather than the whole panel: this runs for every
 // step of a knob being turned.
+void Editor::takeFxMeters()
+{
+    // Only the rack on screen is drawn, and only while the FX page shows, so
+    // the others are left to hold their peaks rather than be taken unseen.
+    if (page != ui::Page::fx) return;
+    const auto rack = shownRack();
+    for (int slot = 0; slot < fxSlotCount; ++slot)
+    {
+        const auto taken = processor.takeFxMeter(rack, slot);
+        auto& live = fxLive[static_cast<size_t>(rack * fxSlotCount + slot)];
+        live.valid = taken.rendered;
+        live.phase = taken.phase;
+        live.inputPeak = taken.inputPeak;
+        live.outputPeak = taken.outputPeak;
+        live.reductionDb = taken.reductionDb < live.reductionDb
+            ? taken.reductionDb : live.reductionDb + (taken.reductionDb - live.reductionDb) * 0.35f;
+    }
+}
+
 void Editor::repaintFxDisplays()
 {
     for (const auto& module : ui::modules())
@@ -133,11 +152,12 @@ void Editor::paintFxShelves(juce::Graphics& g, juce::Rectangle<int> area, const 
             paintFxFrame(g, strip, rack, slot, bypassed);
             // A slot that is bypassed still says what is in it, dimmed — the point
             // of a bypass is to hear a rack without it and put it straight back.
-            paintFxPanels(g, strip, held, bypassed);
+            const auto& live = fxLive[static_cast<size_t>(rack * fxSlotCount + slot)];
+            paintFxPanels(g, strip, held, bypassed, live);
             for (int well = 0; well < strip.wellCount; ++well)
                 ui::drawFxWell(g, strip.wells[static_cast<size_t>(well)], held,
                                processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 48000.0,
-                               processor.hostTempo(), bypassed ? 0.3f : 1.0f);
+                               processor.hostTempo(), bypassed ? 0.3f : 1.0f, live);
             paintFxReadings(g, strip, rack, slot, juce::roundToInt(held.type), bypassed);
             if (slot == fxSelectedSlot)
             {
@@ -152,7 +172,8 @@ void Editor::paintFxShelves(juce::Graphics& g, juce::Rectangle<int> area, const 
 
 // A strip's panels, and the chevron between two of them where the type has
 // one. A panel's gate and lamp are read from the slot as it stands.
-void Editor::paintFxPanels(juce::Graphics& g, const ui::FxStrip& strip, const FxSlot& held, bool bypassed)
+void Editor::paintFxPanels(juce::Graphics& g, const ui::FxStrip& strip, const FxSlot& held, bool bypassed,
+                           const ui::FxLive& live)
 {
     const auto type = fxTypeOf(held.type);
     const auto colour = ui::fxTypeColour(static_cast<int>(type));
@@ -165,7 +186,7 @@ void Editor::paintFxPanels(juce::Graphics& g, const ui::FxStrip& strip, const Fx
         if (panel.gate == ui::FxRole::modeA) dim = fxModeOf(info.modeA, held.modeA) == panel.gateOff;
         else if (panel.gate == ui::FxRole::modeB) dim = fxModeOf(info.modeB, held.modeB) == panel.gateOff;
         const auto tint = panel.lamp == ui::FxLamp::highBand ? ui::fxEqHighColour : colour;
-        ui::drawFxPanel(g, panel, tint, dim, ui::fxLampLevel(panel, held, {}), alpha);
+        ui::drawFxPanel(g, panel, tint, dim, ui::fxLampLevel(panel, held, live), alpha);
     }
     if (!strip.chevron.isEmpty() && type == FxType::distortion)
     {

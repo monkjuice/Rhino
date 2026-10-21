@@ -250,6 +250,20 @@ inline float distortionFilterMagnitude(float hz, float cutoff, float q, bool hig
 // Every type's state, in one place. A slot holds all of it because its type can
 // change between one sample and the next, and the alternative — building the
 // state a type needs when it is chosen — is an allocation on the audio thread.
+// What a slot is doing, as against what it is set to: the loudest sample into
+// it and out of its wet path since this was last taken, the most a compressor
+// took off, and where a swept type's LFO is. Kept by the rack as it renders, and
+// taken once a block by whoever publishes it.
+struct FxSlotMeter
+{
+    // Whether the slot rendered at all since the last take: an empty or
+    // bypassed slot does nothing, and says so rather than reading silence.
+    bool rendered = false;
+    float inputPeak = 0.0f, outputPeak = 0.0f;
+    float reductionDb = 0.0f;
+    float phase = 0.0f;
+};
+
 struct FxSlotState
 {
     // Delay and chorus.
@@ -279,6 +293,8 @@ struct FxSlotState
     // Compressor and phaser. Both are deliberately fixed-size; changing a
     // type or stage count while audio runs never allocates.
     float compressorEnvelope = 0.0f, compressorGain = 1.0f;
+    // What the detector has the curve taking off, in decibels, for the meter.
+    float compressorReductionDb = 0.0f;
     static constexpr int phaserStageCount = 12;
     std::array<std::array<AllpassStage, phaserStageCount>, 2> phaser;
     std::array<float, 2> phaserFeedback {};
@@ -469,6 +485,17 @@ public:
 
     void reset() { for (auto& slot : states) slot.reset(); }
 
+    // A slot's meter since it was last taken, and a fresh one started.
+    FxSlotMeter takeMeter(int slot)
+    {
+        if (slot < 0 || slot >= fxSlotCount) return {};
+        auto& meter = meters[static_cast<size_t>(slot)];
+        const auto taken = meter;
+        meter = {};
+        meter.phase = taken.phase;
+        return taken;
+    }
+
     // The rack's whole effect on one sample. Slots run in the order they are
     // declared, top to bottom, which is the order they are drawn in.
     void process(const Rack& rack, double bpm, float& left, float& right)
@@ -487,8 +514,15 @@ public:
             // Every type is rendered wet and then blended against what came in,
             // so MIX means one thing across the whole rack and no type has to
             // implement it for itself.
+            auto& meter = meters[static_cast<size_t>(index)];
+            meter.rendered = true;
+            meter.inputPeak = juce::jmax(meter.inputPeak, std::abs(left), std::abs(right));
             auto wetLeft = left, wetRight = right;
-            render(states[static_cast<size_t>(index)], slot, type, bpm, wetLeft, wetRight);
+            auto& state = states[static_cast<size_t>(index)];
+            render(state, slot, type, bpm, wetLeft, wetRight);
+            if (type == FxType::compressor) meter.reductionDb = juce::jmin(meter.reductionDb, state.compressorReductionDb);
+            else if (type == FxType::chorus) meter.phase = state.lfoPhase;
+            else if (type == FxType::phaser) meter.phase = state.phaserPhase;
             // And one a slot makes for itself - a filter driven unstable - is
             // cleared out of that slot rather than fed back.
             if (!std::isfinite(wetLeft) || !std::isfinite(wetRight))
@@ -496,6 +530,8 @@ public:
                 states[static_cast<size_t>(index)].reset();
                 wetLeft = wetRight = 0.0f;
             }
+
+            meter.outputPeak = juce::jmax(meter.outputPeak, std::abs(wetLeft), std::abs(wetRight));
 
             const auto mix = juce::jlimit(0.0f, 1.0f, slot.mix);
             const auto level = juce::jlimit(0.0f, 2.0f, slot.level);
@@ -507,6 +543,7 @@ public:
 private:
     double sampleRate = 44100.0;
     std::array<FxSlotState, fxSlotCount> states;
+    std::array<FxSlotMeter, fxSlotCount> meters;
 
     void render(FxSlotState& state, const FxSlot& slot, FxType type, double bpm,
                 float& left, float& right)
@@ -844,6 +881,7 @@ private:
         const auto inputDb = juce::Decibels::gainToDecibels(amplitude, -100.0f);
         const auto outputDb = fxCompressorOutputDb(inputDb, threshold, ratio, knee);
         const auto reduction = outputDb - inputDb;
+        state.compressorReductionDb = reduction;
         const auto makeup = automatic ? fxCompressorAutoMakeup(threshold, ratio)
                                       : fxCompressorMakeup(slot.knobs[4]);
         const auto targetGain = juce::Decibels::decibelsToGain(reduction + makeup);

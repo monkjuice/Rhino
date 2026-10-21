@@ -348,6 +348,38 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     for (int destination = 1; destination < destinationCount; ++destination)
         meterOffsets[static_cast<size_t>(destination)]
             .store(core.modulationOffset(destination), std::memory_order_relaxed);
+
+    // The audio thread only ever raises a peak and the panel only ever takes
+    // it, so a lost race costs one frame's reading and nothing else.
+    for (int rack = 0; rack < rackCount; ++rack)
+        for (int slot = 0; slot < fxSlotCount; ++slot)
+        {
+            const auto taken = core.takeFxMeter(rack, slot);
+            auto& cells = fxMeters[static_cast<size_t>(rack * fxSlotCount + slot)];
+            const auto raise = [] (std::atomic<float>& cell, float to)
+            {
+                if (to > cell.load(std::memory_order_relaxed)) cell.store(to, std::memory_order_relaxed);
+            };
+            raise(cells.inputPeak, taken.inputPeak);
+            raise(cells.outputPeak, taken.outputPeak);
+            if (taken.reductionDb < cells.reductionDb.load(std::memory_order_relaxed))
+                cells.reductionDb.store(taken.reductionDb, std::memory_order_relaxed);
+            cells.phase.store(taken.phase, std::memory_order_relaxed);
+            cells.rendered.store(taken.rendered, std::memory_order_relaxed);
+        }
+}
+
+FxSlotMeter Processor::takeFxMeter(int rack, int slot)
+{
+    if (rack < 0 || rack >= rackCount || slot < 0 || slot >= fxSlotCount) return {};
+    auto& cells = fxMeters[static_cast<size_t>(rack * fxSlotCount + slot)];
+    FxSlotMeter taken;
+    taken.rendered = cells.rendered.load(std::memory_order_relaxed);
+    taken.inputPeak = cells.inputPeak.exchange(0.0f, std::memory_order_relaxed);
+    taken.outputPeak = cells.outputPeak.exchange(0.0f, std::memory_order_relaxed);
+    taken.reductionDb = cells.reductionDb.exchange(0.0f, std::memory_order_relaxed);
+    taken.phase = cells.phase.load(std::memory_order_relaxed);
+    return taken;
 }
 
 const FxTypeInfo& Processor::fxSlotType(int rack, int slot) const

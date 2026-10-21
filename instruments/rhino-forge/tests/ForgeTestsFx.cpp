@@ -405,6 +405,69 @@ void fxSuite()
         }
     }
 
+    // --- What a slot says it is doing -------------------------------------------
+    //
+    // The lamps, the gain-reduction needle and the sweeps read a meter the rack
+    // keeps as it renders. A compressor driven hard says how much it took off
+    // and the peaks either side of it; a bypassed slot says it did nothing
+    // rather than reading as silence; a swept type says where its LFO is; and
+    // taking a meter starts the next one, so a peak is reported once.
+    {
+        rhino::forge::FxRack rack;
+        rack.prepare(48000.0);
+        rhino::forge::Rack settings;
+        settings.slots[0].type = static_cast<float>(FxType::compressor);
+        settings.slots[0].knobs = {0.5f, 0.6f, 0.1f, 0.3f, 0.0f, 0.0f};   // -30 dB, a steep ratio
+        settings.slots[1].type = static_cast<float>(FxType::delay);
+        settings.slots[1].bypass = 1.0f;
+        settings.slots[2].type = static_cast<float>(FxType::phaser);
+        double phase = 0.0;
+        for (int i = 0; i < 9600; ++i)
+        {
+            const auto x = 0.8f * static_cast<float>(std::sin(phase));
+            phase += juce::MathConstants<double>::twoPi * 220.0 / 48000.0;
+            auto left = x, right = x;
+            rack.process(settings, 120.0, left, right);
+        }
+        const auto compressor = rack.takeMeter(0);
+        require(compressor.rendered, "a slot that ran says so");
+        require(std::abs(compressor.inputPeak - 0.8f) < 0.01f, "a slot's input peak is the loudest sample it was given");
+        require(compressor.reductionDb < -10.0f, "a compressor driven twenty-eight decibels past its threshold says it is taking gain off");
+        require(compressor.outputPeak > 0.0f && compressor.outputPeak < compressor.inputPeak,
+                "a compressor's output peak is what came out of it");
+        require(!rack.takeMeter(1).rendered, "a bypassed slot says it did nothing");
+        const auto phaser = rack.takeMeter(2);
+        require(phaser.rendered && phaser.phase > 0.0f && phaser.phase < 1.0f, "a phaser says where its sweep is");
+        const auto again = rack.takeMeter(0);
+        require(!again.rendered && again.inputPeak == 0.0f && again.reductionDb == 0.0f,
+                "a taken meter starts again, so a peak is reported once");
+    }
+
+    // The processor holds a slot's peaks across blocks until the panel takes
+    // them, and forgets them once it has.
+    {
+        auto heldOwner = std::make_unique<rhino::forge::Processor>();
+        auto& held = *heldOwner;
+        soloSineOnA(held);
+        held.prepareToPlay(48000.0, 512);
+        place(held, 0, 0, FxType::distortion);
+        knob(held, 0, 0, 0, 1.0f);
+        juce::AudioBuffer<float> block(2, 512);
+        juce::MidiBuffer notes;
+        notes.addEvent(juce::MidiMessage::noteOn(1, 48, 1.0f), 0);
+        for (int i = 0; i < 8; ++i)
+        {
+            block.clear();
+            held.processBlock(block, notes);
+            notes.clear();
+        }
+        const auto first = held.takeFxMeter(0, 0);
+        require(first.rendered && first.outputPeak > 0.5f, "a driven distortion's peak reaches the panel");
+        const auto second = held.takeFxMeter(0, 0);
+        require(second.outputPeak == 0.0f, "a peak the panel has taken is not taken twice");
+        held.releaseResources();
+    }
+
     // --- What a type opens on --------------------------------------------------
     //
     // Every type is put into a slot by the panel, which then sets it up from

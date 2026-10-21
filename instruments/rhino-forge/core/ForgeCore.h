@@ -587,6 +587,12 @@ public:
         right = softClip(right * gain);
     }
 
+    // What one FX slot has been doing since this was last asked, for the panel.
+    FxSlotMeter takeFxMeter(int rack, int slot)
+    {
+        return rack >= 0 && rack < rackCount ? racks[static_cast<size_t>(rack)].takeMeter(slot) : FxSlotMeter {};
+    }
+
 private:
     // Each bus given its level and its place, then handed to wherever it goes.
     //

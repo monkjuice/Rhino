@@ -165,6 +165,11 @@ public:
     // staircase so the display can draw the steps ahead. An LFO that answers
     // the keyboard reports the loudest voice's copy of itself, exactly as
     // ENV 1's display follows that voice.
+    // What an FX slot has been doing since the panel last took it: the peaks
+    // in and out and the most a compressor took off, held across blocks so a
+    // transient between two frames still lights a lamp, and where its sweep is.
+    // Taking it starts the hold again.
+    FxSlotMeter takeFxMeter(int rack, int slot);
     float lfoPhase(int lfo) const { return meter(meterLfoPhase, lfo); }
     float lfoValue(int lfo) const { return meter(meterLfoValue, lfo); }
     float lfoValueY(int lfo) const { return meter(meterLfoValueY, lfo); }
@@ -423,6 +428,12 @@ private:
     std::array<std::atomic<float>, envCount> meterLevel {};
     std::array<std::atomic<float>, oscillatorCount> meterScan {};
     std::array<std::atomic<int>, envCount> meterStage {};
+    struct FxMeterCells
+    {
+        std::atomic<bool> rendered {false};
+        std::atomic<float> inputPeak {0.0f}, outputPeak {0.0f}, reductionDb {0.0f}, phase {0.0f};
+    };
+    std::array<FxMeterCells, rackCount * fxSlotCount> fxMeters;
     std::array<std::atomic<float>, lfoCount> meterLfoPhase {};
     std::array<std::atomic<float>, lfoCount> meterLfoValue {};
     std::array<std::atomic<float>, lfoCount> meterLfoValueY {};

@@ -442,7 +442,7 @@ private:
     // The shelves the slots sit on, drawn behind their controls.
     void paintFxShelves(juce::Graphics&, juce::Rectangle<int> area, const ui::Module&);
     void paintFxFrame(juce::Graphics&, const ui::FxStrip&, int rack, int slot, bool bypassed);
-    void paintFxPanels(juce::Graphics&, const ui::FxStrip&, const FxSlot&, bool bypassed);
+    void paintFxPanels(juce::Graphics&, const ui::FxStrip&, const FxSlot&, bool bypassed, const ui::FxLive&);
     void paintFxReadings(juce::Graphics&, const ui::FxStrip&, int rack, int slot, int type, bool bypassed);
     // The compact signal-flow overview at the left of the rack. It is a
     // painted view of the same slot parameters, not another component
@@ -453,6 +453,12 @@ private:
     // The type each slot last showed, so a type arriving from a preset or from
     // host automation re-labels its slot rather than only one chosen by hand.
     std::array<int, rackCount * fxSlotCount> fxTypesShown {};
+    // What each slot was doing at the last frame, taken from the processor by
+    // the timer so a paint never takes it twice. The gain-reduction needle is
+    // eased here, falling at once and returning over a few frames as a
+    // needle does.
+    std::array<ui::FxLive, rackCount * fxSlotCount> fxLive {};
+    void takeFxMeters();
     // Which rack the FX module is showing: its chosen bank.
     int shownRack() const;
     // What the rack module's header says: the rack being shown, and what is in

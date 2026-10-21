@@ -161,9 +161,22 @@ int runSnapshot(int argc, char** argv)
 int runProfile(int argc, char** argv)
 {
     auto processor = std::make_unique<rhino::forge::Processor>();
+    // Argument 6 names a preset, loaded before the editor is built as
+    // --snapshot's argument 7 is, so a page is timed with something on it: an
+    // empty FX rack draws nothing at all.
+    if (argc > 6 && juce::String(argv[6]) != "-")
+    {
+        const auto opened = processor->loadPreset(juce::File::getCurrentWorkingDirectory().getChildFile(argv[6]));
+        if (opened.failed())
+        {
+            std::cerr << "profile: " << opened.getErrorMessage() << '\n';
+            return 1;
+        }
+    }
     // Argument 4 names the theme, as --snapshot's argument 8 does, so the two
-    // looks can be timed against each other from one binary.
-    if (argc > 4)
+    // looks can be timed against each other from one binary. A `-` keeps the
+    // default, so a page can be named alone.
+    if (argc > 4 && juce::String(argv[4]) != "-")
     {
         if (!rhino::forge::ui::knownThemeName(argv[4]))
         {
@@ -176,6 +189,13 @@ int runProfile(int argc, char** argv)
     const auto width = argc > 2 ? juce::String(argv[2]).getIntValue() : editor->getWidth();
     const auto height = argc > 3 ? juce::String(argv[3]).getIntValue() : editor->getHeight();
     editor->setSize(width, height);
+
+    // Argument 5 names the tab the idle and resize frames are timed on, FX for
+    // the effects rack; without it they are the oscillators'.
+    if (argc > 5 && juce::String(argv[5]) != "-")
+        for (auto* child : editor->getChildren())
+            if (auto* tab = dynamic_cast<rhino::forge::ui::PageTab*>(child))
+                if (tab->getButtonText().equalsIgnoreCase(argv[5]) && tab->onClick) tab->onClick();
 
     juce::Image canvas(juce::Image::ARGB, editor->getWidth(), editor->getHeight(), true);
     const auto paintOnce = [&editor, &canvas]

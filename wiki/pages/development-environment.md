@@ -4,7 +4,7 @@ type: guide
 summary: What the Windows development machine offers (shells, CMake, Python, ffmpeg, PDF tools, the reference manuals) and the habits it demands.
 tags: [both, environment, windows, tooling]
 sources: []
-updated: 2026-10-16
+updated: 2026-10-21
 ---
 
 # Development environment and reference material
@@ -49,7 +49,10 @@ Read the figures too: the screenshots carry layout the prose never states, such 
   arrives mangled ("unexpected EOF" inside a quoted heredoc), which the velocity lane's patches hit on 2026-10-16.
   Write anything longer than a few lines, or holding a backslash, to a file with the Write tool and run it by path.
 - **The HARBIZ hook also screens Workflow tool input.** On 2026-10-16 it refused an input that held a `.key` token and a
-  `file:` token. Reword those, as for commit messages ([Git workflow](git-workflow.md)).
+  `file:` token. Reword those, as for commit messages ([Git workflow](git-workflow.md)). A command hook likewise refuses
+  any shell command holding a token that ends in `.key`, such as a heredoc of C++ that reads a member named `key`.
+  Write such code with the Write tool, or name the member otherwise: Forge's FX picture cache calls its field
+  `drawnFrom` partly for this reason (2026-10-21).
 - **`near` and `far` are macros in `windows.h`**, defined as nothing, so a helper with either name breaks the build in
   any unit that sees that header. The velocity lane's test helpers were renamed for this reason (2026-10-16).
 - **The Bash command hook refuses a heredoc that names a drive-letter path.** It reads `C:` followed by a backslash

@@ -976,3 +976,8 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 ## [2026-10-21] update | Forge's FX pictures kept as images; --profile times a named page
 - source: instruments/rhino-forge/src/ForgeEditorFxView.cpp, ui/ForgeFxDisplay.h, tests/ForgeTestTools.cpp, tests/ForgeTestsFx.cpp
 - updated: pages/forge-panel-repaint-cost.md (`--profile` page and preset arguments; the `fxPictures` cache, its key rule, live marks drawn over it, and the measurements against the pre-redesign build)
+
+## [2026-10-21] update | Forge FX picture gestures: gaps filled (f4241e4 and later)
+- source: instruments/rhino-forge/ui/ForgeFxGestures.h, src/ForgeEditorFxView.cpp, src/ForgeEditorInput.cpp, tests/ForgeTestsFx.cpp
+- updated: pages/forge-fx-strip-plans.md (what a press takes per picture; presses only inside the plot, because of the phaser's STAGES field; nodes jump to the press except the distortion's DRIVE handle, `fxWellFollowsPointer`, and the two cursors; the inverse knob laws; the phaser's 20 Hz axis against FREQ's 80 Hz floor that failed the first end-to-end test)
+- updated: pages/development-environment.md (a command hook refuses shell commands with a token ending in `.key`; why the FX picture cache's field is `drawnFrom`)

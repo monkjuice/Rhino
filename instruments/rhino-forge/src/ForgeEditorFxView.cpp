@@ -183,6 +183,67 @@ void Editor::endFxWellDrag()
     fxWellDrag = {};
 }
 
+// One well: its picture blitted from the copy kept of it, drawn again only
+// when something it is drawn from has moved, and what moves with the sound
+// drawn over it.
+void Editor::paintFxWell(juce::Graphics& g, int rack, int slot, int index, const ui::FxWell& well,
+                         const FxSlot& held, bool bypassed, const ui::FxLive& live)
+{
+    const auto sampleRate = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 48000.0;
+    const auto bpm = processor.hostTempo();
+    const auto alpha = bypassed ? 0.3f : 1.0f;
+    const auto scale = g.getInternalContext().getPhysicalPixelScaleFactor();
+    auto local = well;
+    local.area = well.area.withZeroOrigin();
+    local.plot = well.plot - well.area.getPosition();
+    const auto pictureLive = ui::fxWellPictureLive(well.kind, live);
+
+    ui::FxPictureKey key;
+    key.kind = well.kind;
+    key.area = local.area;
+    key.plot = local.plot;
+    key.type = held.type;
+    key.modeA = held.modeA;
+    key.modeB = held.modeB;
+    key.knobs = held.knobs;
+    key.sampleRate = sampleRate;
+    key.bpm = bpm;
+    key.alpha = alpha;
+    key.scale = scale;
+    key.live = pictureLive.valid;
+    key.phase = pictureLive.phase;
+
+    auto& cache = fxPictures[static_cast<size_t>((rack * fxSlotCount + slot) * ui::maxFxWells + index)];
+    // A picture whose size is still changing -- a window edge being dragged --
+    // is drawn straight onto the panel, since a copy would be thrown away the
+    // next frame. Its size is remembered, and once it holds for a frame the
+    // picture is kept.
+    if (cache.drawnFrom.area != key.area || cache.drawnFrom.scale != key.scale)
+    {
+        cache.drawnFrom = key;
+        cache.drawn = false;
+        ui::drawFxWell(g, well, held, sampleRate, bpm, alpha, live);
+        return;
+    }
+    if (!cache.drawn || !(cache.drawnFrom == key))
+    {
+        const auto width = juce::jmax(1, static_cast<int>(std::ceil(static_cast<float>(local.area.getWidth()) * scale)));
+        const auto height = juce::jmax(1, static_cast<int>(std::ceil(static_cast<float>(local.area.getHeight()) * scale)));
+        if (cache.image.getWidth() != width || cache.image.getHeight() != height)
+            cache.image = juce::Image(juce::Image::ARGB, width, height, true);
+        else
+            cache.image.clear(cache.image.getBounds());
+        juce::Graphics into(cache.image);
+        into.addTransform(juce::AffineTransform::scale(scale));
+        ui::drawFxWellPicture(into, local, held, sampleRate, bpm, alpha, pictureLive);
+        cache.drawnFrom = key;
+        cache.drawn = true;
+    }
+    g.drawImageTransformed(cache.image, juce::AffineTransform::scale(1.0f / scale)
+                                            .translated(well.area.getPosition().toFloat()));
+    ui::drawFxWellLive(g, well, held, bpm, alpha, live);
+}
+
 void Editor::takeFxMeters()
 {
     // Only the rack on screen is drawn, and only while the FX page shows, so
@@ -234,9 +295,7 @@ void Editor::paintFxShelves(juce::Graphics& g, juce::Rectangle<int> area, const 
             const auto& live = fxLive[static_cast<size_t>(rack * fxSlotCount + slot)];
             paintFxPanels(g, strip, held, bypassed, live);
             for (int well = 0; well < strip.wellCount; ++well)
-                ui::drawFxWell(g, strip.wells[static_cast<size_t>(well)], held,
-                               processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 48000.0,
-                               processor.hostTempo(), bypassed ? 0.3f : 1.0f, live);
+                paintFxWell(g, rack, slot, well, strip.wells[static_cast<size_t>(well)], held, bypassed, live);
             paintFxReadings(g, strip, rack, slot, juce::roundToInt(held.type), bypassed);
             if (slot == fxSelectedSlot)
             {

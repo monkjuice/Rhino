@@ -601,9 +601,23 @@ inline void drawFxEqResponse(juce::Graphics& g, juce::Rectangle<float> plot, con
 //
 // The static curve, lifted by the makeup actually applied and held at 0 dB
 // where the slot clips, with the knee's width shaded. A dot rides it at the
-// level the detector has, once the engine publishes one.
+// level the detector has, once the engine publishes one (drawFxWellLive).
+
+// Where the curve passes for an input level, in its picture's box.
+inline juce::Point<float> fxCompressorCurveAt(juce::Rectangle<float> box, const FxSlot& slot, float inputDb)
+{
+    const auto& info = fxTypes()[static_cast<size_t>(FxType::compressor)];
+    const auto threshold = fxCompressorThreshold(slot.knobs[0]);
+    const auto ratio = fxCompressorRatio(slot.knobs[1]);
+    const auto makeup = fxModeOf(info.modeB, slot.modeB) == 1 ? fxCompressorAutoMakeup(threshold, ratio)
+                                                               : fxCompressorMakeup(slot.knobs[4]);
+    const auto out = juce::jmin(0.0f, fxCompressorOutputDb(inputDb, threshold, ratio, fxCompressorKnee(slot.knobs[5])) + makeup);
+    return {box.getX() + (juce::jlimit(-60.0f, 0.0f, inputDb) + 60.0f) / 60.0f * box.getWidth(),
+            box.getBottom() - juce::jlimit(0.0f, 1.0f, (out + 60.0f) / 66.0f) * box.getHeight()};
+}
+
 inline void drawFxCompressorCurve(juce::Graphics& g, juce::Rectangle<float> plot, const FxSlot& slot,
-                                  juce::Colour colour, float alpha, const FxLive& live)
+                                  juce::Colour colour, float alpha)
 {
     const auto& info = fxTypes()[static_cast<size_t>(FxType::compressor)];
     const auto threshold = fxCompressorThreshold(slot.knobs[0]);
@@ -645,34 +659,54 @@ inline void drawFxCompressorCurve(juce::Graphics& g, juce::Rectangle<float> plot
     g.fillRect(end);
     g.setColour(colour.withAlpha(alpha));
     g.drawRect(end, 1.4f);
-    if (live.valid && live.inputPeak > 1.0e-4f)
-    {
-        const auto in = 20.0f * std::log10(live.inputPeak);
-        if (in > -60.0f)
-        {
-            g.setColour(text.withAlpha(alpha * 0.9f));
-            g.fillEllipse(juce::Rectangle<float>(6.0f, 6.0f).withCentre({xOf(in), yOf(outAt(in))}));
-        }
-    }
 }
 
 // The gain being taken off, on a reverse-reading needle that rests at the right
-// and dips left. Only the engine knows it, so until a slot has published, the
-// needle rests.
-inline void drawFxCompressorMeter(juce::Graphics& g, juce::Rectangle<float> area, float alpha, const FxLive& live)
+// and dips left. The face is drawn here; the needle, which only the engine
+// knows, is drawn over it every frame (drawFxWellLive) and rests until a slot
+// has published.
+struct FxMeterDial
+{
+    juce::Point<float> pivot;
+    float radius = 0.0f;
+
+    static float angleFor(float db)
+    {
+        return juce::degreesToRadians(52.0f - juce::jlimit(0.0f, 20.0f, -db) / 20.0f * 104.0f);
+    }
+    juce::Point<float> at(float r, float angle) const
+    {
+        return pivot + juce::Point<float>(std::sin(angle) * r, -std::cos(angle) * r);
+    }
+};
+
+inline FxMeterDial fxMeterDial(juce::Rectangle<float> area)
+{
+    const auto face = area.reduced(1.0f);
+    return {{face.getCentreX(), face.getBottom() - 8.0f},
+            juce::jmin(face.getWidth() * 0.5f - 8.0f, face.getHeight() - 20.0f)};
+}
+
+inline void drawFxCompressorNeedle(juce::Graphics& g, juce::Rectangle<float> area, float alpha, float reductionDb)
+{
+    const auto dial = fxMeterDial(area);
+    g.setColour(meterInk.withAlpha(alpha));
+    g.drawLine({dial.pivot, dial.at(dial.radius + 2.0f, FxMeterDial::angleFor(reductionDb))}, 1.2f);
+    g.fillEllipse(juce::Rectangle<float>(4.8f, 4.8f).withCentre(dial.pivot));
+}
+
+inline void drawFxCompressorMeter(juce::Graphics& g, juce::Rectangle<float> area, float alpha)
 {
     const auto face = area.reduced(1.0f);
     g.setColour(meterFace.withAlpha(alpha));
     g.fillRoundedRectangle(face, 3.0f);
     g.setColour(meterInk.withAlpha(alpha * 0.5f));
     g.drawRoundedRectangle(face, 3.0f, 1.0f);
-    const auto pivot = juce::Point<float>(face.getCentreX(), face.getBottom() - 8.0f);
-    const auto radius = juce::jmin(face.getWidth() * 0.5f - 8.0f, face.getHeight() - 20.0f);
-    const auto angleFor = [] (float db)
-    {
-        return juce::degreesToRadians(52.0f - juce::jlimit(0.0f, 20.0f, -db) / 20.0f * 104.0f);
-    };
-    const auto polar = [pivot] (float r, float angle) { return pivot + juce::Point<float>(std::sin(angle) * r, -std::cos(angle) * r); };
+    const auto dial = fxMeterDial(area);
+    const auto pivot = dial.pivot;
+    const auto radius = dial.radius;
+    const auto angleFor = [] (float db) { return FxMeterDial::angleFor(db); };
+    const auto polar = [&dial] (float r, float angle) { return dial.at(r, angle); };
     juce::Path scale;
     scale.addCentredArc(pivot.x, pivot.y, radius, radius, 0.0f, angleFor(-20.0f), angleFor(0.0f), true);
     g.setColour(meterInk.withAlpha(alpha));
@@ -689,10 +723,7 @@ inline void drawFxCompressorMeter(juce::Graphics& g, juce::Rectangle<float> area
                        juce::Rectangle<float>(16.0f, 9.0f).withCentre(polar(radius + 6.0f, angle)),
                        juce::Justification::centred, false);
     }
-    const auto needle = angleFor(live.valid ? live.reductionDb : 0.0f);
     g.setColour(meterInk.withAlpha(alpha));
-    g.drawLine({pivot, polar(radius + 2.0f, needle)}, 1.2f);
-    g.fillEllipse(juce::Rectangle<float>(4.8f, 4.8f).withCentre(pivot));
     g.drawText("GR", juce::Rectangle<float>(face.getX() + 4.0f, face.getBottom() - 11.0f, 20.0f, 9.0f),
                juce::Justification::centredLeft, false);
     g.drawText("dB", juce::Rectangle<float>(face.getRight() - 24.0f, face.getBottom() - 11.0f, 20.0f, 9.0f),
@@ -706,7 +737,7 @@ inline void drawFxCompressorMeter(juce::Graphics& g, juce::Rectangle<float> area
 // round, dashed. RATE is how dense the waves are, the delays how high they
 // sit, DEPTH how far they swing. A playhead marks where the LFO is.
 inline void drawFxChorusTaps(juce::Graphics& g, juce::Rectangle<float> plot, const FxSlot& slot, double bpm,
-                             juce::Colour colour, float alpha, const FxLive& live)
+                             juce::Colour colour, float alpha)
 {
     const auto right = juce::Colour(0xff9fe7ff);
     const auto box = fxPictureBox(FxWellKind::chorusTaps, plot);
@@ -760,12 +791,6 @@ inline void drawFxChorusTaps(juce::Graphics& g, juce::Rectangle<float> plot, con
         g.fillEllipse(juce::Rectangle<float>(7.0f, 7.0f).withCentre(at));
         g.setColour(colour.withAlpha(alpha));
         g.drawEllipse(juce::Rectangle<float>(7.0f, 7.0f).withCentre(at), 1.4f);
-    }
-    if (live.valid && cycles > 0.0f)
-    {
-        const auto x = box.getX() + juce::jlimit(0.0f, 1.0f, live.phase / juce::jmax(1.0f, cycles)) * box.getWidth();
-        g.setColour(text.withAlpha(alpha * 0.35f));
-        g.fillRect(x, box.getY(), 1.0f, box.getHeight());
     }
     // The legend at the top right, clear of the scale and of the delay nodes.
     const auto legend = box.withHeight(9.0f).withTrimmedRight(14.0f);
@@ -916,9 +941,11 @@ inline void drawFxFlangerComb(juce::Graphics& g, juce::Rectangle<float> plot, co
 }
 
 // One of a strip's wells: the well itself, and whichever picture its kind
-// names, clipped to it so a resonant peak cannot run over the controls.
-inline void drawFxWell(juce::Graphics& g, const FxWell& well, const FxSlot& slot, double sampleRate, double bpm,
-                       float alpha, const FxLive& live = {})
+// names, clipped to it so a resonant peak cannot run over the controls. What
+// moves with the sound rather than with the settings is left to
+// drawFxWellLive, so the editor can keep this as an image between frames.
+inline void drawFxWellPicture(juce::Graphics& g, const FxWell& well, const FxSlot& slot, double sampleRate,
+                              double bpm, float alpha, const FxLive& live)
 {
     if (well.area.getWidth() < 24 || well.area.getHeight() < 18) return;
     drawDisplayWell(g, well.area);
@@ -943,12 +970,93 @@ inline void drawFxWell(juce::Graphics& g, const FxWell& well, const FxSlot& slot
         case FxWellKind::reverbTail:      drawFxReverbTail(g, plot, slot, sampleRate, colour, alpha); return;
         case FxWellKind::reverbDecay:     drawFxReverbDecay(g, plot, slot, sampleRate, colour, alpha); return;
         case FxWellKind::eqResponse:      drawFxEqResponse(g, plot, slot, sampleRate, colour, fxEqHighColour, alpha); return;
-        case FxWellKind::compressorCurve: drawFxCompressorCurve(g, plot, slot, colour, alpha, live); return;
-        case FxWellKind::compressorMeter: drawFxCompressorMeter(g, well.area.toFloat(), alpha, live); return;
-        case FxWellKind::chorusTaps:      drawFxChorusTaps(g, plot, slot, bpm, colour, alpha, live); return;
+        case FxWellKind::compressorCurve: drawFxCompressorCurve(g, plot, slot, colour, alpha); return;
+        case FxWellKind::compressorMeter: drawFxCompressorMeter(g, well.area.toFloat(), alpha); return;
+        case FxWellKind::chorusTaps:      drawFxChorusTaps(g, plot, slot, bpm, colour, alpha); return;
         case FxWellKind::phaserComb:      drawFxPhaserComb(g, plot, slot, sampleRate, colour, alpha, live); return;
         case FxWellKind::flangerComb:     drawFxFlangerComb(g, plot, slot, sampleRate, colour, alpha, live); return;
         case FxWellKind::generic:         break;
     }
 }
+
+// What of a picture moves with the sound: the compressor's needle and the dot
+// on its curve, and the chorus's playhead. Drawn over the picture every frame.
+inline void drawFxWellLive(juce::Graphics& g, const FxWell& well, const FxSlot& slot, double bpm, float alpha,
+                           const FxLive& live)
+{
+    if (well.area.getWidth() < 24 || well.area.getHeight() < 18) return;
+    juce::Graphics::ScopedSaveState clip(g);
+    g.reduceClipRegion(displayClip(well.area));
+    const auto box = fxPictureBox(well.kind, well.plot.toFloat());
+    switch (well.kind)
+    {
+        case FxWellKind::compressorMeter:
+            drawFxCompressorNeedle(g, well.area.toFloat(), alpha, live.valid ? live.reductionDb : 0.0f);
+            return;
+        case FxWellKind::compressorCurve:
+            if (live.valid && live.inputPeak > 1.0e-3f)
+            {
+                g.setColour(text.withAlpha(alpha * 0.9f));
+                g.fillEllipse(juce::Rectangle<float>(6.0f, 6.0f)
+                                  .withCentre(fxCompressorCurveAt(box, slot, 20.0f * std::log10(live.inputPeak))));
+            }
+            return;
+        case FxWellKind::chorusTaps:
+        {
+            const auto cycles = juce::jmin(24.0f, fxChorusRate(slot, bpm) * 3.0f);
+            if (!live.valid || cycles <= 0.0f) return;
+            const auto x = box.getX() + juce::jlimit(0.0f, 1.0f, live.phase / juce::jmax(1.0f, cycles)) * box.getWidth();
+            g.setColour(text.withAlpha(alpha * 0.35f));
+            g.fillRect(x, box.getY(), 1.0f, box.getHeight());
+            return;
+        }
+        default: return;
+    }
+}
+
+// A well whole: its picture and what moves over it.
+inline void drawFxWell(juce::Graphics& g, const FxWell& well, const FxSlot& slot, double sampleRate, double bpm,
+                       float alpha, const FxLive& live = {})
+{
+    drawFxWellPicture(g, well, slot, sampleRate, bpm, alpha, live);
+    drawFxWellLive(g, well, slot, bpm, alpha, live);
+}
+
+// The live reading a well's picture itself is drawn with. The phaser's and
+// the flanger's combs move whole with their LFO, so their picture is drawn
+// per phase, to a step finer than a frame shows; every other picture is drawn
+// from its settings alone and has its live marks drawn over it.
+inline FxLive fxWellPictureLive(FxWellKind kind, const FxLive& live)
+{
+    FxLive kept;
+    if ((kind == FxWellKind::phaserComb || kind == FxWellKind::flangerComb) && live.valid)
+    {
+        kept.valid = true;
+        kept.phase = std::round(live.phase * 512.0f) / 512.0f;
+    }
+    return kept;
+}
+
+// Everything a well's picture is drawn from, so a copy of it can be kept until
+// one of them moves. Positions are the well's own, so scrolling the rack moves
+// the copy rather than throwing it away.
+struct FxPictureKey
+{
+    FxWellKind kind = FxWellKind::generic;
+    juce::Rectangle<int> area, plot;
+    float type = 0.0f, modeA = 0.0f, modeB = 0.0f;
+    std::array<float, fxKnobCount> knobs {};
+    double sampleRate = 0.0, bpm = 0.0;
+    float alpha = 0.0f, scale = 0.0f;
+    bool live = false;
+    float phase = 0.0f;
+
+    bool operator==(const FxPictureKey& other) const
+    {
+        return kind == other.kind && area == other.area && plot == other.plot && type == other.type
+            && modeA == other.modeA && modeB == other.modeB && knobs == other.knobs
+            && sampleRate == other.sampleRate && bpm == other.bpm && alpha == other.alpha
+            && scale == other.scale && live == other.live && phase == other.phase;
+    }
+};
 }

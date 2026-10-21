@@ -459,6 +459,18 @@ private:
     // needle does.
     std::array<ui::FxLive, rackCount * fxSlotCount> fxLive {};
     void takeFxMeters();
+    // Each rack picture as an image, kept until something it is drawn from
+    // moves. The pictures were most of the rack's frame: drawn live, four
+    // strips of them cost 4.6 ms of a 13.7 ms idle frame at 1440x900.
+    struct FxPictureCache
+    {
+        ui::FxPictureKey drawnFrom;
+        juce::Image image;
+        bool drawn = false;
+    };
+    std::array<FxPictureCache, rackCount * fxSlotCount * ui::maxFxWells> fxPictures;
+    void paintFxWell(juce::Graphics&, int rack, int slot, int index, const ui::FxWell&, const FxSlot&,
+                     bool bypassed, const ui::FxLive&);
     // Which rack the FX module is showing: its chosen bank.
     int shownRack() const;
     // What the rack module's header says: the rack being shown, and what is in

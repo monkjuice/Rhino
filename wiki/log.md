@@ -972,3 +972,7 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/forge-fx-strip-plans.md (the node gestures as pure functions, `Editor::fxWellAt`, one host gesture per knob; the fallback well now shows the type's mark, the old generic pictures deleted)
 - updated: pages/displays-draw-from-the-dsp.md (gestures invert the drawn axes through `fxPictureBox`, read from the slot as pressed)
 - updated: pages/forge-mixer-and-fx.md (pictures can be dragged by their nodes)
+
+## [2026-10-21] update | Forge's FX pictures kept as images; --profile times a named page
+- source: instruments/rhino-forge/src/ForgeEditorFxView.cpp, ui/ForgeFxDisplay.h, tests/ForgeTestTools.cpp, tests/ForgeTestsFx.cpp
+- updated: pages/forge-panel-repaint-cost.md (`--profile` page and preset arguments; the `fxPictures` cache, its key rule, live marks drawn over it, and the measurements against the pre-redesign build)

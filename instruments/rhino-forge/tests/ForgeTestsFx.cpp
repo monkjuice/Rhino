@@ -1096,6 +1096,68 @@ void fxDisplaySuite()
         require(value(processor, freq.toRawUTF8()) == dragged, "and once let go, the pointer moves nothing");
     }
 
+    // Each picture is kept as an image between frames, so it has to be drawn
+    // again the moment a knob it pictures moves, and come back exactly as it
+    // was when the knob does. Read at the points the pointer says belong to
+    // the picture, so the reading under the knob does not count.
+    {
+        auto owner = std::make_unique<rhino::forge::Processor>();
+        auto& processor = *owner;
+        setValue(processor, rhino::forge::fxParameterId(0, 0, "Type").toRawUTF8(), static_cast<float>(FxType::filter));
+        std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+        editor->setSize(ui::defaultPanelWidth, ui::defaultPanelHeight);
+        for (auto* child : editor->getChildren())
+            if (auto* tab = dynamic_cast<ui::PageTab*>(child))
+                if (tab->getButtonText() == "FX" && tab->onClick) tab->onClick();
+        const ui::Module* fxModule = nullptr;
+        for (const auto& module : ui::modules())
+            if (juce::String(module.id) == "fx") fxModule = &module;
+        require(fxModule != nullptr, "the cache test finds the rack module");
+        const auto area = fxModule == nullptr ? juce::Rectangle<int>()
+            : ui::fxModuleBounds(editor->getLocalBounds(), *fxModule, false);
+        const auto viewport = ui::fxSlotViewportBounds(area, true);
+        const auto mouse = juce::Desktop::getInstance().getMainMouseSource();
+        const auto when = juce::Time::getCurrentTime();
+        std::vector<juce::Point<int>> picture;
+        for (int y = viewport.getY(); y < viewport.getY() + 76; y += 3)
+            for (int x = viewport.getX(); x < viewport.getRight(); x += 3)
+            {
+                const auto at = juce::Point<int>(x, y);
+                editor->mouseMove(juce::MouseEvent(mouse, at.toFloat(), juce::ModifierKeys(), 1.0f, 0.0f, 0.0f, 0.0f,
+                                                   0.0f, editor.get(), editor.get(), when, at.toFloat(), when, 1, false));
+                if (editor->getMouseCursor() == juce::MouseCursor(juce::MouseCursor::CrosshairCursor))
+                    picture.push_back(at);
+            }
+        require(picture.size() > 100, "the pointer finds the filter's picture");
+
+        const auto paintPanel = [&editor]
+        {
+            juce::Image image(juce::Image::ARGB, editor->getWidth(), editor->getHeight(), true);
+            juce::Graphics g(image);
+            editor->paint(g);
+            return image;
+        };
+        const auto differing = [&picture] (const juce::Image& a, const juce::Image& b)
+        {
+            auto count = 0;
+            for (const auto at : picture)
+                if (a.getPixelAt(at.x, at.y) != b.getPixelAt(at.x, at.y)) ++count;
+            return count;
+        };
+        const auto cutoff = rhino::forge::fxParameterId(0, 0, "Knob1");
+        setValue(processor, cutoff.toRawUTF8(), 0.3f);
+        // The first frame at a size is drawn straight onto the panel; the
+        // copy is kept from the second.
+        paintPanel();
+        const auto before = paintPanel();
+        setValue(processor, cutoff.toRawUTF8(), 0.8f);
+        const auto moved = paintPanel();
+        setValue(processor, cutoff.toRawUTF8(), 0.3f);
+        const auto back = paintPanel();
+        require(differing(before, moved) > 10, "a kept picture is drawn again when a knob it pictures moves");
+        require(differing(before, back) == 0, "and comes back exactly as it was when the knob does");
+    }
+
     // --- The equaliser ---------------------------------------------------------
     //
     // A band's magnitude is read off the coefficients setBand built, so a band

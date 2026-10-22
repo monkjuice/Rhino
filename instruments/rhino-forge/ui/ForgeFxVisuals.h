@@ -895,7 +895,7 @@ inline void drawFxPanel(juce::Graphics& g, const FxPanel& group, juce::Colour co
         const auto centre = lane.getCentre().translated(0.0f, hasLamp ? 5.0f : 0.0f);
         g.addTransform(juce::AffineTransform::rotation(-juce::MathConstants<float>::halfPi, centre.x, centre.y));
         g.setColour(colour.withAlpha(alpha * (dim ? 0.35f : 0.95f)));
-        g.setFont(panelFont(Face::header, 8.0f).withExtraKerningFactor(0.2f));
+        g.setFont(panelFont(Face::header, 9.5f).withExtraKerningFactor(0.2f));
         g.drawText(group.caption, juce::Rectangle<float>(lane.getHeight(), lane.getWidth()).withCentre(centre),
                    juce::Justification::centred, false);
     }
@@ -935,8 +935,8 @@ inline void drawFxChevron(juce::Graphics& g, juce::Rectangle<int> area, int dire
     chevron.lineTo(centre.x - 4.5f * d, centre.y + 7.0f);
     g.setColour(colour.withAlpha(alpha));
     g.strokePath(chevron, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-    g.setFont(panelFont(Face::reading, 7.5f));
-    g.drawText(word, box.withTop(centre.y + 10.0f).withHeight(10.0f), juce::Justification::centredTop, false);
+    g.setFont(panelFont(Face::reading, 8.5f));
+    g.drawText(word, box.withTop(centre.y + 10.0f).withHeight(11.0f), juce::Justification::centredTop, false);
 }
 
 // The list at the left of the rack is deliberately quieter than the editors

@@ -1460,6 +1460,12 @@ void rackCaptionsFitSuite()
         {
             editor->setSize(width, width == ui::minPanelWidth ? ui::minPanelHeight : ui::defaultPanelHeight);
             editor->resized();
+            // The strips are tall enough for their text and knobs to breathe,
+            // and no taller than lets three of them stand whole in the rack.
+            for (const auto& module : ui::modules())
+                if (juce::String(module.id) == "fx")
+                    require(ui::fxVisibleSlotCount(ui::fxModuleBounds(editor->getLocalBounds(), module, false)) >= 3,
+                            "three whole strips fit the rack at every window size");
             const auto walk = [&] (auto&& self, juce::Component& parent) -> void
             {
                 for (auto* child : parent.getChildren())

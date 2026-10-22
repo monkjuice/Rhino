@@ -1119,7 +1119,7 @@ void fxDisplaySuite()
         const auto mouse = juce::Desktop::getInstance().getMainMouseSource();
         const auto when = juce::Time::getCurrentTime();
         std::vector<juce::Point<int>> picture;
-        for (int y = viewport.getY(); y < viewport.getY() + 76; y += 3)
+        for (int y = viewport.getY(); y < viewport.getY() + ui::fxSlotHeight; y += 3)
             for (int x = viewport.getX(); x < viewport.getRight(); x += 3)
             {
                 const auto at = juce::Point<int>(x, y);
@@ -1147,15 +1147,103 @@ void fxDisplaySuite()
         const auto cutoff = rhino::forge::fxParameterId(0, 0, "Knob1");
         setValue(processor, cutoff.toRawUTF8(), 0.3f);
         // The first frame at a size is drawn straight onto the panel; the
-        // copy is kept from the second.
-        paintPanel();
+        // copy is kept from the second, and has to be pasted back exactly as
+        // bright. An image is composited at the context's current opacity, and
+        // once the copy came back faded to whatever the last colour's alpha was.
+        const auto direct = paintPanel();
         const auto before = paintPanel();
+        auto faded = 0;
+        for (const auto at : picture)
+        {
+            const auto drawn = direct.getPixelAt(at.x, at.y), kept = before.getPixelAt(at.x, at.y);
+            if (std::abs(drawn.getRed() - kept.getRed()) > 24 || std::abs(drawn.getGreen() - kept.getGreen()) > 24
+                || std::abs(drawn.getBlue() - kept.getBlue()) > 24)
+                ++faded;
+        }
+        if (faded * 50 > static_cast<int>(picture.size()))
+            std::cerr << "       " << faded << " of " << picture.size() << " picture pixels differ from the drawn frame" << '\n';
+        require(faded * 50 <= static_cast<int>(picture.size()), "a kept picture is pasted back as bright as it was drawn");
         setValue(processor, cutoff.toRawUTF8(), 0.8f);
         const auto moved = paintPanel();
         setValue(processor, cutoff.toRawUTF8(), 0.3f);
         const auto back = paintPanel();
         require(differing(before, moved) > 10, "a kept picture is drawn again when a knob it pictures moves");
         require(differing(before, back) == 0, "and comes back exactly as it was when the knob does");
+    }
+
+    // The gain-reduction needle, end to end: a note through a compressor set
+    // to take a lot off, the editor's own timer taking the meters as it does
+    // 24 times a second, and the meter's face read before and after.
+    {
+        auto owner = std::make_unique<rhino::forge::Processor>();
+        auto& processor = *owner;
+        soloSineOnA(processor);
+        setValue(processor, rhino::forge::fxParameterId(0, 0, "Type").toRawUTF8(), static_cast<float>(FxType::compressor));
+        setValue(processor, rhino::forge::fxParameterId(0, 0, "Knob1").toRawUTF8(), 0.2f);   // THRESH -48 dB
+        setValue(processor, rhino::forge::fxParameterId(0, 0, "Knob2").toRawUTF8(), 0.8f);   // a steep RATIO
+        processor.prepareToPlay(48000.0, 512);
+        std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+        editor->setSize(ui::defaultPanelWidth, ui::defaultPanelHeight);
+        for (auto* child : editor->getChildren())
+            if (auto* tab = dynamic_cast<ui::PageTab*>(child))
+                if (tab->getButtonText() == "FX" && tab->onClick) tab->onClick();
+        const ui::Module* fxModule = nullptr;
+        for (const auto& module : ui::modules())
+            if (juce::String(module.id) == "fx") fxModule = &module;
+        require(fxModule != nullptr, "the needle test finds the rack module");
+        if (fxModule != nullptr)
+        {
+            const auto area = ui::fxModuleBounds(editor->getLocalBounds(), *fxModule, false);
+            const auto strip = ui::fxStripLayout(static_cast<int>(FxType::compressor),
+                                                 ui::rowBounds(ui::fxScrolledRackBounds(area, true, 0), *fxModule, 0),
+                                                 ui::fxKnobSizesFor(editor->getLocalBounds()));
+            juce::Rectangle<int> meter;
+            for (int well = 0; well < strip.wellCount; ++well)
+                if (strip.wells[static_cast<size_t>(well)].kind == ui::FxWellKind::compressorMeter)
+                    meter = strip.wells[static_cast<size_t>(well)].area;
+            require(!meter.isEmpty(), "the compressor's strip has a meter");
+
+            const auto paintPanel = [&editor]
+            {
+                juce::Image image(juce::Image::ARGB, editor->getWidth(), editor->getHeight(), true);
+                juce::Graphics g(image);
+                editor->paint(g);
+                return image;
+            };
+            // The timers are run all through a wait, as a message loop would:
+            // run once after a sleep, a timer the timer thread has not yet
+            // counted down is skipped.
+            const auto runTimer = []
+            {
+                const auto until = juce::Time::getMillisecondCounterHiRes() + 150.0;
+                while (juce::Time::getMillisecondCounterHiRes() < until)
+                {
+                    juce::Thread::sleep(15);
+                    juce::Timer::callPendingTimersSynchronously();
+                }
+            };
+            runTimer();
+            paintPanel();
+            const auto resting = paintPanel();
+
+            juce::AudioBuffer<float> audio(2, 512);
+            juce::MidiBuffer midi;
+            midi.addEvent(juce::MidiMessage::noteOn(1, 60, 1.0f), 0);
+            for (int i = 0; i < 24; ++i)
+            {
+                processor.processBlock(audio, midi);
+                midi.clear();
+            }
+            runTimer();
+            const auto working = paintPanel();
+            auto moved = 0;
+            for (int y = meter.getY(); y < meter.getBottom(); ++y)
+                for (int x = meter.getX(); x < meter.getRight(); ++x)
+                    if (resting.getPixelAt(x, y) != working.getPixelAt(x, y)) ++moved;
+            if (moved <= 20) std::cerr << "       meter " << meter.toString() << ": " << moved << " pixels changed" << '\n';
+            require(moved > 20, "the gain-reduction needle swings while the compressor takes gain off");
+        }
+        processor.releaseResources();
     }
 
     // --- The equaliser ---------------------------------------------------------

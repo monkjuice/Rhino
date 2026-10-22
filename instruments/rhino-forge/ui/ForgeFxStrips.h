@@ -50,22 +50,32 @@ inline constexpr int fxTailUnits = 5;
 inline constexpr int fxBodyUnits = fxGridUnits - fxCardUnits - fxTailUnits;
 
 // The lines every knob in a strip stands on, measured down from the strip's
-// top. A caption is centred in its box, so its text sits a few pixels lower
-// than the box's top; the knob's centre is halfway between the foot of that
-// text and the top of the reading's.
+// top, for a strip fxSlotHeight tall. A caption is centred in its box, so its
+// text sits a few pixels lower than the box's top; the knob's centre is
+// halfway between the foot of that text and the top of the reading's, and the
+// largest knob clears both.
 inline constexpr int fxCaptionTop = 6;
 inline constexpr int fxCaptionHeight = knobLabelHeight;
-inline constexpr int fxKnobCentre = 39;
-inline constexpr int fxReadingTop = 59;
-inline constexpr int fxReadingHeight = 11;
+inline constexpr int fxKnobCentre = 46;
+inline constexpr int fxReadingTop = 72;
+inline constexpr int fxReadingHeight = 14;
+// The two lines a pair of small knobs stands on, one above the other.
+inline constexpr int fxMiniRowTop = 28;
+inline constexpr int fxMiniRowBottom = 62;
+// The identity card, from the strip's top; the automation name stands under it.
+inline constexpr int fxCardTop = 5;
+inline constexpr int fxCardBottom = 71;
+// A field of two choices standing on the knob line, and of three.
+inline constexpr int fxStackHeight = 58;
+inline constexpr int fxGlyphStackHeight = 66;
 
 // The three sizes a knob comes in. A hero is the panel's shared diameter: the
 // one control a strip is about, drawn as large as the oscillators' knobs and
 // no larger. An ordinary knob is the rack's compact share of it, as every
 // rack knob was before. A small one sits on a line beside its caption.
-inline constexpr int fxHeroKnobMax = 48;
-inline constexpr int fxKnobMax = 40;
-inline constexpr int fxMiniKnob = 26;
+inline constexpr int fxHeroKnobMax = 50;
+inline constexpr int fxKnobMax = 42;
+inline constexpr int fxMiniKnob = 28;
 
 struct FxKnobSizes
 {
@@ -303,7 +313,7 @@ inline void placeFxModeStack(FxStrip& strip, FxRole role, juce::Rectangle<int> c
 inline void placeFxChip(FxStrip& strip, FxRole role, juce::Rectangle<int> column, int width = 44)
 {
     auto& spot = strip.spot(role);
-    spot.component = juce::Rectangle<int>(juce::jmin(width, column.getWidth() - 4), chipHeight - 2)
+    spot.component = juce::Rectangle<int>(juce::jmin(width, column.getWidth() - 4), chipHeight)
                          .withCentre({column.getCentreX(), column.getY() + fxKnobCentre});
     spot.presentation = FxPresentation::chip;
     spot.placed = true;
@@ -323,7 +333,7 @@ inline int addFxWell(FxStrip& strip, juce::Rectangle<int> column, FxWellKind kin
 
 // A framed group across a column. Its caption is engraved up one edge, in a
 // lane of its own, so the group's controls keep the strip's whole height.
-inline constexpr int fxPanelLaneWidth = 13;
+inline constexpr int fxPanelLaneWidth = 15;
 
 inline FxPanel& addFxPanel(FxStrip& strip, juce::Rectangle<int> column, const char* caption,
                            bool legendRight = false)
@@ -349,7 +359,7 @@ inline juce::Rectangle<int> fxPanelContent(const FxStrip& strip, const FxPanel& 
 
 // A mode field seated along the top of a well: the picture loses the strip it
 // stands in, and the field is the one control allowed on the picture.
-inline constexpr int fxSeatHeight = 17;
+inline constexpr int fxSeatHeight = 19;
 
 inline void seatFxField(FxStrip& strip, int well, FxRole role, FxPresentation presentation,
                         int width = 0)
@@ -370,8 +380,8 @@ inline juce::Rectangle<int> placeFxFrame(FxStrip& strip, const FxKnobSizes& size
 {
     const FxGrid grid {strip.strip};
     const auto cardColumn = grid.span(0.0f, static_cast<float>(fxCardUnits));
-    strip.card = juce::Rectangle<int>::leftTopRightBottom(cardColumn.getX(), cardColumn.getY() + 4,
-                                                          cardColumn.getRight() - 6, cardColumn.getY() + 58);
+    strip.card = juce::Rectangle<int>::leftTopRightBottom(cardColumn.getX(), cardColumn.getY() + fxCardTop,
+                                                          cardColumn.getRight() - 6, cardColumn.getY() + fxCardBottom);
     strip.automation = juce::Rectangle<int>::leftTopRightBottom(strip.card.getX(), strip.card.getBottom() + 2,
                                                                 strip.card.getRight(), strip.card.getBottom() + 14);
     auto& type = strip.spot(FxRole::type);
@@ -508,11 +518,11 @@ inline FxStrip fxDistortionStrip(juce::Rectangle<int> stripBounds, const FxKnobS
               FxWellKind::distortionTone);
     const auto rows = juce::Rectangle<int>::leftTopRightBottom(grid.x(19.0f) + 2, stripBounds.getY(),
                                                                toneContent.getRight(), stripBounds.getBottom());
-    placeFxMiniRow(strip, FxRole::knob2, rows, stripBounds.getY() + 24, sizes, 32);
-    placeFxMiniRow(strip, FxRole::knob3, rows, stripBounds.getY() + 52, sizes, 32);
+    placeFxMiniRow(strip, FxRole::knob2, rows, stripBounds.getY() + fxMiniRowTop, sizes, 32);
+    placeFxMiniRow(strip, FxRole::knob3, rows, stripBounds.getY() + fxMiniRowBottom, sizes, 32);
 
-    strip.chevron = juce::Rectangle<int>::leftTopRightBottom(grid.x(25.0f), stripBounds.getY() + 22,
-                                                             grid.x(26.0f), stripBounds.getBottom() - 16);
+    strip.chevron = juce::Rectangle<int>::leftTopRightBottom(grid.x(25.0f), stripBounds.getY() + 26,
+                                                             grid.x(26.0f), stripBounds.getBottom() - 20);
 
     auto& shape = addFxPanel(strip, grid.span(26.0f, 17.0f), "SHAPE");
     shape.lamp = FxLamp::clip;
@@ -545,8 +555,8 @@ inline FxStrip fxFilterStrip(juce::Rectangle<int> stripBounds, const FxKnobSizes
     colour.lamp = FxLamp::knob;
     colour.lampKnob = 2;
     const auto colourContent = fxPanelContent(strip, colour);
-    placeFxMiniRow(strip, FxRole::knob3, colourContent, top + 24, sizes, 34);
-    placeFxMiniRow(strip, FxRole::knob4, colourContent, top + 52, sizes, 34);
+    placeFxMiniRow(strip, FxRole::knob3, colourContent, top + fxMiniRowTop, sizes, 34);
+    placeFxMiniRow(strip, FxRole::knob4, colourContent, top + fxMiniRowBottom, sizes, 34);
 
     auto& corner = addFxPanel(strip, grid.span(12.0f, 28.0f), "CORNER");
     const auto content = fxPanelContent(strip, corner);
@@ -597,8 +607,8 @@ inline FxStrip fxDelayStrip(juce::Rectangle<int> stripBounds, const FxKnobSizes&
     placeFxKnob(strip, FxRole::knob3, fxColumn(strip, loopContent.getX(), grid.x(31.0f)), FxKnobSize::hero, sizes);
     addFxWell(strip, fxColumn(strip, grid.x(31.0f), grid.x(37.0f)), FxWellKind::delayLoop);
     const auto rows = fxColumn(strip, grid.x(37.0f) + 2, loopContent.getRight());
-    placeFxMiniRow(strip, FxRole::knob4, rows, top + 24, sizes, 28);
-    placeFxMiniRow(strip, FxRole::knob5, rows, top + 52, sizes, 28);
+    placeFxMiniRow(strip, FxRole::knob4, rows, top + fxMiniRowTop, sizes, 28);
+    placeFxMiniRow(strip, FxRole::knob5, rows, top + fxMiniRowBottom, sizes, 28);
     return strip;
 }
 
@@ -620,7 +630,7 @@ inline FxStrip fxReverbStrip(juce::Rectangle<int> stripBounds, const FxKnobSizes
     auto& room = addFxPanel(strip, grid.span(5.0f, 8.0f), "ROOM");
     const auto roomContent = fxPanelContent(strip, room);
     const auto split = roomContent.getX() + roomContent.getWidth() * 42 / 100;
-    placeFxStack(strip, FxRole::modeA, fxColumn(strip, roomContent.getX(), split), 50);
+    placeFxStack(strip, FxRole::modeA, fxColumn(strip, roomContent.getX(), split), fxStackHeight);
     placeFxKnob(strip, FxRole::knob1, fxColumn(strip, split, roomContent.getRight()), FxKnobSize::hero, sizes);
 
     placeFxKnob(strip, FxRole::knob2, grid.span(13.0f, 3.0f), FxKnobSize::normal, sizes);
@@ -631,8 +641,8 @@ inline FxStrip fxReverbStrip(juce::Rectangle<int> stripBounds, const FxKnobSizes
     placeFxKnob(strip, FxRole::knob3, fxColumn(strip, toneContent.getX(), grid.x(29.0f)), FxKnobSize::normal, sizes);
     addFxWell(strip, fxColumn(strip, grid.x(29.0f), grid.x(33.0f)), FxWellKind::reverbDecay);
     const auto rows = fxColumn(strip, grid.x(33.0f) + 2, toneContent.getRight());
-    placeFxMiniRow(strip, FxRole::knob5, rows, top + 24, sizes, 36);
-    placeFxMiniRow(strip, FxRole::knob6, rows, top + 52, sizes, 36);
+    placeFxMiniRow(strip, FxRole::knob5, rows, top + fxMiniRowTop, sizes, 36);
+    placeFxMiniRow(strip, FxRole::knob6, rows, top + fxMiniRowBottom, sizes, 36);
 
     placeFxKnob(strip, FxRole::knob4, grid.span(40.0f, 3.0f), FxKnobSize::normal, sizes);
     return strip;
@@ -665,9 +675,9 @@ inline FxStrip fxEqualiserStrip(juce::Rectangle<int> stripBounds, const FxKnobSi
     };
     band(5.0f, "LOW", false, FxLamp::lowBand, {FxRole::knob1, FxRole::knob2, FxRole::knob3});
     strip.spot(FxRole::knob3).bipolar = true;
-    placeFxStack(strip, FxRole::modeA, grid.span(14.0f, 2.0f), 56, FxPresentation::glyphs);
+    placeFxStack(strip, FxRole::modeA, grid.span(14.0f, 2.0f), fxGlyphStackHeight, FxPresentation::glyphs);
     addFxWell(strip, grid.span(16.0f, 16.0f), FxWellKind::eqResponse);
-    placeFxStack(strip, FxRole::modeB, grid.span(32.0f, 2.0f), 56, FxPresentation::glyphs);
+    placeFxStack(strip, FxRole::modeB, grid.span(32.0f, 2.0f), fxGlyphStackHeight, FxPresentation::glyphs);
     band(34.0f, "HIGH", true, FxLamp::highBand, {FxRole::knob6, FxRole::knob5, FxRole::knob4});
     strip.spot(FxRole::knob6).bipolar = true;
     return strip;
@@ -695,7 +705,7 @@ inline FxStrip fxCompressorStrip(juce::Rectangle<int> stripBounds, const FxKnobS
     auto& timing = addFxPanel(strip, grid.span(24.0f, 8.0f), "TIMING");
     const auto timingContent = fxPanelContent(strip, timing);
     const auto stackRight = timingContent.getX() + juce::jmax(30, grid.x(26.0f) - grid.x(24.0f) - 4);
-    placeFxStack(strip, FxRole::modeA, fxColumn(strip, timingContent.getX(), stackRight), 50);
+    placeFxStack(strip, FxRole::modeA, fxColumn(strip, timingContent.getX(), stackRight), fxStackHeight);
     const auto half = (timingContent.getRight() - stackRight) / 2;
     placeFxKnob(strip, FxRole::knob3, fxColumn(strip, stackRight, stackRight + half), FxKnobSize::normal, sizes);
     placeFxKnob(strip, FxRole::knob4, fxColumn(strip, stackRight + half, timingContent.getRight()),
@@ -708,7 +718,7 @@ inline FxStrip fxCompressorStrip(juce::Rectangle<int> stripBounds, const FxKnobS
 
     auto& out = addFxPanel(strip, grid.span(37.0f, 6.0f), "OUT");
     const auto outContent = fxPanelContent(strip, out);
-    const auto makeupRight = outContent.getX() + outContent.getWidth() * 55 / 100;
+    const auto makeupRight = outContent.getX() + outContent.getWidth() / 2;
     placeFxKnob(strip, FxRole::knob5, fxColumn(strip, outContent.getX(), makeupRight), FxKnobSize::normal, sizes);
     placeFxChip(strip, FxRole::modeB, fxColumn(strip, makeupRight, outContent.getRight()));
     return strip;

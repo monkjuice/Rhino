@@ -32,8 +32,9 @@ void selectRack(juce::AudioProcessorEditor& editor, int rack)
     require(false, "the FX page offers the requested rack bank");
 }
 
-// Labels span the whole cell and knobs occupy its centre. Match neighbours
-// in the real component tree, so this does not merely repeat layout arithmetic.
+// Labels span the whole cell and knobs occupy its centre, the knob's top a
+// little under the caption's foot. Match neighbours in the real component
+// tree, so this does not merely repeat layout arithmetic.
 std::vector<ui::ModKnob*> rackKnobs(juce::AudioProcessorEditor& editor, const char* caption)
 {
     std::vector<ui::ModKnob*> found;
@@ -50,7 +51,7 @@ std::vector<ui::ModKnob*> rackKnobs(juce::AudioProcessorEditor& editor, const ch
                                     && std::abs(knob->getBounds().getCentreX()
                                                 - label->getBounds().getCentreX()) <= 1
                                     && knob->getY() >= label->getY()
-                                    && knob->getY() - label->getY() <= ui::knobLabelHeight + 2)
+                                    && knob->getY() <= label->getBottom() + 12)
                                     found.push_back(knob);
             self(self, *child);
         }

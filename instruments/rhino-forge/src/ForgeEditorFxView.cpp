@@ -239,6 +239,10 @@ void Editor::paintFxWell(juce::Graphics& g, int rack, int slot, int index, const
         cache.drawnFrom = key;
         cache.drawn = true;
     }
+    // An image is composited at the context's current opacity, which is
+    // whatever colour was set last -- often a panel's translucent frame. Left
+    // alone, every kept picture was pasted half faded from its second frame on.
+    g.setOpacity(1.0f);
     g.drawImageTransformed(cache.image, juce::AffineTransform::scale(1.0f / scale)
                                             .translated(well.area.getPosition().toFloat()));
     ui::drawFxWellLive(g, well, held, bpm, alpha, live);
@@ -340,7 +344,7 @@ void Editor::paintFxFrame(juce::Graphics& g, const ui::FxStrip& strip, int rack,
 {
     // The name a host's automation lane and the matrix give this slot's
     // controls: MAIN 2 Knob 3 is the third knob on the strip that says MAIN 2.
-    g.setFont(ui::panelFont(ui::Face::reading, 8.5f));
+    g.setFont(ui::panelFont(ui::Face::reading, 9.5f));
     g.setColour(ui::mutedText.withAlpha(0.8f));
     g.drawText(juce::String(rackName(rack)) + " " + juce::String(slot + 1), strip.automation,
                juce::Justification::centredRight, false);
@@ -355,7 +359,7 @@ void Editor::paintFxFrame(juce::Graphics& g, const ui::FxStrip& strip, int rack,
 void Editor::paintFxReadings(juce::Graphics& g, const ui::FxStrip& strip, int rack, int slot, int type,
                              bool bypassed)
 {
-    g.setFont(ui::panelFont(ui::Face::reading, 9.5f));
+    g.setFont(ui::panelFont(ui::Face::reading, 11.0f));
     for (int role = ui::fxRoleIndex(ui::FxRole::knob1); role <= ui::fxRoleIndex(ui::FxRole::level); ++role)
     {
         const auto which = static_cast<ui::FxRole>(role);
@@ -368,8 +372,10 @@ void Editor::paintFxReadings(juce::Graphics& g, const ui::FxStrip& strip, int ra
         if (!control->slider.isEnabled()) colour = colour.withMultipliedAlpha(0.45f);
         if (bypassed) colour = colour.withMultipliedAlpha(0.5f);
         g.setColour(colour);
-        g.drawText(control->slider.getTextFromValue(control->slider.getValue()), spot.reading,
-                   spot.captionLeft ? juce::Justification::centredLeft : juce::Justification::centred, false);
+        // Squeezed a little rather than cut short where a long reading meets
+        // a narrow column: "12.05 kHz" under an equaliser band's FREQ.
+        g.drawFittedText(control->slider.getTextFromValue(control->slider.getValue()), spot.reading,
+                         spot.captionLeft ? juce::Justification::centredLeft : juce::Justification::centred, 1, 0.8f);
     }
 }
 

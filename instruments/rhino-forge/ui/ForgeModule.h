@@ -415,8 +415,10 @@ inline constexpr int fxViewButtonSize = 22;
 inline constexpr int fxViewButtonGap = 5;
 // A slot keeps the same physical height in the compact and expanded rack. The
 // viewport decides how many fit; it never stretches four effects into whatever
-// height happens to be available.
-inline constexpr int fxSlotHeight = 76;
+// height happens to be available. 92 gives a caption, a full knob and a reading
+// their own lines with room between them, and still fits three whole strips in
+// the rack at the smallest window.
+inline constexpr int fxSlotHeight = 92;
 // A list row is one line of text tall, not a slot tall: the list is read down
 // by name, and a full rack of eight fits beside the first two strips instead of
 // beside all eight.

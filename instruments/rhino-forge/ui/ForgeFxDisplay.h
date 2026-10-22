@@ -46,6 +46,23 @@ inline float biquadMagnitude(const Biquad& filter, float hz, double sampleRate)
 // Where each picture draws inside its well: the box its axes span. Shared with
 // the gestures in ForgeFxGestures.h, so a press lands on the value drawn under
 // it.
+// A fill under a curve, strongest at the curve's own highest point and fading
+// to the box's foot, so a curve that sits low in its box is filled as boldly
+// as one at the top.
+inline void fillUnderCurve(juce::Graphics& g, const juce::Path& fill, const juce::Path& curve,
+                           juce::Rectangle<float> box, juce::Colour colour, float alpha, float strength)
+{
+    const auto top = juce::jlimit(box.getY(), box.getBottom() - 1.0f, curve.getBounds().getY());
+    g.setGradientFill(juce::ColourGradient(colour.withAlpha(alpha * strength), box.getX(), top,
+                                           colour.withAlpha(alpha * 0.04f), box.getX(), box.getBottom(), false));
+    g.fillPath(fill);
+}
+
+// The size of the words inside a picture: a scale's figures, a slope's name,
+// the side a repeat is on.
+inline constexpr float fxPictureTextSize = 8.5f;
+inline constexpr float fxPictureTextHeight = 11.0f;
+
 inline juce::Rectangle<float> fxPictureBox(FxWellKind kind, juce::Rectangle<float> plot)
 {
     switch (kind)
@@ -55,11 +72,11 @@ inline juce::Rectangle<float> fxPictureBox(FxWellKind kind, juce::Rectangle<floa
         case FxWellKind::filterResponse:  return plot.reduced(4.0f, 3.0f);
         case FxWellKind::delayTape:       return plot.reduced(6.0f, 3.0f);
         case FxWellKind::delayLoop:       return plot.reduced(4.0f, 4.0f);
-        case FxWellKind::reverbTail:      return plot.reduced(5.0f, 3.0f).withTrimmedBottom(9.0f);
+        case FxWellKind::reverbTail:      return plot.reduced(5.0f, 3.0f).withTrimmedBottom(fxPictureTextHeight);
         case FxWellKind::reverbDecay:     return plot.reduced(4.0f, 4.0f);
         case FxWellKind::eqResponse:      return plot.reduced(4.0f, 4.0f);
         case FxWellKind::compressorCurve: return plot.reduced(5.0f, 4.0f);
-        case FxWellKind::chorusTaps:      return plot.reduced(4.0f, 4.0f).withTrimmedLeft(14.0f);
+        case FxWellKind::chorusTaps:      return plot.reduced(4.0f, 4.0f).withTrimmedLeft(17.0f);
         case FxWellKind::phaserComb:      return plot.reduced(4.0f, 3.0f);
         case FxWellKind::flangerComb:     return plot.reduced(4.0f, 3.0f);
         case FxWellKind::compressorMeter:
@@ -98,8 +115,9 @@ inline void drawFxDistortionTone(juce::Graphics& g, juce::Rectangle<float> plot,
         g.setColour(mutedText.withAlpha(alpha * 0.6f));
         const float dashes[] {3.0f, 3.0f};
         g.drawDashedLine({box.getX(), unity, box.getRight(), unity}, dashes, 2, 1.0f);
-        g.setFont(panelFont(Face::reading, 7.5f));
-        g.drawText("FILTER OFF", box.withTop(unity + 3.0f).withHeight(10.0f), juce::Justification::centredTop, false);
+        g.setFont(panelFont(Face::reading, fxPictureTextSize));
+        g.drawText("FILTER OFF", box.withTop(unity + 3.0f).withHeight(fxPictureTextHeight),
+                   juce::Justification::centredTop, false);
         return;
     }
     g.setColour(line.withAlpha(alpha * 0.5f));
@@ -120,10 +138,9 @@ inline void drawFxDistortionTone(juce::Graphics& g, juce::Rectangle<float> plot,
     fill.lineTo(box.getRight(), box.getBottom());
     fill.lineTo(box.getX(), box.getBottom());
     fill.closeSubPath();
-    g.setColour(colour.withAlpha(alpha * 0.1f));
-    g.fillPath(fill);
+    fillUnderCurve(g, fill, curve, box, colour, alpha, 0.3f);
     g.setColour(colour.withAlpha(alpha));
-    g.strokePath(curve, juce::PathStrokeType(1.6f));
+    g.strokePath(curve, juce::PathStrokeType(1.8f));
 
     const auto nodeGain = distortionFilterMagnitude(cutoff, cutoff, q, highPass, sampleRate);
     const auto node = juce::Point<float>(filterHzToX(box, cutoff),
@@ -134,9 +151,9 @@ inline void drawFxDistortionTone(juce::Graphics& g, juce::Rectangle<float> plot,
     g.setColour(colour.withAlpha(alpha));
     g.drawEllipse(juce::Rectangle<float>(8.4f, 8.4f).withCentre(node), 1.6f);
 
-    g.setFont(panelFont(Face::reading, 7.5f));
+    g.setFont(panelFont(Face::reading, fxPictureTextSize));
     g.drawText(juce::String(highPass ? "HP" : "LP") + (placement == 1 ? "  PRE" : "  POST"),
-               box.withHeight(10.0f), juce::Justification::topLeft, false);
+               box.withHeight(fxPictureTextHeight), juce::Justification::topLeft, false);
 }
 
 // SHAPE: what comes out for what goes in, fxShape per pixel, filled toward the
@@ -201,8 +218,9 @@ inline void drawFxDistortionShape(juce::Graphics& g, juce::Rectangle<float> plot
     if (shape == 7)
     {
         g.setColour(colour.withAlpha(alpha));
-        g.setFont(panelFont(Face::reading, 7.5f));
-        g.drawText("HOLD " + juce::String(factor, 1), box.withHeight(10.0f), juce::Justification::topRight, false);
+        g.setFont(panelFont(Face::reading, fxPictureTextSize));
+        g.drawText("HOLD " + juce::String(factor, 1), box.withHeight(fxPictureTextHeight),
+                   juce::Justification::topRight, false);
     }
 }
 
@@ -312,8 +330,8 @@ inline void drawFxFilterResponse(juce::Graphics& g, juce::Rectangle<float> plot,
     g.fillEllipse(juce::Rectangle<float>(8.4f, 8.4f).withCentre(node));
     g.setColour(colour.withAlpha(alpha));
     g.drawEllipse(juce::Rectangle<float>(8.4f, 8.4f).withCentre(node), 1.6f);
-    g.setFont(panelFont(Face::reading, 7.5f));
-    g.drawText(slopes[model], box.withHeight(10.0f), juce::Justification::topRight, false);
+    g.setFont(panelFont(Face::reading, fxPictureTextSize));
+    g.drawText(slopes[model], box.withHeight(fxPictureTextHeight), juce::Justification::topRight, false);
 }
 
 // --- DELAY ------------------------------------------------------------------------------------
@@ -390,11 +408,11 @@ inline void drawFxDelayTape(juce::Graphics& g, juce::Rectangle<float> plot, cons
             g.setColour((side == 0 ? colour : right).withAlpha(alpha));
             g.drawEllipse(juce::Rectangle<float>(7.2f, 7.2f).withCentre(at), 1.5f);
         }
-    g.setFont(panelFont(Face::reading, 7.0f));
+    g.setFont(panelFont(Face::reading, fxPictureTextSize));
     g.setColour(colour.withAlpha(alpha));
-    g.drawText("L", box.withHeight(9.0f), juce::Justification::topLeft, false);
+    g.drawText("L", box.withHeight(fxPictureTextHeight), juce::Justification::topLeft, false);
     g.setColour(right.withAlpha(alpha));
-    g.drawText("R", box.withTop(box.getBottom() - 9.0f), juce::Justification::bottomLeft, false);
+    g.drawText("R", box.withTop(box.getBottom() - fxPictureTextHeight), juce::Justification::bottomLeft, false);
 }
 
 // What every repeat passes through on its way round: fxDelayLoopGain, from
@@ -416,10 +434,9 @@ inline void drawFxDelayLoop(juce::Graphics& g, juce::Rectangle<float> plot, cons
     fill.lineTo(box.getRight(), box.getBottom());
     fill.lineTo(box.getX(), box.getBottom());
     fill.closeSubPath();
-    g.setColour(colour.withAlpha(alpha * 0.14f));
-    g.fillPath(fill);
+    fillUnderCurve(g, fill, curve, box, colour, alpha, 0.34f);
     g.setColour(colour.withAlpha(alpha));
-    g.strokePath(curve, juce::PathStrokeType(1.5f));
+    g.strokePath(curve, juce::PathStrokeType(1.8f));
     const auto corner = fxHertz(slot.knobs[3], 200.0f, 16000.0f);
     const auto node = juce::Point<float>(filterHzToX(box, corner),
                                          dbY(20.0f * std::log10(juce::jmax(1.0e-6f, fxDelayLoopGain(slot, corner, sampleRate)))));
@@ -446,21 +463,22 @@ inline void drawFxReverbTail(juce::Graphics& g, juce::Rectangle<float> plot, con
         return box.getX() + std::sqrt(juce::jlimit(0.0f, 1.0f, t / fxReverbAxisSeconds)) * box.getWidth();
     };
     const auto dbY = [box] (float db) { return box.getY() + juce::jlimit(0.0f, 1.0f, -db / 60.0f) * box.getHeight(); };
-    g.setFont(panelFont(Face::reading, 7.0f));
+    g.setFont(panelFont(Face::reading, fxPictureTextSize));
     for (const auto t : {0.1f, 0.5f, 1.0f, 2.0f, 4.0f})
     {
-        g.setColour(line.withAlpha(alpha * 0.5f));
+        g.setColour(line.withAlpha(alpha * 0.6f));
         g.fillRect(tX(t), box.getY(), 1.0f, box.getHeight());
-        g.setColour(mutedText.withAlpha(alpha));
+        g.setColour(mutedText.interpolatedWith(text, 0.35f).withAlpha(alpha));
         g.drawText(t < 1.0f ? juce::String(t, 1).substring(1) : juce::String(juce::roundToInt(t)) + "s",
-                   juce::Rectangle<float>(24.0f, 9.0f).withCentre({tX(t), box.getBottom() + 5.0f}),
+                   juce::Rectangle<float>(26.0f, fxPictureTextHeight)
+                       .withCentre({tX(t), box.getBottom() + fxPictureTextHeight * 0.5f + 1.0f}),
                    juce::Justification::centred, false);
     }
     const auto preDelay = fxScaled(slot.knobs[1], 0.0f, 0.2f);
     const auto decay = fxReverbDecay(slot);
     const auto trip = juce::jmax(1.0e-4f, fxReverbMeanTrip(slot));
     const auto rt60 = fxReverbRt60(slot, 0.0f, sampleRate);
-    g.setColour(colour.withAlpha(alpha * 0.1f));
+    g.setColour(colour.withAlpha(alpha * 0.14f));
     g.fillRect(juce::Rectangle<float>::leftTopRightBottom(tX(0.0f), box.getY(), tX(preDelay), box.getBottom()));
 
     juce::Path tail;
@@ -474,11 +492,11 @@ inline void drawFxReverbTail(juce::Graphics& g, juce::Rectangle<float> plot, con
     auto fill = tail;
     fill.lineTo(box.getRight(), box.getBottom());
     fill.closeSubPath();
-    g.setGradientFill(juce::ColourGradient(colour.withAlpha(alpha * 0.35f), box.getX(), box.getY(),
-                                           colour.withAlpha(alpha * 0.02f), box.getX(), box.getBottom(), false));
+    g.setGradientFill(juce::ColourGradient(colour.withAlpha(alpha * 0.45f), box.getX(), box.getY(),
+                                           colour.withAlpha(alpha * 0.04f), box.getX(), box.getBottom(), false));
     g.fillPath(fill);
     g.setColour(colour.withAlpha(alpha));
-    g.strokePath(tail, juce::PathStrokeType(1.6f));
+    g.strokePath(tail, juce::PathStrokeType(1.9f));
     const float dashes[] {2.0f, 2.0f};
     g.setColour(colour.withAlpha(alpha * 0.6f));
     g.drawDashedLine({tX(preDelay + rt60), box.getY(), tX(preDelay + rt60), box.getBottom()}, dashes, 2, 1.0f);
@@ -505,9 +523,11 @@ inline void drawFxReverbDecay(juce::Graphics& g, juce::Rectangle<float> plot, co
     };
     const auto low = fxHertz(slot.knobs[4], 20.0f, 1200.0f);
     const auto high = fxHertz(slot.knobs[5], 1200.0f, 20000.0f);
-    g.setColour(wellFloor.withAlpha(alpha * 0.65f));
-    g.fillRect(juce::Rectangle<float>::leftTopRightBottom(box.getX(), box.getY(), filterHzToX(box, low), box.getBottom()));
-    g.fillRect(juce::Rectangle<float>::leftTopRightBottom(filterHzToX(box, high), box.getY(), box.getRight(), box.getBottom()));
+    const auto lowX = filterHzToX(box, low), highX = filterHzToX(box, high);
+    g.setColour(colour.withAlpha(alpha * 0.07f));
+    g.fillRect(juce::Rectangle<float>::leftTopRightBottom(lowX, box.getY(), highX, box.getBottom()));
+    g.setColour(line.withAlpha(alpha * 0.5f));
+    for (const auto seconds : {1.0f, 2.0f, 4.0f}) g.fillRect(box.getX(), rtY(seconds), box.getWidth(), 1.0f);
     juce::Path curve;
     const auto points = juce::jlimit(32, 160, juce::roundToInt(box.getWidth()));
     for (int i = 0; i <= points; ++i)
@@ -520,13 +540,21 @@ inline void drawFxReverbDecay(juce::Graphics& g, juce::Rectangle<float> plot, co
     fill.lineTo(box.getRight(), box.getBottom());
     fill.lineTo(box.getX(), box.getBottom());
     fill.closeSubPath();
-    g.setColour(colour.withAlpha(alpha * 0.12f));
-    g.fillPath(fill);
+    fillUnderCurve(g, fill, curve, box, colour, alpha, 0.45f);
     g.setColour(colour.withAlpha(alpha));
-    g.strokePath(curve, juce::PathStrokeType(1.5f));
-    g.setColour(colour.withAlpha(alpha * 0.75f));
-    for (const auto hz : {low, high})
-        g.fillRect(filterHzToX(box, hz) - 0.7f, box.getY(), 1.4f, box.getHeight());
+    g.strokePath(curve, juce::PathStrokeType(1.9f));
+    // What the cuts take away is the well's own dark, not a grey over it.
+    g.setColour(displayFloor.withAlpha(alpha * 0.62f));
+    g.fillRect(juce::Rectangle<float>::leftTopRightBottom(box.getX(), box.getY(), lowX, box.getBottom()));
+    g.fillRect(juce::Rectangle<float>::leftTopRightBottom(highX, box.getY(), box.getRight(), box.getBottom()));
+    g.setColour(colour.withAlpha(alpha * 0.9f));
+    for (const auto x : {lowX, highX})
+    {
+        g.fillRect(x - 0.75f, box.getY(), 1.5f, box.getHeight());
+        juce::Path tab;
+        tab.addTriangle(x - 4.0f, box.getY(), x + 4.0f, box.getY(), x, box.getY() + 5.0f);
+        g.fillPath(tab);
+    }
 }
 
 // --- EQ --------------------------------------------------------------------------------------
@@ -587,11 +615,11 @@ inline void drawFxEqResponse(juce::Graphics& g, juce::Rectangle<float> plot, con
     {
         const auto at = juce::Point<float>(filterHzToX(box, hz), dbY(live ? gainDb : 0.0f));
         g.setColour(displayFloor);
-        g.fillEllipse(juce::Rectangle<float>(10.0f, 10.0f).withCentre(at));
+        g.fillEllipse(juce::Rectangle<float>(12.0f, 12.0f).withCentre(at));
         g.setColour(ink.withAlpha(alpha));
-        g.drawEllipse(juce::Rectangle<float>(10.0f, 10.0f).withCentre(at), 1.5f);
-        g.setFont(panelFont(Face::emphasis, 7.5f));
-        g.drawText(letter, juce::Rectangle<float>(10.0f, 10.0f).withCentre(at), juce::Justification::centred, false);
+        g.drawEllipse(juce::Rectangle<float>(12.0f, 12.0f).withCentre(at), 1.6f);
+        g.setFont(panelFont(Face::emphasis, fxPictureTextSize));
+        g.drawText(letter, juce::Rectangle<float>(12.0f, 12.0f).withCentre(at), juce::Justification::centred, false);
     };
     node(fxHertz(slot.knobs[0], 20.0f, 2000.0f), fxScaled(slot.knobs[2], -18.0f, 18.0f), lowChoice != 2, lowColour, "L");
     node(fxHertz(slot.knobs[3], 500.0f, 18000.0f), fxScaled(slot.knobs[5], -18.0f, 18.0f), highChoice != 2, highColour, "H");
@@ -630,14 +658,20 @@ inline void drawFxCompressorCurve(juce::Graphics& g, juce::Rectangle<float> plot
     const auto yOf = [box] (float db) { return box.getBottom() - juce::jlimit(0.0f, 1.0f, (db + 60.0f) / 66.0f) * box.getHeight(); };
     const auto outAt = [&] (float in) { return juce::jmin(0.0f, fxCompressorOutputDb(in, threshold, ratio, knee) + makeup); };
 
-    g.setColour(line.withAlpha(alpha * 0.9f));
+    g.setColour(line.withAlpha(alpha * 0.45f));
+    for (const auto db : {-48.0f, -36.0f, -24.0f, -12.0f})
+    {
+        g.fillRect(xOf(db), box.getY(), 1.0f, box.getHeight());
+        g.fillRect(box.getX(), yOf(db), box.getWidth(), 1.0f);
+    }
+    g.setColour(line.withAlpha(alpha * 0.95f));
     g.drawLine(xOf(-60.0f), yOf(-60.0f), xOf(0.0f), yOf(0.0f), 1.0f);
-    g.setColour(markRed.withAlpha(alpha * 0.4f));
+    g.setColour(markRed.withAlpha(alpha * 0.55f));
     const float dashes[] {2.0f, 3.0f};
     g.drawDashedLine({box.getX(), yOf(0.0f), box.getRight(), yOf(0.0f)}, dashes, 2, 1.0f);
     if (knee > 0.1f)
     {
-        g.setColour(colour.withAlpha(alpha * 0.08f));
+        g.setColour(colour.withAlpha(alpha * 0.06f));
         g.fillRect(juce::Rectangle<float>::leftTopRightBottom(xOf(threshold - knee * 0.5f), box.getY(),
                                                               xOf(threshold + knee * 0.5f), box.getBottom()));
     }
@@ -647,13 +681,29 @@ inline void drawFxCompressorCurve(juce::Graphics& g, juce::Rectangle<float> plot
         const auto in = -60.0f + static_cast<float>(i) * 0.5f;
         if (i == 0) curve.startNewSubPath(xOf(in), yOf(outAt(in))); else curve.lineTo(xOf(in), yOf(outAt(in)));
     }
+    // The gain the compressor changes, between its curve and unity: the
+    // wedge above the threshold is what it takes off.
+    auto change = curve;
+    for (int i = 120; i >= 0; --i)
+    {
+        const auto in = -60.0f + static_cast<float>(i) * 0.5f;
+        change.lineTo(xOf(in), yOf(in));
+    }
+    change.closeSubPath();
+    auto under = curve;
+    under.lineTo(xOf(0.0f), box.getBottom());
+    under.lineTo(xOf(-60.0f), box.getBottom());
+    under.closeSubPath();
+    fillUnderCurve(g, under, curve, box, colour, alpha, 0.3f);
+    g.setColour(colour.withAlpha(alpha * 0.38f));
+    g.fillPath(change);
     g.setColour(colour.withAlpha(alpha));
-    g.strokePath(curve, juce::PathStrokeType(1.7f));
+    g.strokePath(curve, juce::PathStrokeType(2.0f));
     const auto knot = juce::Point<float>(xOf(threshold), yOf(outAt(threshold)));
     g.setColour(displayFloor);
-    g.fillEllipse(juce::Rectangle<float>(8.0f, 8.0f).withCentre(knot));
+    g.fillEllipse(juce::Rectangle<float>(9.0f, 9.0f).withCentre(knot));
     g.setColour(colour.withAlpha(alpha));
-    g.drawEllipse(juce::Rectangle<float>(8.0f, 8.0f).withCentre(knot), 1.5f);
+    g.drawEllipse(juce::Rectangle<float>(9.0f, 9.0f).withCentre(knot), 1.6f);
     const auto end = juce::Rectangle<float>(7.0f, 7.0f).withCentre({xOf(0.0f) - 3.5f, yOf(outAt(0.0f))});
     g.setColour(displayFloor);
     g.fillRect(end);
@@ -687,21 +737,56 @@ inline FxMeterDial fxMeterDial(juce::Rectangle<float> area)
             juce::jmin(face.getWidth() * 0.5f - 8.0f, face.getHeight() - 20.0f)};
 }
 
-inline void drawFxCompressorNeedle(juce::Graphics& g, juce::Rectangle<float> area, float alpha, float reductionDb)
-{
-    const auto dial = fxMeterDial(area);
-    g.setColour(meterInk.withAlpha(alpha));
-    g.drawLine({dial.pivot, dial.at(dial.radius + 2.0f, FxMeterDial::angleFor(reductionDb))}, 1.2f);
-    g.fillEllipse(juce::Rectangle<float>(4.8f, 4.8f).withCentre(dial.pivot));
-}
-
-inline void drawFxCompressorMeter(juce::Graphics& g, juce::Rectangle<float> area, float alpha)
+// The needle, the reduction it points at as a figure, and a lamp that lights
+// as the compressor works: what moves with the sound, drawn over the face.
+inline void drawFxCompressorNeedle(juce::Graphics& g, juce::Rectangle<float> area, float alpha, float reductionDb,
+                                   bool live)
 {
     const auto face = area.reduced(1.0f);
+    const auto dial = fxMeterDial(area);
+    const auto tip = dial.at(dial.radius + 2.0f, FxMeterDial::angleFor(reductionDb));
+    g.setColour(meterInk.withAlpha(alpha * 0.22f));
+    g.drawLine({dial.pivot.translated(1.0f, 1.0f), tip.translated(1.0f, 1.0f)}, 1.6f);
+    g.setColour(meterInk.withAlpha(alpha));
+    g.drawLine({dial.pivot, tip}, 1.6f);
+    g.fillEllipse(juce::Rectangle<float>(6.0f, 6.0f).withCentre(dial.pivot));
+
+    const auto working = live ? juce::jlimit(0.0f, 1.0f, -reductionDb / 12.0f) : 0.0f;
+    const auto lamp = juce::Rectangle<float>(5.0f, 5.0f).withCentre({face.getX() + 8.0f, face.getY() + 8.0f});
+    if (working > 0.02f)
+    {
+        g.setColour(meterRed.withAlpha(alpha * 0.35f * working));
+        g.fillEllipse(lamp.expanded(3.5f));
+    }
+    g.setColour(meterInk.withAlpha(alpha * 0.35f).interpolatedWith(meterRed.withAlpha(alpha), working));
+    g.fillEllipse(lamp);
+    if (live)
+    {
+        g.setColour(meterInk.withAlpha(alpha));
+        g.setFont(panelFont(Face::reading, fxPictureTextSize));
+        g.drawText(juce::String(juce::jmin(0.0f, reductionDb), 1),
+                   juce::Rectangle<float>(face.getRight() - 34.0f, face.getBottom() - fxPictureTextHeight - 2.0f,
+                                          30.0f, fxPictureTextHeight),
+                   juce::Justification::centredRight, false);
+    }
+}
+
+inline void drawFxCompressorMeter(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour, float alpha)
+{
+    const auto face = area.reduced(1.0f);
+    // Lit from behind, warm where the lamp is, like the meter on a channel
+    // strip: the type's colour glows through the card from under the scale.
     g.setColour(meterFace.withAlpha(alpha));
     g.fillRoundedRectangle(face, 3.0f);
-    g.setColour(meterInk.withAlpha(alpha * 0.5f));
-    g.drawRoundedRectangle(face, 3.0f, 1.0f);
+    g.setGradientFill(juce::ColourGradient(colour.withAlpha(alpha * 0.34f), face.getCentreX(), face.getBottom() - 6.0f,
+                                           colour.withAlpha(0.0f), face.getCentreX(), face.getY() - face.getHeight() * 0.2f,
+                                           true));
+    g.fillRoundedRectangle(face, 3.0f);
+    g.setGradientFill(juce::ColourGradient(juce::Colours::white.withAlpha(alpha * 0.22f), face.getX(), face.getY(),
+                                           juce::Colours::white.withAlpha(0.0f), face.getX(), face.getCentreY(), false));
+    g.fillRoundedRectangle(face.reduced(1.0f), 2.5f);
+    g.setColour(meterInk.withAlpha(alpha * 0.85f));
+    g.drawRoundedRectangle(face, 3.0f, 1.4f);
     const auto dial = fxMeterDial(area);
     const auto pivot = dial.pivot;
     const auto radius = dial.radius;
@@ -710,24 +795,28 @@ inline void drawFxCompressorMeter(juce::Graphics& g, juce::Rectangle<float> area
     juce::Path scale;
     scale.addCentredArc(pivot.x, pivot.y, radius, radius, 0.0f, angleFor(-20.0f), angleFor(0.0f), true);
     g.setColour(meterInk.withAlpha(alpha));
-    g.strokePath(scale, juce::PathStrokeType(0.8f));
-    g.setFont(panelFont(Face::header, 7.0f));
+    g.strokePath(scale, juce::PathStrokeType(1.4f));
+    juce::Path hot;
+    hot.addCentredArc(pivot.x, pivot.y, radius - 2.5f, radius - 2.5f, 0.0f, angleFor(-20.0f), angleFor(-10.0f), true);
+    g.setColour(meterRed.withAlpha(alpha));
+    g.strokePath(hot, juce::PathStrokeType(3.0f));
+    g.setFont(panelFont(Face::header, fxPictureTextSize));
     for (const auto db : {0.0f, -1.0f, -2.0f, -3.0f, -5.0f, -7.0f, -10.0f, -20.0f})
     {
         const auto angle = angleFor(db);
+        const auto major = db == 0.0f || db == -3.0f || db == -10.0f || db == -20.0f;
         const auto ink = (db <= -10.0f ? meterRed : meterInk).withAlpha(alpha);
         g.setColour(ink);
-        g.drawLine({polar(radius, angle), polar(radius - 4.0f, angle)}, 1.0f);
-        if (db == 0.0f || db == -3.0f || db == -10.0f || db == -20.0f)
+        g.drawLine({polar(radius + 1.0f, angle), polar(radius - (major ? 7.0f : 5.0f), angle)}, major ? 1.6f : 1.2f);
+        if (major)
             g.drawText(juce::String(juce::roundToInt(-db)),
-                       juce::Rectangle<float>(16.0f, 9.0f).withCentre(polar(radius + 6.0f, angle)),
+                       juce::Rectangle<float>(18.0f, fxPictureTextHeight).withCentre(polar(radius + 7.0f, angle)),
                        juce::Justification::centred, false);
     }
     g.setColour(meterInk.withAlpha(alpha));
-    g.drawText("GR", juce::Rectangle<float>(face.getX() + 4.0f, face.getBottom() - 11.0f, 20.0f, 9.0f),
+    g.drawText("GR", juce::Rectangle<float>(face.getX() + 4.0f, face.getBottom() - fxPictureTextHeight - 2.0f,
+                                            22.0f, fxPictureTextHeight),
                juce::Justification::centredLeft, false);
-    g.drawText("dB", juce::Rectangle<float>(face.getRight() - 24.0f, face.getBottom() - 11.0f, 20.0f, 9.0f),
-               juce::Justification::centredRight, false);
 }
 
 // --- CHORUS ----------------------------------------------------------------------------------
@@ -742,13 +831,14 @@ inline void drawFxChorusTaps(juce::Graphics& g, juce::Rectangle<float> plot, con
     const auto right = juce::Colour(0xff9fe7ff);
     const auto box = fxPictureBox(FxWellKind::chorusTaps, plot);
     const auto msY = [box] (float ms) { return box.getBottom() - juce::jlimit(0.0f, 1.0f, ms / 42.0f) * box.getHeight(); };
-    g.setFont(panelFont(Face::reading, 7.0f));
+    g.setFont(panelFont(Face::reading, fxPictureTextSize));
     for (const auto ms : {10.0f, 20.0f, 30.0f, 40.0f})
     {
         g.setColour(line.withAlpha(alpha * 0.55f));
         g.fillRect(box.getX(), msY(ms), box.getWidth(), 1.0f);
-        g.setColour(mutedText.withAlpha(alpha));
-        g.drawText(juce::String(juce::roundToInt(ms)), juce::Rectangle<float>(box.getX() - 15.0f, msY(ms) - 5.0f, 13.0f, 10.0f),
+        g.setColour(mutedText.interpolatedWith(text, 0.35f).withAlpha(alpha));
+        g.drawText(juce::String(juce::roundToInt(ms)),
+                   juce::Rectangle<float>(box.getX() - 18.0f, msY(ms) - fxPictureTextHeight * 0.5f, 15.0f, fxPictureTextHeight),
                    juce::Justification::centredRight, false);
     }
     const auto first = fxScaled(slot.knobs[1], 0.5f, 30.0f);
@@ -793,7 +883,7 @@ inline void drawFxChorusTaps(juce::Graphics& g, juce::Rectangle<float> plot, con
         g.drawEllipse(juce::Rectangle<float>(7.0f, 7.0f).withCentre(at), 1.4f);
     }
     // The legend at the top right, clear of the scale and of the delay nodes.
-    const auto legend = box.withHeight(9.0f).withTrimmedRight(14.0f);
+    const auto legend = box.withHeight(fxPictureTextHeight).withTrimmedRight(14.0f);
     g.setColour(colour.withAlpha(alpha));
     g.drawText("L", legend.withTrimmedRight(10.0f), juce::Justification::topRight, false);
     g.setColour(right.withAlpha(alpha));
@@ -935,9 +1025,9 @@ inline void drawFxFlangerComb(juce::Graphics& g, juce::Rectangle<float> plot, co
     g.setColour(line.withAlpha(alpha * 0.7f));
     const float dashes[] {2.0f, 3.0f};
     g.drawDashedLine({box.getX(), dbY(0.0f), box.getRight(), dbY(0.0f)}, dashes, 2, 1.0f);
-    g.setFont(panelFont(Face::reading, 7.5f));
+    g.setFont(panelFont(Face::reading, fxPictureTextSize));
     g.setColour(colour.withAlpha(alpha));
-    g.drawText(juce::String(now, 2) + " ms", box.withHeight(10.0f), juce::Justification::topRight, false);
+    g.drawText(juce::String(now, 2) + " ms", box.withHeight(fxPictureTextHeight), juce::Justification::topRight, false);
 }
 
 // One of a strip's wells: the well itself, and whichever picture its kind
@@ -971,7 +1061,7 @@ inline void drawFxWellPicture(juce::Graphics& g, const FxWell& well, const FxSlo
         case FxWellKind::reverbDecay:     drawFxReverbDecay(g, plot, slot, sampleRate, colour, alpha); return;
         case FxWellKind::eqResponse:      drawFxEqResponse(g, plot, slot, sampleRate, colour, fxEqHighColour, alpha); return;
         case FxWellKind::compressorCurve: drawFxCompressorCurve(g, plot, slot, colour, alpha); return;
-        case FxWellKind::compressorMeter: drawFxCompressorMeter(g, well.area.toFloat(), alpha); return;
+        case FxWellKind::compressorMeter: drawFxCompressorMeter(g, well.area.toFloat(), colour, alpha); return;
         case FxWellKind::chorusTaps:      drawFxChorusTaps(g, plot, slot, bpm, colour, alpha); return;
         case FxWellKind::phaserComb:      drawFxPhaserComb(g, plot, slot, sampleRate, colour, alpha, live); return;
         case FxWellKind::flangerComb:     drawFxFlangerComb(g, plot, slot, sampleRate, colour, alpha, live); return;
@@ -991,7 +1081,7 @@ inline void drawFxWellLive(juce::Graphics& g, const FxWell& well, const FxSlot& 
     switch (well.kind)
     {
         case FxWellKind::compressorMeter:
-            drawFxCompressorNeedle(g, well.area.toFloat(), alpha, live.valid ? live.reductionDb : 0.0f);
+            drawFxCompressorNeedle(g, well.area.toFloat(), alpha, live.valid ? live.reductionDb : 0.0f, live.valid);
             return;
         case FxWellKind::compressorCurve:
             if (live.valid && live.inputPeak > 1.0e-3f)

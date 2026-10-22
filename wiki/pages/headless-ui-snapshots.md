@@ -4,7 +4,7 @@ type: guide
 summary: Render a Rhino panel, the whole Rhino shell or Forge's editor to a PNG without a window, then measure it instead of eyeballing it.
 tags: [both, ui, testing, snapshots]
 sources: []
-updated: 2026-10-19
+updated: 2026-10-22
 ---
 
 # Seeing the UI without taking the screen
@@ -114,6 +114,7 @@ standalone's saved `filterState`, or call `importSample` in `runSnapshot` tempor
 
 - Check the PNG's modification time before believing it. A failed run leaves the previous image, and a writer that does
   not delete or truncate first appends to it ([juce::File::createOutputStream appends](juce-output-stream-appends.md)).
+- A snapshot paints once, so it never shows a kept layer. Forge draws an FX picture straight through on the first frame at a size. A paste that faded every later frame therefore showed only in the running app ([A JUCE image is drawn at the last colour's opacity](juce-image-draws-at-current-opacity.md)). To check a cache, paint twice and compare.
 - Sample pixels with PIL instead of trusting a magnified view, which once turned neutral grey boxes purple. PyMuPDF
   pixmaps default to 72 dpi, so pass `dpi=96` or every coordinate is off.
 - Against a reference image, render at its pixel width so crops line up, find text rows by row profile before
@@ -130,3 +131,4 @@ standalone's saved `filterState`, or call `importSample` in `runSnapshot` tempor
 - [Driving Forge's standalone on Windows](driving-the-forge-standalone.md)
 - [juce::File::createOutputStream appends](juce-output-stream-appends.md)
 - [A juce::Path holding only a start point is empty](juce-path-isempty-ignores-a-lone-point.md)
+- [A JUCE image is drawn at the last colour's opacity](juce-image-draws-at-current-opacity.md)

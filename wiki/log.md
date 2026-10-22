@@ -981,3 +981,12 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - source: instruments/rhino-forge/ui/ForgeFxGestures.h, src/ForgeEditorFxView.cpp, src/ForgeEditorInput.cpp, tests/ForgeTestsFx.cpp
 - updated: pages/forge-fx-strip-plans.md (what a press takes per picture; presses only inside the plot, because of the phaser's STAGES field; nodes jump to the press except the distortion's DRIVE handle, `fxWellFollowsPointer`, and the two cursors; the inverse knob laws; the phaser's 20 Hz axis against FREQ's 80 Hz floor that failed the first end-to-end test)
 - updated: pages/development-environment.md (a command hook refuses shell commands with a token ending in `.key`; why the FX picture cache's field is `drawnFrom`)
+
+## [2026-10-22] update | Forge FX pictures pasted at full brightness; taller strips and larger text (44e19bb)
+- source: the change's brief, checked against instruments/rhino-forge/src/ForgeEditorFxView.cpp, src/ForgeEditorPaint.cpp, ui/ForgeModule.h, ui/ForgeFxStrips.h, ui/ForgeFxDisplay.h, ui/ForgePlacement.h, ui/ForgeMerliChassis.h, tests/ForgeTestsFx.cpp
+- created: pages/juce-image-draws-at-current-opacity.md (gotcha: `drawImage*` composites at the last colour's opacity; the faded FX picture cache and why snapshots missed it; which other blits are safe; paint twice to test a cache)
+- updated: pages/forge-panel-repaint-cost.md (the paste sets opacity 1; the cache test holds the kept frame to a drawn one; 9.0 ms idle and 62.9 ms resize, three strips shown)
+- updated: pages/forge-fx-strip-plans.md (`fxSlotHeight` 92 px and why, the three-strip test at both window sizes, the strip lines tied to that height; text sizes; `rackKnobs` finds a knob by the caption's foot)
+- updated: pages/forge-mixer-and-fx.md (the compressor meter's look, its end-to-end needle test, about 14 dB off the default patch, and the cache, not the art, behind "greyed out")
+- updated: pages/headless-ui-snapshots.md (a snapshot paints once and never shows a kept layer)
+- updated: index.md (new gotcha page)

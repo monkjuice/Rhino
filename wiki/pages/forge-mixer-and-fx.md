@@ -4,7 +4,7 @@ type: component
 summary: The MIX tab's nine channels and two busses, and three eight-slot effects racks of nine types that run on the summed voices, each slot printing its readings and fed meters by the engine once a block.
 tags: [forge, mixer, fx, signal-flow]
 sources: []
-updated: 2026-10-21
+updated: 2026-10-22
 ---
 
 # Forge mixer and effects racks
@@ -38,6 +38,7 @@ Three racks (MAIN, BUS 1, BUS 2) of eight slots (`fxSlotCount`); a slot holds on
 - **Meters.** `FxRack` keeps an `FxSlotMeter` per slot as it renders (`core/ForgeFxDsp.h`). It records whether the slot rendered, the input peak, the wet output peak, the compressor's gain reduction, and the LFO phase of a chorus, phaser or flanger.
 - **Publishing.** `Processor::processBlock` takes the meters once a block into atomics, which only ever raise a peak or deepen a reduction, so a reading holds until it is taken and a lost race costs one frame. `Editor::takeFxMeters` runs on the 24 Hz timer, but only for the shown rack and only while the FX page shows. It copies them into `ui::FxLive`, easing the gain-reduction needle back over a few frames.
 - **Readers.** The meters drive the panel lamps (`fxLampLevel`), the compressor's needle and the input dot on its curve, and the chorus, phaser and flanger sweeps. Until a slot has published, its pictures draw from the settings alone and its live lamps stay dark.
+- **The compressor's meter** (since commit `44e19bb`) is lit from behind in the type colour, with a red band past -10 dB. The live pass adds a lamp that lights with reduction and prints the reduction as a figure. A `forge_fx` test checks the needle end to end: it drives a compressor through `processBlock`, pumps the editor's own timer through a wait ([Seeing the UI without taking the screen](headless-ui-snapshots.md)), and requires the meter's pixels to change. The default compressor takes about 14 dB off the default patch. When the pictures looked greyed out, the cause was the picture cache, not the art ([A JUCE image is drawn at the last colour's opacity](juce-image-draws-at-current-opacity.md)).
 
 Still absent as of 2026-10-21: a `DIRECT` output, Serum's Bode, Convolve, Hyper/Dimension and splitter types, and rack presets.
 

@@ -4,7 +4,7 @@ type: decision
 summary: Each rack slot is laid out by its effect type's own strip plan, from one pure function in ui/ForgeFxStrips.h that the editor, the painter and the layout test all call; the slot's identity card is its bypass, and a filled slot's type is never changed in place.
 tags: [forge, fx, ui, layout]
 sources: []
-updated: 2026-10-21
+updated: 2026-10-22
 ---
 
 # Forge's FX strips are per-type plans in a pure header
@@ -20,6 +20,12 @@ Every rack slot declares the same twelve controls ([Forge's FX slots declare gen
   - up to two `FxWell`s, the pictures (`FxWellKind`);
   - up to four `FxPanel`s, framed groups of controls the DSP couples. Each panel's caption is engraved up a side lane. A panel may carry an `FxLamp`, and a mode `gate` that dims the whole panel.
 - **One frame for every type.** The strip is a 48-unit grid of its width: 5 units of card, a 38-unit body that each type lays out its own way, and a 5-unit tail of MIX and LEVEL as matched knobs. Every knob, hero, normal or mini (`fxKnobSizesFor`), stands on the same caption, centre and reading lines.
+- **92 px tall, three whole strips.** The user asked for taller strips and larger text, so `fxSlotHeight` (`ui/ForgeModule.h`) went from 76 to 92 px in commit `44e19bb`. 92 is the tallest height that still fits three whole strips in the rack at the smallest window. The rack's viewport is about 281 px there and 325 px at the default 1440x900, which now shows three strips instead of four. `rackCaptionsFitSuite` (`tests/ForgeTestsLayout.cpp`) requires `fxVisibleSlotCount >= 3` at both sizes. Each line a strip is built on (caption, knob centre, reading, mini rows, card, stacks) is a constant in `ui/ForgeFxStrips.h` set for that height, so a new height means moving every one of them.
+- **Text.**
+  - Readings are 11 pt. `drawFittedText` squeezes a long one to 0.8 width rather than cutting it.
+  - Panel legends and the automation name are 9.5 pt.
+  - Words inside a picture are 8.5 pt (`fxPictureTextSize`, `ui/ForgeFxDisplay.h`).
+  - Captions keep the panel's one caption size.
 - **Refactor first.** `7f3e81e` introduced the plan and reproduced the old row byte for byte. Only after that did each type get its own strip (`d9acbe8` onward).
 - **The card is the bypass.** The identity card (`FxPlate`, `ui/ForgeFxVisuals.h`) is lit in the type colour while the slot plays and dark when it is bypassed, with the FX list's power glyph in its corner. A right-click opens the bypass parameter's menu, for MIDI learn. At the user's request, the BYP chip and the card's replace-the-effect menu were removed. Effects are added and removed only in the list, so a slip while reaching for a knob cannot change what a slot holds.
 
@@ -40,6 +46,7 @@ Every rack slot declares the same twelve controls ([Forge's FX slots declare gen
   - knobs are round, at least 24 px and no larger than the shared diameter;
   - each stacked choice is at least 14 px tall;
   - the bypass lies inside the card.
+- Tests find controls by where they stand, never by a fixed offset. `rackKnobs` (`tests/ForgeTestsFxModulation.cpp`) used to look a fixed distance below a caption's top, which assumed the 76 px strip. It now takes the knob whose top lies within 12 px of the caption's foot.
 
 ## Related
 

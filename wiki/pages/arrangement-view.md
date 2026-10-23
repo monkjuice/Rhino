@@ -2,9 +2,9 @@
 title: Arrangement view
 type: component
 summary: The timeline UI, one class across thirteen files, that previews every drag locally and leaves panel decisions to the shell.
-tags: [rhino, ui, arrangement]
+tags: [rhino, ui, arrangement, zoom, grid]
 sources: []
-updated: 2026-10-16
+updated: 2026-10-23
 ---
 
 # Arrangement view
@@ -22,7 +22,7 @@ updated: 2026-10-16
 
 - **A clip is two rows.** The top strip (`clipHeaderHeight`: half the clip, clamped to 8-22 px) selects and carries it; the body behaves like empty lane, so a press there sets the selection line and a drag sweeps a region. Edges trim at any height.
 - **The selection line is where playback starts.** `moveTransportToSelectionStart` always calls `Session::setPlaybackStart`, but moves the transport only while stopped and not counting in.
-- **Two snapping rules.** Clip edges round to the nearest line (`snapped`); a pointer position takes the cell it is inside (`snappedDown`/`snappedUp`). The grid is adaptive by default (`ArrangementGrid.h`).
+- **Two snapping rules.** Clip edges round to the nearest line (`snapped`); a pointer position takes the cell it is inside (`snappedDown`/`snappedUp`). The grid is adaptive by default (`ArrangementGrid.h`); see [Zoom and the adaptive grid](#zoom-and-the-adaptive-grid).
 - **The bar ruler labels counts too.** Bar numbers step by powers of two bars, 44 px apart (`barLabelStep`, `barNumberMinimumPixels`). Once they are one bar apart, `paintBarNumbers` also labels counts as `bar.count` with short marks between, like Live. A count is the signature's denominator note (`timeSignature().numerator` per bar, so 6/8 reads 1.2 to 1.6 in eighths), not the engine's quarter-note beat (`beatsPerBar()`). Every span comes from one chain in `ArrangementGrid.h`, `finerRulerSpan`, where each span divides the previous: 4/4 runs 4, 2, 1, 1/2, 1/4; 6/8 runs 6, 3, 1; 7/8 runs 7, 1. That chain is what makes every mark land on a division of the labels either side. `rulerLabelSpan` keeps labels 44 px apart and never goes finer than a count. `rulerTickSpan` keeps marks 10 px apart and stops at a quarter count. The ruler ignores the snap grid, and the time ruler's rule (every labelled time sits on a numbered bar) is unchanged. Unit-tested in `tests/Arrangement/ClipGeometryTest.cpp`.
 - **`Focus`** records what the last click selected (clip, track, automation lane, region or nothing), and Delete, Ctrl+B, Ctrl+C, Ctrl+X and Ctrl+D dispatch on it: on `Focus::track` they act on every selected card ([Track clipboard](track-clipboard.md)), otherwise on the region. Ctrl+V follows whichever clipboard was filled last.
 - **A muted clip is drawn grey** (since 2026-10-14): `ClipView::muted`, a desaturated body, grey waveform and dim notes in `ArrangementPainter.cpp`. The clip menu's ticked *Mute* (`muteSelected`, `Session::setClipsMuted`) mutes either kind of clip as one undo step; before, a muted audio clip looked like any other and a MIDI clip could not be muted at all.
@@ -33,6 +33,25 @@ updated: 2026-10-16
 - **Waveforms already fill their height.** `paintWaveformLanes` draws JUCE's `AudioThumbnail` (peaks stored as int8 × 127, drawn at zoom × height / 256) at zoom 1.45 (`ArrangementPainter.cpp`), so a peak of about -3.2 dBFS reaches the lane edge and anything louder is clipped at it. In a default 96 px row the clip box is 86 px, its name strip and padding take 36, and the 50 px left split into two channel lanes of about 25 and 23 px. A waveform that looks small is quiet material: a recording reported as loud (2026-10-15) peaked at -4.4 dBFS but 90% of its pixel columns sat below -12.6 dBFS. Measure the file before changing the drawing ([Measure sound, don't read the DSP](measure-sound-dont-read-dsp.md)).
 - **It reports, the shell decides.** `clipSelected`, `clipOpened`, `trackSelected` and `trackFocused` are callbacks; which panel opens is the [app shell](app-shell.md)'s call.
 - **Cards.** A card's bottom edge resizes its row and its body carries the track through the stack (`Session::moveTrack`), both previewed until release. Row height (`rhinoLaneHeight`, 0 means fit the panel) is a view setting written without undo; colour and name are undoable. Renaming puts one `TextEditor` over the painted name. A track from the `+` menu or Ctrl+T lands under the selected card and becomes the selection (`insertTrack`, see [Track kinds: audio and MIDI](track-kinds.md)).
+
+## Zoom and the adaptive grid
+
+Since 2026-10-23, matched to Ableton Live (`Arrangement.h`, `Arrangement::zoom`, `ArrangementGrid.h`).
+
+- **It opens on two minutes.** `viewSpan` is seconds across the lane width and starts at `defaultViewSeconds` (120; it was 8). At 120 BPM the adaptive grid reads that in one-bar cells on any lane about 1,360-2,700 px wide (a 1920 or 2560 screen with the browser open). Zoom-out stops at max(2 × `defaultViewSeconds`, 2 × `songEnd`); the old cap, max(60 s, 2 × song), would clamp the first zoom-out from the opening view back to one minute.
+- **Zoom-in stops at 1/16384.** The floor is lane width ÷ `deepestZoomPixelsPerBeat` × seconds per beat (it was a fixed 0.25 s). `deepestZoomPixelsPerBeat` is the medium target over a 1/16384, 32 × 4096 = 131,072 px per beat, held per beat so the deepest view shows 1/16384 at every tempo: about 262 px/ms at 120 BPM, past Live's deepest (1/8192 lines 28 px apart, about 115 px/ms).
+- **The adaptive grid picks the division nearest its target.** `adaptiveGridDivision` takes the finest division whose lines are at least target ÷ √2 apart, which for divisions an octave apart is the nearest one. The old rule, finest that clears the whole target, read half an octave coarser than Live: two-bar cells over two minutes where Live shows one, 1/4096 at 56 px where Live shows 1/8192. The five targets (72/48/32/20/12 px) are unchanged.
+- **Divisions run past 1/64**, `note128` to `note16384`. The Fixed menu lists only the first `fixedGridDivisionCount` (10, through 1/64), as Live's stops early; the finer ones come from the adaptive grid and Ctrl+1, since `narrowerGridDivision` walks the whole chain.
+- **A grid too fine to draw is drawn coarser; snapping keeps it.** `drawnGridBeats` steps a fixed or off-mode grid whose lines fall under `gridLineMinimumPixels` (4 px) out to the counts, then the bars. Drawn line for line, 1/64 across two minutes is about 3,840 lines, past the painter's 2,000-line cap, which left the right of the view bare.
+
+Covered by `tests/Arrangement/ClipGeometryTest.cpp` (the nearest rule, the deepest zoom reaching `note16384`, `drawnGridBeats`) and the scenario `BrowserDrops.inc` (one-bar opening at lane widths 1673 and 2313, zoom-out widening it, nothing past 1/16384).
+
+**Open at deep zoom** (as of 2026-10-23):
+
+- Neither ruler labels below a count: the bar ruler marks down to a quarter count (`rulerFinestSpan`) and the time ruler labels only bar positions, so a view of a few milliseconds prints nothing. Live's time ruler prints min:sec:ms there. Already true at the old 0.25 s floor.
+- Waveforms are `AudioThumbnail` peaks, blocky rather than single samples below thumbnail resolution.
+- `xFor` returns float: a clip starting minutes before a deep view, tens of millions of pixels off-screen, loses a few pixels of edge precision, and past about 2^31 px (about 2.3 hours at 120 BPM at the deepest zoom) an integer conversion would overflow.
+- The 92 px toolbar grid button squeezes "Grid 1/16384" and its arrow to about 86% width (79% with T), inside JUCE's 0.7 floor.
 
 ## Clips that leave the panel
 

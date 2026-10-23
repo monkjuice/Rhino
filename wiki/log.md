@@ -1050,3 +1050,8 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/region-editing.md (bounce no longer falls back to the region's clips; it bounces the span)
 - updated: pages/keeping-files-small.md (SessionBounce.cpp at 661 lines, and what splitting it needs)
 - updated: index.md (Bounce to New Track's summary)
+
+## [2026-10-23] update | The arrangement opens on two minutes and zooms to 1/16384, its adaptive grid matched to Live
+- source: the change's brief, checked against native/src/ui/arrangement/Arrangement.h (`defaultViewSeconds`), Arrangement.cpp (`zoom`), ArrangementGrid.h (`adaptiveGridDivision`, `deepestZoomPixelsPerBeat`, `drawnGridBeats`), ArrangementPainter.cpp
+- updated: pages/arrangement-view.md (new section "Zoom and the adaptive grid": the two-minute opening view and the zoom-out cap, the 1/16384 zoom-in floor held per beat, the nearest-division rule and why the old one read half an octave coarse, divisions past 1/64 outside the Fixed menu, the drawn grid coarsened under 4 px; open items at deep zoom: rulers, thumbnail peaks, float `xFor`, the grid button's squeeze)
+- checked, not changed: pages/transport.md (its tempo and signature ranges already match the code)

@@ -64,9 +64,37 @@ inline juce::Path chamferedPath(juce::Rectangle<float> box, float cut, int corne
     return path;
 }
 
+// --- Images the panel makes -------------------------------------------------
+
+// Never give a juce::Image static storage in Forge. On Windows a plain image is
+// a Direct2D bitmap, and a static one is released when the plugin's DLL
+// detaches, under the loader lock, where NVIDIA's driver waits forever for
+// threads that need that lock: RhinoDAW stayed running with no window after
+// being closed whenever Forge's panel had been open.
+//
+// An image the panel makes for itself goes in JUCE's ImageCache instead, under
+// a key of its own, and is made again whenever the cache has let it go. JUCE
+// empties the cache on the message thread when the last plugin instance goes,
+// and lets an image go a few seconds after nothing holds it. getFromMemory
+// keys an asset by its address, which in a 64-bit process never sets the top
+// bits these keys set, so the two cannot meet.
+inline constexpr juce::int64 grainImageKey = 0x46f0'0000'0000'0001;
+inline constexpr juce::int64 wheelImageKey = 0x46f0'0000'0000'0002;
+
+template <typename Make>
+juce::Image cachedImage(juce::int64 key, Make&& make)
+{
+    if (auto kept = juce::ImageCache::getFromHashCode(key); kept.isValid())
+        return kept;
+    auto made = make();
+    juce::ImageCache::addImageToCache(made, key);
+    return made;
+}
+
 // --- Grain ------------------------------------------------------------------
 
-// A seamless tile of brushed metal, generated once and tiled thereafter.
+// A seamless tile of brushed metal, generated when first drawn and tiled
+// thereafter.
 //
 // This is the one place the panel uses a raster, and it is 128 pixels square
 // rather than the size of a plate: tiled, it stays sharp at any window size and
@@ -86,9 +114,9 @@ inline juce::Path chamferedPath(juce::Rectangle<float> box, float cut, int corne
 // unevenness over it: dense, even, low contrast per pixel. That is what a
 // machined face looks like, and it is nothing like noise. Fine tooth, gentle
 // drift, and a few hairline scratches for incident.
-inline const juce::Image& brushedGrain()
+inline juce::Image brushedGrain()
 {
-    static const juce::Image tile = []
+    return cachedImage(grainImageKey, []
     {
         constexpr int size = 128;
         juce::Image image(juce::Image::ARGB, size, size, true);
@@ -137,8 +165,7 @@ inline const juce::Image& brushedGrain()
             }
         }
         return image;
-    }();
-    return tile;
+    });
 }
 
 // Lays the grain over whatever shape has already been filled.
@@ -182,15 +209,16 @@ enum class Fastener
     dome
 };
 
-inline const juce::Image& fastenerImage(Fastener kind)
+// Fetched from the ImageCache at every call, as Merli's assets are, and never
+// kept (see cachedImage).
+inline juce::Image fastenerImage(Fastener kind)
 {
-    static const juce::Image cross = juce::ImageCache::getFromMemory(
-        BinaryData::screw_cross_png, BinaryData::screw_cross_pngSize);
-    // The dome asset has a wide transparent gutter. Trim it in the cached view
-    // so the requested radius describes the hardware, as it does for the screw.
-    static const juce::Image dome = juce::ImageCache::getFromMemory(
-        BinaryData::screw_dome_png, BinaryData::screw_dome_pngSize).getClippedImage({20, 19, 28, 28});
-    return kind == Fastener::cross ? cross : dome;
+    if (kind == Fastener::cross)
+        return juce::ImageCache::getFromMemory(BinaryData::screw_cross_png, BinaryData::screw_cross_pngSize);
+    // The dome asset has a wide transparent gutter. Trim it on the way out so
+    // the requested radius describes the hardware, as it does for the screw.
+    return juce::ImageCache::getFromMemory(BinaryData::screw_dome_png, BinaryData::screw_dome_pngSize)
+        .getClippedImage({20, 19, 28, 28});
 }
 
 inline void drawFastener(juce::Graphics& g, juce::Point<float> centre, float radius,
@@ -200,7 +228,7 @@ inline void drawFastener(juce::Graphics& g, juce::Point<float> centre, float rad
     // chassis together, its small one where the dome stud holds a plate on.
     if (isMerli()) { merli::drawScrew(g, centre, radius, kind == Fastener::cross, alpha); return; }
     if (radius < 1.0f || alpha <= 0.0f) return;
-    const auto& art = fastenerImage(kind);
+    const auto art = fastenerImage(kind);
     if (art.isNull()) return;
 
     juce::Graphics::ScopedSaveState state(g);

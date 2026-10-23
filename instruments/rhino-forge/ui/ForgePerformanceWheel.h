@@ -6,6 +6,20 @@
 
 namespace rhino::forge::ui
 {
+// The wheel's art, cut from its photograph and scaled down once rather than on
+// every paint, and kept in the ImageCache rather than in a static (see
+// cachedImage in ForgeChrome.h).
+inline juce::Image performanceWheelArt()
+{
+    return cachedImage(wheelImageKey, []
+    {
+        return juce::ImageCache::getFromMemory(BinaryData::performance_wheel_png,
+                                               BinaryData::performance_wheel_pngSize)
+            .getClippedImage({245, 65, 530, 1385})
+            .rescaled(76, 160, juce::Graphics::highResamplingQuality);
+    });
+}
+
 // The metal stays put while the ribbing scrolls inside its slot. Keeping each
 // wheel a child lets a drag repaint only this small plate, not the whole panel.
 class PerformanceWheel final : public juce::Component, public juce::SettableTooltipClient
@@ -30,10 +44,7 @@ public:
 
     void paint(juce::Graphics& g) override
     {
-        static const auto wheel = juce::ImageCache::getFromMemory(
-            BinaryData::performance_wheel_png, BinaryData::performance_wheel_pngSize)
-            .getClippedImage({245, 65, 530, 1385})
-            .rescaled(76, 160, juce::Graphics::highResamplingQuality);
+        const auto wheel = performanceWheelArt();
         const auto width = getWidth();
         const auto art = juce::Rectangle<int>(2, 10, width - 4, getHeight() - 11);
         g.setColour(mutedText);

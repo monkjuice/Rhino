@@ -4,6 +4,8 @@
 #include "../ui/ForgePlacement.h"
 #include "../ui/ForgeControls.h"
 #include "../ui/ForgePresetPlate.h"
+#include "../ui/ForgeChrome.h"
+#include "../ui/ForgePerformanceWheel.h"
 
 #include <iostream>
 #include <memory>
@@ -472,6 +474,52 @@ void forgeStableSuite()
     if (differing != 0) std::cerr << "  two Forge panels differ in " << differing << " pixels\n";
     require(differing == 0, "two fresh Forge panels paint the OSC page byte for byte alike");
 }
+
+// ------------------------------------------- nothing outlives the panel ---
+
+// Every image the panel makes or decodes is let go once the panel has closed
+// and nothing draws it. Kept in a static, one outlived the plugin and was
+// released by the DLL's detach under the loader lock, where NVIDIA's driver
+// deadlocked: RhinoDAW stayed running with no window after it was closed.
+// Each image is marked while it is held, so the same image fetched again
+// after the cache has let it go would still carry the mark.
+void releasedImagesSuite()
+{
+    {
+        auto opened = openPanel(ThemeId::forge, ui::defaultPanelWidth, ui::defaultPanelHeight);
+        for (const auto page : ui::tabPages)
+        {
+            pressTab(*opened->editor, ui::pageName(page));
+            paintPanel(*opened->editor);
+        }
+    }
+
+    struct Art
+    {
+        const char* name;
+        juce::Image (*fetch)();
+    };
+    const Art drawn[] {
+        {"the brushed grain",     [] { return ui::brushedGrain(); }},
+        {"the cross-head screw",  [] { return ui::fastenerImage(ui::Fastener::cross); }},
+        {"the domed stud",        [] { return ui::fastenerImage(ui::Fastener::dome); }},
+        {"the performance wheel", [] { return ui::performanceWheelArt(); }},
+    };
+    const auto mark = juce::Colour(0xff123456);
+    for (const auto& art : drawn)
+    {
+        {
+            auto held = art.fetch();
+            require(held.isValid(), "every image the panel draws can be fetched");
+            held.setPixelAt(0, 0, mark);
+            require(art.fetch().getPixelAt(0, 0) == mark, "a fetch while the image is held returns that image");
+        }
+        juce::ImageCache::releaseUnusedImages();
+        const auto kept = art.fetch().getPixelAt(0, 0) == mark;
+        if (kept) std::cerr << "  " << art.name << " outlived everything that drew it\n";
+        require(!kept, "an image the panel drew is let go once nothing holds it");
+    }
+}
 }
 
 void themeTests()
@@ -491,6 +539,7 @@ void themeTests()
     forgeStableSuite();
     merliRenderSuite();
     merliDiffersSuite();
+    releasedImagesSuite();
 
     // A no-argument run executes every area in one process, so the tokens go
     // back to Forge, the choice is forgotten, and the override returns to

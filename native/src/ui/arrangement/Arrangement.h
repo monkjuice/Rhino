@@ -61,7 +61,7 @@ public:
     // acts on is usually the one the audio editor is looking at.
     void mergeSelected();
     // Bounces what is selected to new audio tracks (ArrangementBounce.cpp):
-    // the selected clips, or the clips a dragged region holds, or the
+    // the selected clips whole, or a dragged region cut at its edges, or the
     // selected cards, a group's bus card bouncing the group. Public for the
     // same reason as the merge: Ctrl+B is also a shell shortcut.
     void bounceSelected();
@@ -263,14 +263,16 @@ private:
     // The cards a command made become the selection, a card focus.
     void selectCards(const std::vector<int>&);
     void nudgeSelected(int direction, bool byBar);
-    // ArrangementBounce.cpp. The menus pass what they were opened on; the
-    // shortcut passes the selection.
+    // ArrangementBounce.cpp. The card menu passes what it was opened on; the
+    // shortcut and the clip menu pass the selection.
     void bounceClips(std::vector<te::EditItemID>);
     void bounceTracks(std::vector<int>);
+    void bounceRegion(TimeSelection);
     void runBounce();
     // What the bounce in flight was asked for, which decides what is selected
-    // once it is done: the new cards, or the new clips.
+    // once it is done, the new cards or the new clips, and what it says.
     bool bouncingTracks = false;
+    bool bouncingRegion = false;
     // Mutes the selected clips, or unmutes them when every one already is:
     // the way back for a clip a bounce muted.
     void muteSelected();

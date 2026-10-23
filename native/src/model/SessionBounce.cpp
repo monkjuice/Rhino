@@ -1,5 +1,6 @@
 #include "SessionInternal.h"
 #include <algorithm>
+#include <cmath>
 #include <optional>
 
 // Bounce to New Track: what some clips, a track or a group play is rendered to
@@ -39,6 +40,7 @@ struct Session::BounceJob
     int track = -1;   // the source: a track, or a group's bus
     bool group = false;
     bool fromClips = false;  // the clips are what is muted, not the track
+    bool region = false;     // only the part of the clips between start and end is
     std::vector<int> members;
     std::vector<te::Clip*> clips;  // everything the render plays
     // One new clip each, a window onto the render over its own span.
@@ -229,6 +231,65 @@ juce::Result Session::startBounceClips(const std::vector<te::EditItemID>& ids)
     for (auto& job : jobs)
         std::sort(job.pieces.begin(), job.pieces.end(),
                   [](const BounceJob::Piece& a, const BounceJob::Piece& b) { return a.start < b.start; });
+    return startBounce(jobs);
+}
+
+// A time selection, as Live bounces one: every track in it with a clip inside
+// gets a new track holding one clip over exactly the selection, and the source
+// is muted only between its edges, the clips cut there as the bounce is laid
+// down. A muted clip plays nothing in the song, so it is left out of the
+// bounce rather than refusing it.
+juce::Result Session::startBounceRegion(double start, double end, int firstTrack, int lastTrack)
+{
+    jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+    if (!std::isfinite(start) || !std::isfinite(end) || end - start < minimumSplitSeconds)
+        return juce::Result::fail("Select a span of the timeline to bounce.");
+    const auto tracks = te::getAudioTracks(*edit);
+    std::vector<BounceJob> jobs;
+    for (auto index = std::max(0, firstTrack); index <= std::min(lastTrack, tracks.size() - 1); ++index)
+    {
+        BounceJob job;
+        for (auto* clip : tracks[index]->getClips())
+        {
+            if (clip == nullptr || clip->isMuted() || !shouldShowClipInArrangement(*clip))
+                continue;
+            const auto clipStart = clip->getPosition().time.getStart().inSeconds();
+            const auto clipEnd = clip->getPosition().time.getEnd().inSeconds();
+            if (clipEnd <= start || clipStart >= end)
+                continue;
+            // One that only grazes an edge is not in the selection, as a region
+            // copy has it: cut there, it would leave a sliver nobody could hear.
+            const auto cropped = clipStart < start || clipEnd > end;
+            if (cropped && std::min(clipEnd, end) - std::max(clipStart, start) < minimumSplitSeconds)
+                continue;
+            job.clips.push_back(clip);
+        }
+        if (job.clips.empty())
+            continue;
+        job.track = index;
+        job.fromClips = true;
+        job.region = true;
+        job.start = start;
+        job.end = end;
+        job.after = index;
+        job.joinGroup = trackGroupId(index);
+        job.name = trackName(index);
+        job.colour = trackColour(index);
+        const auto mixer = trackMixer(index);
+        job.volumeDb = mixer.volumeDb;
+        job.pan = mixer.pan;
+        // Named and coloured for the first clip it holds, as Live names it.
+        auto* first = *std::min_element(job.clips.begin(), job.clips.end(), [](te::Clip* a, te::Clip* b)
+        {
+            return a->getPosition().time.getStart() < b->getPosition().time.getStart();
+        });
+        const auto name = first->getName().trim();
+        job.pieces.push_back({{}, start, end, name.isEmpty() ? juce::String("(Bounce)") : name + " (Bounce)",
+                              clipColour(*first)});
+        jobs.push_back(std::move(job));
+    }
+    if (jobs.empty())
+        return juce::Result::fail("There is no clip playing inside the selection to bounce.");
     return startBounce(jobs);
 }
 
@@ -466,7 +527,24 @@ void Session::finishBounce()
     // Muted while every index still names its source.
     for (const auto& job : jobs)
     {
-        if (job.fromClips)
+        if (job.region)
+        {
+            // Cut at the selection's edges, so the song still plays every
+            // clip outside it. The engine keeps the left part in the clip it
+            // cuts and hands back the right one. A clip reaching past an edge
+            // by less than a split may leave is muted whole, as Delete takes it.
+            for (auto* clip : job.clips)
+            {
+                auto* inside = clip;
+                if (job.start - clip->getPosition().time.getStart().inSeconds() >= minimumSplitSeconds)
+                    if (auto* right = tracks[job.track]->splitClip(*clip, at(job.start)))
+                        inside = right;
+                if (inside->getPosition().time.getEnd().inSeconds() - job.end >= minimumSplitSeconds)
+                    tracks[job.track]->splitClip(*inside, at(job.end));
+                inside->setMuted(true);
+            }
+        }
+        else if (job.fromClips)
         {
             for (const auto& piece : job.pieces)
                 if (auto* clip = findClip(piece.source))
@@ -554,6 +632,17 @@ juce::Result Session::bounceClipsToNewTracks(const std::vector<te::EditItemID>& 
     if (summary != nullptr)
         *summary = {};
     if (const auto started = startBounceClips(ids); started.failed())
+        return started;
+    while (continueBounce(1000.0)) {}
+    return bounceOutcome(summary);
+}
+
+juce::Result Session::bounceRegionToNewTracks(double start, double end, int firstTrack, int lastTrack,
+                                              BounceResult* summary)
+{
+    if (summary != nullptr)
+        *summary = {};
+    if (const auto started = startBounceRegion(start, end, firstTrack, lastTrack); started.failed())
         return started;
     while (continueBounce(1000.0)) {}
     return bounceOutcome(summary);

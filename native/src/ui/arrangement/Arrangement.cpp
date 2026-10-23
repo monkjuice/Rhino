@@ -928,7 +928,7 @@ void Arrangement::showClipMenu(te::EditItemID id)
             else if (result == 6) safe->pasteSelection();
             else if (result == 8) safe->reverseSelected();
             else if (result == 9) safe->mergeSelected();
-            else if (result == 13) safe->bounceClips(safe->clipsToActOn());
+            else if (result == 13) safe->bounceSelected();
             else if (result == 14) safe->muteSelected();
         });
 }

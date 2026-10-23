@@ -978,6 +978,13 @@ public:
     // group's bus, is muted. A group's bus bounces the group; a member listed
     // with its own bus is bounced as part of it rather than twice.
     juce::Result bounceTracksToNewTracks(const std::vector<int>& tracks, BounceResult* = nullptr);
+    // A time selection: every track from firstTrack to lastTrack with an
+    // unmuted clip inside the span gets one clip over exactly the span, and
+    // the source clips are cut at its edges and muted only between them, as
+    // Live bounces a selection. A lane with nothing playing in it is passed
+    // over.
+    juce::Result bounceRegionToNewTracks(double start, double end, int firstTrack, int lastTrack,
+                                         BounceResult* = nullptr);
     // The bounce in steps, so the window can draw while it renders - the
     // shell's loading screen drives it. A start makes every refusal at once
     // and takes the edit off the device; continueBounce renders for about
@@ -988,6 +995,7 @@ public:
     // redo wait, and opening or starting a document cancels it.
     juce::Result startBounceClips(const std::vector<te::EditItemID>&);
     juce::Result startBounceTracks(const std::vector<int>& tracks);
+    juce::Result startBounceRegion(double start, double end, int firstTrack, int lastTrack);
     bool continueBounce(double milliseconds);
     void cancelBounce();
     bool isBouncing() const { return bounceRun != nullptr; }

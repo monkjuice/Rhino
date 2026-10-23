@@ -196,6 +196,82 @@
             require(keyed.trackCount() == 6 && keyed.trackMixer(2).muted && keyedView.selectedTrack == 3,
                     "With a card selected it bounces the track, and the new card is selected");
         }
+
+        // A time selection is bounced as a span, as Live bounces one: the new
+        // clip covers exactly the selection, and the source is cut at its edges
+        // and muted only between them, so the song still plays the rest.
+        {
+            Session spanned;
+            spanned.projectFile = bounceScratch.getChildFile("span.rhinoedit");
+            require(spanned.importAudio(source.getFile()).wasOk(), "A file imports for the span fixture");
+            const auto lane = 1;
+            const auto sourceID = te::getAudioTracks(*spanned.edit)[lane]->getClips().getFirst()->itemID;
+            // Every clip on the lane, in time order.
+            struct LanePiece
+            {
+                double start = 0.0, end = 0.0;
+                bool muted = false;
+            };
+            const auto laneClips = [&spanned, lane]
+            {
+                std::vector<LanePiece> found;
+                for (auto* clip : te::getAudioTracks(*spanned.edit)[lane]->getClips())
+                    found.push_back({clip->getPosition().time.getStart().inSeconds(),
+                                     clip->getPosition().time.getEnd().inSeconds(), clip->isMuted()});
+                std::sort(found.begin(), found.end(), [](const LanePiece& a, const LanePiece& b) { return a.start < b.start; });
+                return found;
+            };
+            const auto refusedEmpty = spanned.bounceRegionToNewTracks(0.25, 0.75, 0, 0);
+            require(refusedEmpty.failed() && spanned.trackCount() == 4,
+                    "A selection over a lane with nothing in it is refused, and nothing is made");
+
+            Session::BounceResult made;
+            require(spanned.bounceRegionToNewTracks(0.25, 0.75, 0, lane, &made).wasOk(),
+                    "A selection across part of a clip bounces");
+            require(spanned.trackCount() == 5 && made.tracks == std::vector<int>({lane + 1}),
+                    "to one new track under the lane that had a clip in it, the empty lane passed over");
+            require(made.clips.size() == 1, "as one clip");
+            const auto span = spanned.audioClipMix(made.clips.front());
+            require(close(span.startSeconds, 0.25) && close(span.endSeconds, 0.75) && close(span.offsetSeconds, 0.0),
+                    "over exactly the selection");
+            // The fixture turns loud half way through, at 0.5 s in the song,
+            // which is 0.25 s into a file that starts at the selection.
+            const auto quiet = bounceRms(span.sourceFile, 0.05, 0.2);
+            require(quiet > 0.03f && quiet < 0.15f, "The file starts where the selection does, on the quiet half");
+            require(bounceRms(span.sourceFile, 0.3, 0.45) > 0.3f, "and turns loud where the song does");
+            const auto cut = laneClips();
+            require(cut.size() == 3, "The source is cut at both edges of the selection");
+            require(close(cut[0].start, 0.0) && close(cut[0].end, 0.25) && !cut[0].muted
+                        && close(cut[1].start, 0.25) && close(cut[1].end, 0.75) && cut[1].muted
+                        && close(cut[2].start, 0.75) && close(cut[2].end, 1.0) && !cut[2].muted,
+                    "and only the part inside it is muted");
+            spanned.undo();
+            const auto whole = laneClips();
+            require(spanned.trackCount() == 4 && whole.size() == 1 && close(whole[0].end, 1.0)
+                        && !whole[0].muted && spanned.findClip(sourceID) != nullptr,
+                    "One undo takes the bounce away and puts the clip back whole and playing");
+
+            // Through the arrangement: a span dragged out over the lanes, with
+            // no clip picked by its header, is what Ctrl+B bounces.
+            Arrangement spanView(spanned);
+            spanView.setSize(1200, 400);
+            spanView.sync();
+            spanView.fit();
+            spanView.setTimeSelection(0.25, 0.75, lane, lane);
+            spanView.focus = Arrangement::Focus::region;
+            const auto ctrlB = juce::KeyPress('B', juce::ModifierKeys(juce::ModifierKeys::commandModifier), 0);
+            spanView.keyPressed(ctrlB);
+            require(spanned.trackCount() == 5 && laneClips().size() == 3,
+                    "Ctrl+B on a dragged span bounces the span, not the whole clip");
+            const auto bouncedSpan = spanned.audioClipMix(spanView.selectedClipID());
+            require(bouncedSpan.valid && close(bouncedSpan.startSeconds, 0.25) && close(bouncedSpan.endSeconds, 0.75),
+                    "and the selection moves onto what it made");
+            spanView.setSelection({});
+            spanView.setTimeSelection(0.25, 0.75, lane, lane);
+            spanView.keyPressed(ctrlB);
+            require(spanned.trackCount() == 5,
+                    "A span whose clips are already muted has nothing playing in it to bounce");
+        }
         // In steps, as the shell's loading screen runs it: a slice renders and
         // hands the thread back, nothing undoes under it, and cancelling
         // leaves the document and the disk as they were.

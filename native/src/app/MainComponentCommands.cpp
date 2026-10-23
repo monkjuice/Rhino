@@ -280,7 +280,7 @@ void MainComponent::showHelpMenu(juce::Component& target)
                     "Ctrl+X / Ctrl+C / Ctrl+V  Cut, copy and paste the selection, or whole tracks from their cards\n"
                     "Ctrl+D  Duplicate it directly after itself\nCtrl+E  Split the selected clip at the playhead\n"
                     "Ctrl+J  Merge the selected audio clips into one audio file\n"
-                    "Ctrl+B  Bounce the selected clips, tracks or group to new audio tracks\n"
+                    "Ctrl+B  Bounce the selection, the selected clips, tracks or group to new audio tracks\n"
                     "R  Play the selected audio clips backwards\nDelete  Empty the selection, or delete the selected tracks\n"
                     "?  Show/hide Info View\nF12  Full screen\nCtrl+,  Preferences: audio device, MIDI keyboards");
             else if (result == 2)

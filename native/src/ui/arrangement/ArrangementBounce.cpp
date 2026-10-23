@@ -9,8 +9,8 @@ namespace rhino
 {
 
 // What the last click selected decides what is bounced, as it decides what
-// Delete removes: the cards, or the clips - picked one by one or held by a
-// dragged region.
+// Delete removes: the cards, the clips picked by their headers, or a span
+// dragged over the lanes - which is bounced as a span, cut at its edges.
 void Arrangement::bounceSelected()
 {
     cancelDrag();
@@ -18,6 +18,11 @@ void Arrangement::bounceSelected()
     if (focus == Focus::track)
     {
         bounceTracks(selectedTracks);
+        return;
+    }
+    if (selectedClips.empty() && selected == te::EditItemID() && timeSelection.active && timeSelection.isRange())
+    {
+        bounceRegion(timeSelection);
         return;
     }
     auto chosen = clipsToActOn();
@@ -38,6 +43,7 @@ void Arrangement::bounceClips(std::vector<te::EditItemID> ids)
         return;
     }
     bouncingTracks = false;
+    bouncingRegion = false;
     runBounce();
 }
 
@@ -50,6 +56,21 @@ void Arrangement::bounceTracks(std::vector<int> tracks)
         return;
     }
     bouncingTracks = true;
+    bouncingRegion = false;
+    runBounce();
+}
+
+void Arrangement::bounceRegion(TimeSelection region)
+{
+    cancelDrag();
+    if (const auto started = session.startBounceRegion(region.start, region.end, region.firstTrack, region.lastTrack);
+        started.failed())
+    {
+        if (status) status(started.getErrorMessage());
+        return;
+    }
+    bouncingTracks = false;
+    bouncingRegion = true;
     runBounce();
 }
 
@@ -98,7 +119,14 @@ void Arrangement::bounceFinished()
     else
     {
         setSelection(result.clips);
-        if (status)
+        if (status && bouncingRegion)
+        {
+            status("Bounced the selection to "
+                   + (result.tracks.size() == 1 ? session.trackName(result.tracks.front())
+                                                : juce::String(static_cast<int>(result.tracks.size())) + " new tracks")
+                   + ". The originals are muted inside it.");
+        }
+        else if (status)
         {
             const auto one = result.sourceCount == 1;
             status("Bounced " + (one ? juce::String("1 clip") : juce::String(result.sourceCount) + " clips") + " to "

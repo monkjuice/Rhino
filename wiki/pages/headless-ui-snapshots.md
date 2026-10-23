@@ -35,6 +35,9 @@ deleting any old
 file first; it is the way to see the meters without opening the app ([Track level meters](level-meters.md)).
 `RHINO_PREFERENCES_SNAPSHOT` writes the Preferences panel on its MIDI tab at 560 x 480, with a `Theme`, from
 `KeyboardCurves.inc` in the same case, deleting any old file first ([Keyboard velocity curves](keyboard-velocity-curves.md)).
+`RHINO_TIME_ROW_SNAPSHOT` writes the arrangement's time row at four zooms, stacked - two minutes, a 1/32 grid, a 1/512
+grid and the deepest zoom - from `BrowserDrops.inc` in the same case, deleting any old file first
+([Arrangement view](arrangement-view.md#the-time-row)).
 It writes the face at 852 px (`DeviceEditorPanel::drumFaceWidth`) by `standardHeight`, painted with a `Theme`, as the
 test leaves it at its end, showing a sliced roll, and deletes any old file first. A snapshot is what caught the sample
 editor's envelope line drawing nothing ([A juce::Path holding only a start point is empty](juce-path-isempty-ignores-a-lone-point.md)).

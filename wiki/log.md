@@ -1043,3 +1043,10 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 
 ## [2026-10-23] update | Bounce reads clipsToActOn (follow-up to 558cede)
 - updated: pages/bounce-to-new-track.md (`bounceSelected` bounces the picked clips, else the whole clips a dragged region runs across, through `Arrangement::clipsToActOn`; the region no longer selects them)
+
+## [2026-10-23] update | Bounce a time selection as a span, as Live does
+- source: commit cbf0cf0, native/src/model/SessionBounce.cpp (`startBounceRegion`, `BounceJob::region`), ArrangementBounce.cpp, Arrangement.cpp, scenario ClipBounce.inc; Tracktion at 4536d8a upstream; Live 12 manual pp. 418-420
+- updated: pages/bounce-to-new-track.md (summary; the dispatch to `bounceRegion` and the clip menu; new section "A time selection": which tracks, muted clips left out, naming, the cut and mute inside one undo step, `splitClip`'s left/right rule, MIDI note chase; the span item removed from Not done)
+- updated: pages/region-editing.md (bounce no longer falls back to the region's clips; it bounces the span)
+- updated: pages/keeping-files-small.md (SessionBounce.cpp at 661 lines, and what splitting it needs)
+- updated: index.md (Bounce to New Track's summary)

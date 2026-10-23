@@ -4,7 +4,7 @@ type: component
 summary: Play and stop, the loop that is always on, the single tempo and the time signature, and what Rhino rescales by hand when the tempo moves.
 tags: [rhino, transport, tempo]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-23
 ---
 
 # Transport, tempo and loop
@@ -42,7 +42,10 @@ is not part of that, so `setTempo` rescales it by the same factor: automation po
 `updateRepitchedClips` ([Time warp](time-warp.md)).
 
 A drag on the tempo or signature field is one undo step. `beginTempoGesture` and `endTempoGesture` count their
-nesting, so one caller cannot close a bracket another opened.
+nesting, so one caller cannot close a bracket another opened. A tempo drag step costs
+42-43 ms on 135 tracks and 103,072 notes (2026-10-23; a knob drag step costs 0.08 ms), because a tempo change bumps
+every track's revision, so the arrangement reads every track's clips again, and the engine remaps every clip. It is
+still open ([The 120-track stress audit](stress-audit-2026-10.md)).
 
 ## Time signature and metronome
 
@@ -58,6 +61,10 @@ The click's on/off, bar emphasis and level are the edit's own `clickTrack*` prop
 Rhino speaks decibels, the engine stores a linear gain and clamps it to 0.2-1.0, and writing decibels straight in put
 all three of the menu's levels below that floor, so they sounded the same. The count-in is Rhino's own, not the
 engine's ([Recording and the count-in](recording.md)).
+
+## What the views read
+
+A view or the shell never opens the engine's transport; `Session` answers (2026-10-23, [Dependency direction](dependency-direction.md#the-views-ask-session-not-the-engine)). `isPlaying()`, `playheadSeconds()` (the audible position while playing, read on every display refresh; the transport's own while standing, [Playhead rendering](playhead.md)), `locate(seconds)`, `songLengthSeconds()`, `loopRange()`, and the tempo map as `secondsToBeats()` and `beatsToSeconds()`. `locate` moves the transport, rolling or not, and makes the spot the playback start, so stop returns to it. A click on the note editor's ruler used to move the transport alone; it now sets the playback start as the arrangement's does, a small behaviour change. The shell hears the transport start and stop, and the undo history change, through the relayed `Session::transportState` and `undoHistory`, which do not wake the panels listening to the session ([Session, the model](session-model.md#reading-the-document)).
 
 ## Releasing the device
 

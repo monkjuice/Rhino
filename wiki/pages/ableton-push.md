@@ -4,7 +4,7 @@ type: component
 summary: Rhino drives the original Push itself on its User port and keeps all four of its ports from the engine; the pads are translated into a scale or a Drum Rack's bank on the MIDI thread and play like any keyboard, and the buttons and encoders become Rhino's commands, never a track's MIDI.
 tags: [rhino, midi, controller, hardware]
 sources: []
-updated: 2026-10-15
+updated: 2026-10-23
 ---
 
 # Ableton Push 1
@@ -28,7 +28,7 @@ At the pinned commit `4536d8a`, Tracktion has no Push driver and cannot remap no
 
 - **Pads are played on the MIDI thread.** The pad map is a 64-entry table guarded by a `SpinLock`. A per-pad `sounding` table means that letting go releases the note actually played, even if the scale or octave changed in between. A per-note count (`padsHolding`) handles a note that sits on two pads in the fourths layout: it starts with the first pad down and stops with the last pad up. Accent plays every pad at velocity 127. Poly aftertouch follows the sounding note, and pitch bend and channel pressure pass straight through.
 - **`Session::sendControllerMidi` is the one `Session` call that is safe from any thread.** It calls `handleIncomingMidiMessage(msg, MPESourceID)` on cached `shared_ptr`s to the All Ins virtual device and the Push virtual device, under `controllerTargetLock`. The cache is refreshed on the message thread at the top of `midiDevicesChanged`, before its early returns. The lock is held during delivery, so the last reference to a device the engine has dropped is always released on the message thread.
-- **Everything else goes to the message thread**: buttons, encoders, encoder touches and sysex replies. It is queued and handled by an `AsyncUpdater`.
+- **Everything else goes to the message thread**: buttons, encoders, encoder touches and sysex replies. They cross through a fixed ring of 256 `juce::MidiMessage` slots and two atomics (`controlQueue`, `controlWritten`, `controlRead`), one writer (the MIDI thread) and one reader (the `AsyncUpdater`'s callback on the message thread). A message that finds the ring full is dropped: a lost press costs a second press, where a MIDI thread blocked on the heap would cost every pad on the port its timing. `closePorts` empties it, since what the port sent is for a Push that is gone. Until 2026-10-23 the queue was a `std::vector` the MIDI thread grew under a `SpinLock` ([Real-time audio rules](real-time-audio-rules.md)).
 - **Output goes through `juce::MidiOutput`'s background thread** (`sendBlockOfMessages`), because a sysex can block the caller for milliseconds.
 
 ## The pads are a keyboard

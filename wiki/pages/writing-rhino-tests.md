@@ -1,10 +1,10 @@
 ---
 title: Writing Rhino tests
 type: guide
-summary: Choose between a unit check and a workflow scenario, follow the rules that keep scenarios sharing one Session honest, and time the interface with --profile-ui.
+summary: Choose between a unit check and a workflow scenario, follow the rules that keep scenarios sharing one Session honest, and time the interface with --profile-ui and --profile-stress.
 tags: [rhino, testing, conventions]
 sources: []
-updated: 2026-10-16
+updated: 2026-10-23
 ---
 
 # Writing Rhino tests
@@ -15,7 +15,7 @@ Rhino's tests are compiled into the app and selected by flag ([Build and test Rh
 - **Unit-style checks**, for whatever needs no `Session`, render, desktop peer or pointer sequence. Geometry over pure
   headers such as `model/ClipGeometry.h` goes in `tests/Arrangement/ClipGeometryTest.cpp` (`--arrangement-geometry-test`, no
   audio device). That runner also calls the checks other headers keep in files of their own, such as
-  `tests/VelocityLaneTest.*` for `ui/notes/VelocityLaneGeometry.h` (2026-10-16; [Note editor velocity lane](note-velocity-lane.md)). DSP lives in `src/core/dsp` as a plain class driven from `--self-test` (`SelfTest.cpp`, `AutoTuneTest.cpp`,
+  `tests/VelocityLaneTest.*` for `ui/notes/VelocityLaneGeometry.h` (2026-10-16; [Note editor velocity lane](note-velocity-lane.md)). It ends with the layer lint, `tests/LayerLintTest.*` (2026-10-23), which reads every source under `src/ui` and `src/app` and fails on a view that reaches past `Session` into the engine ([Dependency direction](dependency-direction.md#the-views-ask-session-not-the-engine)); tests under `src/tests` are not scanned and may still spell `session.edit`. DSP lives in `src/core/dsp` as a plain class driven from `--self-test` (`SelfTest.cpp`, `AutoTuneTest.cpp`,
   `EqTest.cpp`, `VocoderTest.cpp`, `FmTest.cpp`, `DrumRackTest.cpp`). Every device Rhino makes is also rendered by
   `--device-test` (`DeviceConformance.cpp`) against [the native device standard](native-device-standard.md); a new
   device gets those checks without writing any. A device that is silent at its defaults, as a blank
@@ -135,19 +135,21 @@ as with Forge's `--profile`, because the machine drifts by more than some differ
 ([Profile paint on a software image](profile-paint-on-a-software-image.md)); what the numbers mean is in
 [What a change costs the interface](ui-cost-of-a-change.md).
 
+`RhinoDAW.exe --profile-stress` (`native/src/tests/StressProfile.cpp`, 2026-10-23) is the same kind of tool at the size of a finished song: 120 tracks in 15 groups, 60 of them MIDI with 103,072 notes, 60 audio with 1,002 clips, seven minutes at 120 BPM, 30 4OSC, 10 Rhino FM, 40 Rhino EQ and 24 Compressor, built from fixed seeds so two runs make the same document. Beside what `--profile-ui` times it times what a medium document cannot show: the getters a sync asks of each track, a save and a load, an offline render, the engine's graph rebuild after an edit while the graph is allocated, and the live graph's blocks through the hosted audio device at 512 and 128 samples. `RHINO_STRESS_TRACKS`, `RHINO_STRESS_MINUTES`, `RHINO_STRESS_CLIPS`, `RHINO_STRESS_DEVICES` and `RHINO_STRESS_RENDER_SECONDS` shrink or bisect it. Run it from a shell, never through `Start-Process`, and alternate two builds. Its figures: [The 120-track stress audit](stress-audit-2026-10.md).
+
 A timed check inside a CTest case spends that case's limit. `--self-test` has 30 s (`native/CMakeLists.txt`), and the
 DJ booth's cost check (`checkBoothCost` in `tests/DjTest.cpp`, which logs its numbers and requires no allocation) renders
 10 s of silence rather than 30 for that reason: while the mixer's filters take denormals in silence, 30 s cost the case
-eight seconds and left it at 25 s of its 30 (2026-10-11; [DJ deck engine](dj-deck-engine.md)).
+eight seconds and left it at 25 s of its 30 (2026-10-11; [DJ deck engine](dj-deck-engine.md)). On 2026-10-23 the case took 21 s alone and 29 s run straight after a profile, one second under its limit: run the suite on an idle machine.
 
 ## Access and determinism
 
 Classes under test befriend the runner (`friend int runArrangementTest();` in `Arrangement`, `Session`, `StepGrid`,
-`AudioClipPanel`, `DjClipGrid` and the DJ view's panels; `friend int runUiProfile();` in `Arrangement`, `StepGrid` and `DeviceRack`), one reason
+`AudioClipPanel`, `DjClipGrid` and the DJ view's panels; `friend int runUiProfile();` in `Arrangement`, `StepGrid` and `DeviceRack`; `friend int runStressProfile();` in `Arrangement`), one reason
 big classes are split across translation units rather than into new types ([Keeping files small](keeping-files-small.md)).
 `DjDeck` keeps its audio-thread methods private to `DjEngine` and to `DjDeckTest`, a class in `tests/DjTest.cpp` whose
 static checks drive one deck alone, as the engine does at a block boundary.
-The four runner flags, `--device-test`, `--arp-snapshot` and `--profile-ui` set `Session::setCommandLineTestMode`: machine
+The runner flags `--device-test`, `--arp-snapshot`, `--profile-ui` and `--profile-stress` set `Session::setCommandLineTestMode`: machine
 preferences (browser preview, last track kind) are neither read nor written, `pickTrackColour` takes the first
 unused colour, so pixel comparisons repeat, and the DJ booth never goes on the audio device, so the scenarios and the
 profile drive it alone through `djProcessOffline`; its five-argument form hands back what the device would play, which
@@ -173,3 +175,5 @@ checked at the boundary the shell wires, and whatever it needs is put in the vie
 - [JUCE's rasteriser is not clip-invariant](juce-rasteriser-not-clip-invariant.md)
 - [A JUCE component listening to itself hears its own clicks twice](juce-self-listener-hears-clicks-twice.md)
 - [Tracktion's hosted device is silent until its start is dispatched](hosted-device-silent-until-dispatched.md)
+- [The 120-track stress audit](stress-audit-2026-10.md)
+- [Dependency direction](dependency-direction.md)

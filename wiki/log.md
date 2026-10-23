@@ -1068,3 +1068,22 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/pointer-and-selection.md (a double-click makes a clip filling the grid cell the pointer is in)
 - updated: pages/bounce-to-new-track.md (Bounce keeps the fixed 10 ms and refuses a span under it while copy scales; its direct `splitClip` calls are safe only because of those floors)
 - updated: pages/arrangement-view.md (new bullet: a new clip fills its grid cell from `snappedDown`; bar lines thinned by doubling; the adaptive grid keeps eight-bar cells, a one-bar cap rejected)
+
+## [2026-10-23] update | The 120-track stress audit: --profile-stress, a cached track list, per-track clip views, the Session facade and its lint, deferred device resets
+- source: the brief and the final figures sent after it, checked against native/src/tests/StressProfile.cpp, LayerLintTest.h/.cpp, TestRunners.cpp, tests/Arrangement/ClipGeometryTest.cpp, model/Session.h, Session.cpp, SessionTransport.cpp, SessionDjSources.cpp, ui/arrangement/Arrangement.h, ArrangementSync.cpp, ArrangementPainter.cpp, ui/shared/Playhead.h, app/MainComponent.cpp, MainComponentTimer.cpp, PushController.h/.cpp, devices/audio/*Device.h/.cpp, devices/sdk/NativeDevice.cpp and core/dsp/VocoderEngine.cpp; recorded before the commit, all six CTest cases passing
+- created: pages/stress-audit-2026-10.md (analysis: the tool, its song and env knobs; the baseline, track-cache and final figures per change and the engine-side costs the work does not touch; what was found and done in four places; the open items; how to re-run)
+- updated: pages/session-model.md (new section "Reading the document": the cached track list and its watcher, `trackRevision`, the facade methods, the relayed `transportState` and `undoHistory`, `setPointerHeld`; the self-call that overflowed every runner)
+- updated: pages/ui-cost-of-a-change.md (new rule: a sync reads only the tracks the model marked, and what a command must say; `gestureHeld` told by the shell; the stress figures; the revision that the old note said the engine lacked)
+- updated: pages/arrangement-view.md (clip views cached per track in `TrackClipCache`; notes in the sequence's own seconds drawn from the window's origin; `clipNameWidths` kept)
+- updated: pages/dependency-direction.md (new section "The views ask Session, not the engine": the facade, the layer lint with its allowances and quirks, the exceptions still open)
+- updated: pages/real-time-audio-rules.md (deferred reset on the four pre-SDK devices, the Push's fixed ring, `ScopedNoDenormals` on every SDK device, the Vocoder's followers; the open audio-thread items)
+- updated: pages/ableton-push.md (the MIDI thread's queue is a fixed ring, not a vector under a SpinLock)
+- updated: pages/writing-rhino-tests.md (`--profile-stress`, the layer lint in the geometry runner, the new friend and flag, `--self-test` at 21 s alone and 29 s after a profile)
+- updated: pages/build-and-test-rhino.md (`--profile-stress`, the lint, the device-correctness margin)
+- updated: pages/stack-overflow-reports-as-segfault.md (a runaway recursion from a bulk replace gives the same 0xC00000FD from every runner)
+- updated: pages/playhead.md (the position reader is `Session::playheadSeconds`; `Playhead.h` lost the `TransportControl` forward declaration; clip-name widths kept across syncs)
+- updated: pages/transport.md (new section "What the views read"; a note editor seek now sets the playback start; the tempo drag step's cost)
+- updated: pages/app-shell.md (the timer tells the model the pointer state; the shell listens to the relayed broadcasters)
+- updated: pages/native-device-standard.md (the pre-SDK devices now defer `reset()`; the SDK base holds a `ScopedNoDenormals`)
+- updated: pages/known-hazards.md (a pointer to the audit's open items)
+- updated: index.md (the new page; the summaries of six others)

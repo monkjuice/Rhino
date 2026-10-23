@@ -4,7 +4,7 @@ type: component
 summary: Draws both playheads every display refresh from the audio graph's own position, repainting two narrow strips whose painters skip everything else, with a Direct2D fix.
 tags: [rhino, ui, rendering, windows]
 sources: []
-updated: 2026-10-15
+updated: 2026-10-23
 ---
 
 # Playhead rendering
@@ -13,13 +13,13 @@ updated: 2026-10-15
 
 ## Where the position comes from
 
-`playheadTime()` reads the playback context's latency-adjusted audible position (`getAudibleTimelineTime`) while playing. `TransportControl::getPosition` is only copied from the audio thread by a 50 Hz message-thread timer, so a line drawn from it would step behind the sound. A pending seek is shown at once, while the audio thread adopts it, but a scheduled future jump never moves the line ahead of the audio. Positions are kept fractional rather than rounded to whole pixels.
+`Session::playheadSeconds()` (`SessionTransport.cpp`) reads the playback context's latency-adjusted audible position (`getAudibleTimelineTime`) while playing. Until 2026-10-23 this was `playheadTime()` in `Playhead.cpp`, which opened the engine from the UI; moving it to the model also took the `TransportControl` forward declaration out of `Playhead.h`, which only that reader needed. `TransportControl::getPosition` is only copied from the audio thread by a 50 Hz message-thread timer, so a line drawn from it would step behind the sound. A pending seek is shown at once, while the audio thread adopts it, but a scheduled future jump never moves the line ahead of the audio. Positions are kept fractional rather than rounded to whole pixels.
 
 ## Damage, not repaints
 
 `movePlayhead` repaints two narrow strips, about six pixels each, at the old and new positions, never the panel. `playheadDamage` rounds them outward to physical pixels for fractional display scales.
 
-Both painters skip what such a strip does not reach (commit `c9d7d5d`); before, they drew everything and let the clip throw it away, still paying for the text shaping, tempo-map conversions and model queries. The arrangement draws track cards, bar numbers, ruler times, grid lines, the empty-lane hint, notes, automation segments and clip names only where the repaint reaches, measures each clip name once per sync, and reads per-track facts once per sync. The note editor takes its cell size once per paint and skips the header numbers, keys, rows and sustain lines outside the repaint. Measured with `--profile-ui`, a strip fell from 1.3-1.5 ms to 0.4 ms in the arrangement and from about 0.6 ms to 12 µs in the note editor. A hidden note editor skips its vblank update altogether ([What a change costs the interface](ui-cost-of-a-change.md)).
+Both painters skip what such a strip does not reach (commit `c9d7d5d`); before, they drew everything and let the clip throw it away, still paying for the text shaping, tempo-map conversions and model queries. The arrangement draws track cards, bar numbers, ruler times, grid lines, the empty-lane hint, notes, automation segments and clip names only where the repaint reaches, measures each clip name once (the widths are kept across syncs since 2026-10-23), and reads per-track facts once per sync. The note editor takes its cell size once per paint and skips the header numbers, keys, rows and sustain lines outside the repaint. Measured with `--profile-ui`, a strip fell from 1.3-1.5 ms to 0.4 ms in the arrangement and from about 0.6 ms to 12 µs in the note editor. A hidden note editor skips its vblank update altogether ([What a change costs the interface](ui-cost-of-a-change.md)).
 
 Two cases the strips cannot cover are handled by their callers:
 
@@ -44,5 +44,6 @@ Damage has to be exact on Direct2D: it presents from rotating buffers, so a regi
 - [The executable is RhinoDAW, not Rhino](executable-named-rhinodaw.md)
 - [Tracktion Engine with a native JUCE UI](tracktion-and-juce.md)
 - [Transport, tempo and loop](transport.md)
+- [Session, the model](session-model.md#reading-the-document)
 - [What a change costs the interface](ui-cost-of-a-change.md)
 - [Profile paint on a software image](profile-paint-on-a-software-image.md)

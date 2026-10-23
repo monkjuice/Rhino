@@ -91,12 +91,20 @@ audio device ([The native device standard](native-device-standard.md)).
   parallel run and passed every sequential one ([A CachedValue can lag its own ValueTree](cachedvalue-lags-its-tree.md)).
 - A failure that reads only "Moved render timeout" is a 15 s wall-clock budget tripping on a busy machine. Re-run that
   case on an idle machine before investigating.
-- `--profile-ui` is a timing tool in the same binary, not a case: it prints medians and checks nothing
-  ([Writing Rhino tests](writing-rhino-tests.md)).
+- `native_device_correctness` runs close to its limit: on 2026-10-23 it took 21 s alone and 29 s run straight after a
+  profile, against 30 s. Run the suite on an idle machine.
+- `native_arrangement_geometry` also runs the layer lint (`tests/LayerLintTest.cpp`, 2026-10-23): it reads every
+  source under `native/src/ui` and `native/src/app` and fails, naming file and line, on a line that reaches past
+  `Session` into the engine ([Dependency direction](dependency-direction.md#the-views-ask-session-not-the-engine)).
+- `--profile-ui` and `--profile-stress` are timing tools in the same binary, not cases: they print medians and check
+  nothing ([Writing Rhino tests](writing-rhino-tests.md)). `--profile-stress` builds a 120-track, seven-minute song,
+  takes the process to about 440 MB, and is run from a shell, never through `Start-Process`
+  ([The 120-track stress audit](stress-audit-2026-10.md)).
 
 ## Related
 
 - [Writing Rhino tests](writing-rhino-tests.md)
+- [The 120-track stress audit](stress-audit-2026-10.md)
 - [Rhino's build targets](rhino-build-targets.md)
 - [Build and test Forge](build-and-test-forge.md)
 - [Debugging a crash only one project triggers](debugging-a-crashing-project.md)

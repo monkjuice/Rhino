@@ -4,7 +4,7 @@ type: analysis
 summary: Probable bugs traced by reading the code on 2026-10-03; every Rhino item was fixed by 2026-10-05, and the four Forge items are still open.
 tags: [both, bugs, maintenance]
 sources: []
-updated: 2026-10-19
+updated: 2026-10-23
 ---
 
 # Hazards found while seeding the wiki
@@ -35,7 +35,12 @@ All four are still open as of 2026-10-05.
 15. **The knob-size layout check cannot fail.** `uniformKnobDiameter` never returns less than 40, and the test's threshold is 40 ([One knob diameter for the whole Forge panel](forge-knob-diameter-is-panel-wide.md)).
 16. **Warp does nothing on a spectral oscillator**, and a warp stage reading a spectral oscillator as its source probably reads a constant ([Forge spectral oscillator](forge-spectral.md)).
 
+## Later audits
+
+The stress audit of 2026-10-23 left a short list of open items that were not traced here: the audio thread's last inline costs (the browser preview's lock-taking chain, Rhino Tune's inline FFTs, the DJ booth's delay-line wipes, per-sample transcendentals, the count-in's `AsyncUpdater`), the views' remaining reaches past `Session`, and the dearest remaining message-thread costs (undo, redo and the tempo). They are under [Open](stress-audit-2026-10.md#open) in [The 120-track stress audit](stress-audit-2026-10.md).
+
 ## Related
 
 - [Writing Rhino tests](writing-rhino-tests.md)
 - [Session, the model](session-model.md)
+- [The 120-track stress audit](stress-audit-2026-10.md)

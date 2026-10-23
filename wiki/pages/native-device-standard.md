@@ -4,7 +4,7 @@ type: decision
 summary: Rhino's own devices are written on one SDK base, held to one conformance runner and given generated faces, with their presets as .rnd files; VST3 stays the format for outside instruments.
 tags: [rhino, devices, sdk, testing]
 sources: []
-updated: 2026-10-07
+updated: 2026-10-23
 ---
 
 # The native device standard
@@ -79,7 +79,7 @@ Still to do: move the remaining devices onto the SDK.
 ## Consequences
 
 - An engine parameter is reference counted and can outlive its device. A declared parameter therefore keeps its own copy of its declaration; a reference into the device read freed memory.
-- `reset()` and `midiPanic()` may arrive from any thread, so the base only leaves a note that the audio thread acts on at its next block.
+- `reset()` and `midiPanic()` may arrive from any thread, so the base only leaves a note that the audio thread acts on at its next block. The four devices written before the SDK (Rhino Bloom, Rhino EQ, the Vocoder and Rhino Tune) did not: their `reset()` cleared state itself, from `Session::panicReset` on the message thread, against a running block. Since 2026-10-23 they leave the same note, a `clearPending` flag, and `NativeDevice::applyToBuffer` takes a `juce::ScopedNoDenormals` for every device on the base ([Real-time audio rules](real-time-audio-rules.md)).
 - A chooser or toggle is a `te::AutomatableParameter` subclass that reports itself discrete, with its labels. Code that knows only the engine type still sees it correctly.
 
 ## Related

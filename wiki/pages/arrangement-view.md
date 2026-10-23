@@ -1,7 +1,7 @@
 ---
 title: Arrangement view
 type: component
-summary: The timeline UI, one class across thirteen files, that previews every drag locally and leaves panel decisions to the shell.
+summary: The timeline UI, one class across thirteen files, that previews every drag locally, re-reads only the tracks the model marked changed, and leaves panel decisions to the shell.
 tags: [rhino, ui, arrangement, zoom, grid, ruler]
 sources: []
 updated: 2026-10-23
@@ -14,7 +14,8 @@ updated: 2026-10-23
 ## How it stays responsive and correct
 
 - **Preview, then one commit.** A drag edits a local `preview`; `Session::editClip`, or `Session::moveClips` for several clips, and its undo transaction run once, on release. Mid-drag, a change notification only repaints. Arrow nudges move the whole selection the same way (commit `b5d17e0`), and Left and Right are taken only when there is a clip to move, otherwise reaching the window (commit `d20faa4`).
-- **Clip views are a cache.** `sync()` rebuilds the `ClipView` list on each change notification, never per paint; waveforms share one thumbnail per source file. A `Session` call announces synchronously, so the list can be rebuilt before the call returns: copy a `ClipView` before calling `Session` if you read it afterwards (commit `2df76f8`). The sync also reads each track's facts once (`TrackFacts`), and the painter skips whatever a repaint does not reach ([What a change costs the interface](ui-cost-of-a-change.md)).
+- **Clip views are a cache, kept per track** (2026-10-23). `sync()` rebuilds the `ClipView` list on each change notification, never per paint, but reads a track's clips again (`rebuildTrackClips`) only when its `Session::trackRevision` has moved since or the track is new. A `TrackClipCache` per track id holds the revision, the views, the files their waveforms draw and the sync pass that last kept it; a sync copies the views into `clips` with the track's current index, drops the caches of tracks that are gone, and `editWillChange` clears them all. At 135 tracks and 103,072 notes a sync fell from 11.9 to 2.7 ms ([The 120-track stress audit](stress-audit-2026-10.md)). A command that changes what a clip shows has to mark its track, or the cache keeps the old view ([What a change costs the interface](ui-cost-of-a-change.md)). Waveforms share one thumbnail per source file. A `Session` call announces synchronously, so the list can be rebuilt before the call returns: copy a `ClipView` before calling `Session` if you read it afterwards (commit `2df76f8`). The sync also reads each track's facts once (`TrackFacts`), and the painter skips whatever a repaint does not reach ([What a change costs the interface](ui-cost-of-a-change.md)).
+- **A MIDI clip's notes are kept in the sequence's own seconds.** `ClipView::midiNotes` is a `shared_ptr<const std::vector<MidiNoteView>>`, shared with the track's cache, and the painter draws each note at `xFor(note.start + origin)` with `origin = position.start - position.offset`, the origin of the window the clip is onto its sequence. A clip moved or trimmed, and its preview mid-drag, converts nothing, and the old `noteShift` arithmetic is gone. `clipNameWidths`, the measured width of each name, is kept across syncs, cleared past 8,192 entries and with the document.
 - **Ids, not pointers.** Selection stores `te::EditItemID`s, because a `te::Clip*` dies on undo or project replacement ([Hold ids, not pointers](ids-not-pointers.md)).
 - **`rows` is the vertical authority.** Revealed automation lanes stack extra rows under a track and collapsed group members get zero-height rows, so `lane(track)` looks the track up in `rows` rather than multiplying.
 
@@ -79,3 +80,5 @@ A clip dragged up out of the panel by more than the band where the lanes scroll 
 - [Track and clip colours](track-and-clip-colours.md)
 - [Bounce to New Track](bounce-to-new-track.md)
 - [Track level meters](level-meters.md)
+- [What a change costs the interface](ui-cost-of-a-change.md)
+- [The 120-track stress audit](stress-audit-2026-10.md)

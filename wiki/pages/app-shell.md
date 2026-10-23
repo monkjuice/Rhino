@@ -4,7 +4,7 @@ type: component
 summary: The shell under app/ - Application in a Main.cpp of about 200 lines, MainWindow, and MainComponent across six units holding the control bar, the docked browser, the single lower pane, the 30 Hz timer that polls what the engine never broadcasts, and the modal loading screen a long command runs behind.
 tags: [rhino, ui, shell]
 sources: []
-updated: 2026-10-16
+updated: 2026-10-23
 ---
 
 # App shell and control bar
@@ -63,7 +63,7 @@ Note editor, audio clip editor and Device View are three faces of one pane (`Low
 
 ## The 30 Hz timer
 
-`MainComponent`'s timer (`MainComponentTimer.cpp`) polls what the engine does not broadcast (`Session::recordingStopped`, for the clips a recording wrote, and `Session::djPoll`, for the DJ booth's finished reads, its decks' bindings and the cells to make again), applies pending pane layout, updates the Info View hint (`InfoHints.h`), and rewrites the readout. It no longer plays track automation: since commit `fe163c8` the engine does ([Track automation](automation.md)).
+`MainComponent`'s timer (`MainComponentTimer.cpp`) polls what the engine does not broadcast (`Session::recordingStopped`, for the clips a recording wrote, and `Session::djPoll`, for the DJ booth's finished reads, its decks' bindings and the cells to make again), applies pending pane layout, updates the Info View hint (`InfoHints.h`), and rewrites the readout. It no longer plays track automation: since commit `fe163c8` the engine does ([Track automation](automation.md)). Just before `djPoll` it tells the model whether a mouse button is down (`Session::setPointerHeld`), because the model no longer asks JUCE (2026-10-23). The shell hears the song start and stop and the undo history change through `Session::transportState` and `undoHistory`, relays that outlive any document, so a new one needs no re-subscription: `editWillChange` is empty and `editDidChange` only refreshes ([Session, the model](session-model.md#reading-the-document)).
 
 ## The loading screen
 

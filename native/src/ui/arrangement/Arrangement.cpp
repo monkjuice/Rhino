@@ -215,7 +215,8 @@ void Arrangement::zoom(double factor, double anchor)
 {
     if (dragging) return;
     const auto fraction = (anchor - viewStart) / viewSpan;
-    viewSpan = std::clamp(viewSpan * factor, 0.25, std::max(60.0, songEnd * 2.0));
+    const auto deepest = lane(0).getWidth() / deepestZoomPixelsPerBeat * (60.0 / session.tempo());
+    viewSpan = std::clamp(viewSpan * factor, deepest, std::max(defaultViewSeconds * 2.0, songEnd * 2.0));
     viewStart = std::max(0.0, anchor - viewSpan * fraction);
     updateGridControl();
     updateScroll();
@@ -979,7 +980,7 @@ void Arrangement::showGridMenu(juce::Component* target)
     for (int i = 0; i < static_cast<int>(widths.size()); ++i)
         adaptive.addItem(100 + i, widths[static_cast<size_t>(i)].second, true,
                          gridSettings.mode == GridMode::adaptive && gridSettings.adaptiveWidth == widths[static_cast<size_t>(i)].first);
-    for (int i = 0; i < static_cast<int>(gridDivisions.size()); ++i)
+    for (int i = 0; i < static_cast<int>(fixedGridDivisionCount); ++i)
         fixed.addItem(200 + i, gridDivisionLabel(gridDivisions[static_cast<size_t>(i)]), true,
                       gridSettings.mode == GridMode::fixed && gridSettings.fixedDivision == gridDivisions[static_cast<size_t>(i)]);
     menu.addSubMenu("Adaptive", adaptive);
@@ -996,7 +997,7 @@ void Arrangement::showGridMenu(juce::Component* target)
                 safe->gridSettings.mode = GridMode::adaptive;
                 safe->gridSettings.adaptiveWidth = static_cast<AdaptiveGridWidth>(result - 100);
             }
-            else if (result >= 200 && result < 210)
+            else if (result >= 200 && result < 200 + static_cast<int>(fixedGridDivisionCount))
             {
                 safe->gridSettings.mode = GridMode::fixed;
                 safe->gridSettings.fixedDivision = gridDivisions[static_cast<size_t>(result - 200)];

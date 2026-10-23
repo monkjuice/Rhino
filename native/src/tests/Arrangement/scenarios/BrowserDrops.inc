@@ -3,6 +3,26 @@
         require(std::abs(session.beatsPerBar() - 4.0) < 0.0001, "Default meter is four quarter-note beats per bar");
         view.setLookAndFeel(&theme);
         view.setSize(1000, 246);
+        // The panel opens on two minutes in one-bar cells, on a lane as wide as
+        // a 1920 or a 2560 screen leaves beside the browser, and the first step
+        // out from there has to widen it rather than snap back in: the limit on
+        // zooming out was a minute for a short song, below where it now opens.
+        {
+            const auto openingSpan = view.viewSpan;
+            for (const auto width : {1673, 2313})
+            {
+                view.setSize(width, 246);
+                require(view.resolvedGridDivision() == GridDivision::bar, "The arrangement opens on a one-bar grid");
+            }
+            view.zoom(2.0, view.viewStart);
+            require(view.viewSpan > openingSpan, "Zooming out from where the arrangement opens widens it");
+            view.zoom(1.0e-9, view.viewStart);
+            require(view.resolvedGridDivision() == GridDivision::note16384, "The deepest zoom shows a 1/16384 grid");
+            const auto deepestSpan = view.viewSpan;
+            view.zoom(0.5, view.viewStart);
+            require(view.viewSpan == deepestSpan, "Nothing zooms in past 1/16384");
+            view.setSize(1000, 246);
+        }
         view.fit();
         view.sync();
         require(view.clips.empty(), "Fresh startup hides the internal empty Pattern 1 placeholder");

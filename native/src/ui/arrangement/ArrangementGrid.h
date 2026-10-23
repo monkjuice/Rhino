@@ -8,7 +8,11 @@ namespace rhino
 {
 enum class GridMode { off, adaptive, fixed };
 enum class AdaptiveGridWidth { widest, wide, medium, narrow, narrowest };
-enum class GridDivision { eightBars, fourBars, twoBars, bar, half, quarter, eighth, sixteenth, thirtySecond, sixtyFourth };
+// Past a sixty-fourth the divisions are named by their note: they matter only
+// to a view zoomed in on single samples, and they keep halving down to 1/16384,
+// the deepest the arrangement zooms.
+enum class GridDivision { eightBars, fourBars, twoBars, bar, half, quarter, eighth, sixteenth, thirtySecond, sixtyFourth,
+                          note128, note256, note512, note1024, note2048, note4096, note8192, note16384 };
 
 struct GridSettings
 {
@@ -18,11 +22,18 @@ struct GridSettings
     bool triplet = false;
 };
 
-inline constexpr std::array<GridDivision, 10> gridDivisions {
+inline constexpr std::array<GridDivision, 18> gridDivisions {
     GridDivision::eightBars, GridDivision::fourBars, GridDivision::twoBars, GridDivision::bar,
     GridDivision::half, GridDivision::quarter, GridDivision::eighth, GridDivision::sixteenth,
-    GridDivision::thirtySecond, GridDivision::sixtyFourth
+    GridDivision::thirtySecond, GridDivision::sixtyFourth,
+    GridDivision::note128, GridDivision::note256, GridDivision::note512, GridDivision::note1024,
+    GridDivision::note2048, GridDivision::note4096, GridDivision::note8192, GridDivision::note16384
 };
+
+// The divisions the Fixed menu offers. The finer ones are for a view zoomed in
+// on single samples, where the adaptive grid reaches them by itself, and Ctrl+1
+// still narrows a fixed grid into them.
+inline constexpr size_t fixedGridDivisionCount = static_cast<size_t>(GridDivision::sixtyFourth) + 1;
 
 inline constexpr double adaptiveGridTargetPixels(AdaptiveGridWidth width)
 {
@@ -51,6 +62,14 @@ inline constexpr double gridDivisionBeats(GridDivision division, double beatsPer
         case GridDivision::sixteenth: return 0.25;
         case GridDivision::thirtySecond: return 0.125;
         case GridDivision::sixtyFourth: return 0.0625;
+        case GridDivision::note128: return 4.0 / 128.0;
+        case GridDivision::note256: return 4.0 / 256.0;
+        case GridDivision::note512: return 4.0 / 512.0;
+        case GridDivision::note1024: return 4.0 / 1024.0;
+        case GridDivision::note2048: return 4.0 / 2048.0;
+        case GridDivision::note4096: return 4.0 / 4096.0;
+        case GridDivision::note8192: return 4.0 / 8192.0;
+        case GridDivision::note16384: return 4.0 / 16384.0;
     }
     return 0.25;
 }
@@ -67,13 +86,41 @@ inline constexpr GridDivision widerGridDivision(GridDivision division)
     return gridDivisions[index == 0 ? 0 : index - 1];
 }
 
+// The finest division whose lines are at least the target over root two apart,
+// which between divisions an octave apart is the one nearest the target. Asking
+// for the finest that cleared the whole target left the lines between one and
+// two targets apart and read half an octave coarser than Live: two minutes
+// across the panel came out in two-bar cells where Live shows one bar, and
+// Live's deepest zoom shows 1/8192 lines 28 px apart where this showed 1/4096.
 inline GridDivision adaptiveGridDivision(double pixelsPerBeat, double beatsPerBar, AdaptiveGridWidth width)
 {
-    const auto target = adaptiveGridTargetPixels(width);
+    const auto target = adaptiveGridTargetPixels(width) / std::sqrt(2.0);
     for (auto it = gridDivisions.rbegin(); it != gridDivisions.rend(); ++it)
         if (gridDivisionBeats(*it, beatsPerBar) * pixelsPerBeat >= target)
             return *it;
     return GridDivision::eightBars;
+}
+
+// The deepest the arrangement zooms: the finest division drawn at the medium
+// grid's own spacing. Held per beat rather than per second, so the deepest
+// view shows 1/16384 at every tempo.
+inline constexpr double deepestZoomPixelsPerBeat =
+    adaptiveGridTargetPixels(AdaptiveGridWidth::medium) / gridDivisionBeats(gridDivisions.back(), 4.0);
+
+// The step the grid's lines are drawn at. A fixed division can be finer than
+// the zoom can show - 1/64 across two minutes is nearly four thousand lines -
+// and the painter stops at a cap, so drawing every one left the right of the
+// view bare. Lines too close together step out to the counts and then to the
+// bars, which every signature's bar lines fall on; snapping keeps the division.
+inline constexpr double gridLineMinimumPixels = 4.0;
+
+inline double drawnGridBeats(double gridBeats, double pixelsPerBeat, double countBeats, double barBeats)
+{
+    auto drawn = gridBeats;
+    for (const auto coarser : {countBeats, barBeats})
+        if (drawn * pixelsPerBeat < gridLineMinimumPixels && coarser > drawn)
+            drawn = coarser;
+    return drawn;
 }
 
 inline double resolvedGridBeats(const GridSettings& settings, double pixelsPerBeat, double beatsPerBar)
@@ -98,6 +145,14 @@ inline const char* gridDivisionLabel(GridDivision division)
         case GridDivision::sixteenth: return "1/16";
         case GridDivision::thirtySecond: return "1/32";
         case GridDivision::sixtyFourth: return "1/64";
+        case GridDivision::note128: return "1/128";
+        case GridDivision::note256: return "1/256";
+        case GridDivision::note512: return "1/512";
+        case GridDivision::note1024: return "1/1024";
+        case GridDivision::note2048: return "1/2048";
+        case GridDivision::note4096: return "1/4096";
+        case GridDivision::note8192: return "1/8192";
+        case GridDivision::note16384: return "1/16384";
     }
     return "1/16";
 }

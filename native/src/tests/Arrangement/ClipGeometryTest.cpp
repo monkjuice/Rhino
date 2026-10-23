@@ -55,9 +55,19 @@ int runArrangementGeometryTest()
         if (static_cast<int>(adaptiveGridDivision(160.0, 4.0, AdaptiveGridWidth::medium))
                 <= static_cast<int>(adaptiveGridDivision(16.0, 4.0, AdaptiveGridWidth::medium)))
             throw std::runtime_error("Adaptive grid follows logical pixel density");
-        if (narrowerGridDivision(GridDivision::sixtyFourth) != GridDivision::sixtyFourth
+        if (narrowerGridDivision(GridDivision::note16384) != GridDivision::note16384
             || widerGridDivision(GridDivision::eightBars) != GridDivision::eightBars)
             throw std::runtime_error("Grid width commands clamp safely");
+        // Bars 28 px apart and two bars 56: the nearer of the two to the
+        // medium spacing of 32 is the bar, as Live reads it.
+        if (adaptiveGridDivision(7.0, 4.0, AdaptiveGridWidth::medium) != GridDivision::bar)
+            throw std::runtime_error("The adaptive grid takes the division nearest its spacing");
+        if (adaptiveGridDivision(deepestZoomPixelsPerBeat, 4.0, AdaptiveGridWidth::medium) != GridDivision::note16384)
+            throw std::runtime_error("The deepest zoom reaches the finest division");
+        // 1/64 across two minutes of a 2,000 px lane is half a pixel a line.
+        if (!close(drawnGridBeats(0.0625, 8.3, 1.0, 4.0), 1.0) || !close(drawnGridBeats(0.0625, 0.5, 1.0, 4.0), 4.0)
+            || !close(drawnGridBeats(0.0625, 100.0, 1.0, 4.0), 0.0625) || !close(drawnGridBeats(0.0625, 2.0, 0.5, 3.0), 3.0))
+            throw std::runtime_error("A grid too fine to draw is drawn at its counts, then its bars");
         GridSettings fixed {GridMode::fixed, AdaptiveGridWidth::medium, GridDivision::eighth, false};
         if (!close(resolvedGridBeats(fixed, 1.0, 4.0), resolvedGridBeats(fixed, 1000.0, 4.0)))
             throw std::runtime_error("Fixed grid ignores zoom");

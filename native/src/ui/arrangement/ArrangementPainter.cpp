@@ -434,7 +434,9 @@ void Arrangement::paint(juce::Graphics& g)
     const auto lastBeat = session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(viewStart + viewSpan)).inBeats();
     const auto bandBars = paintBarBands(g, firstBeat, lastBeat);
     const auto barLength = std::max(0.25, session.beatsPerBar());
-    const auto gridBeat = resolvedGridBeats();
+    const auto gridBeat = drawnGridBeats(resolvedGridBeats(),
+                                         lane(0).getWidth() / std::max(0.001, viewSpan) * (60.0 / session.tempo()),
+                                         4.0 / std::max(1, session.timeSignature().denominator), session.beatsPerBar());
     // Only the lines inside the repainted columns, which a playhead strip
     // makes one or two rather than the hundreds across the view.
     const auto beatAtX = [this](float x)

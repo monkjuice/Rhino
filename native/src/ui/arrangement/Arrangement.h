@@ -512,7 +512,14 @@ private:
     double metersFedAt = 0.0;
     juce::ScrollBar scroll {false}, trackScrollBar {true};
     juce::VBlankAttachment vblank;
-    double viewStart = 0.0, viewSpan = 8.0, songEnd = 2.0, trackScroll = 0.0;
+    // The seconds across the lanes when the panel opens: two minutes, room for
+    // a song's shape rather than a bar of it, which at 120 BPM the adaptive
+    // grid reads in one-bar cells on any lane from about 1,360 to 2,700 px
+    // wide. Zooming out goes to twice this or twice the song, whichever is
+    // longer, so the first step out from the default is never refused; zooming
+    // in stops at deepestZoomPixelsPerBeat.
+    static constexpr double defaultViewSeconds = 120.0;
+    double viewStart = 0.0, viewSpan = defaultViewSeconds, songEnd = 2.0, trackScroll = 0.0;
     GridSettings gridSettings;
     // What the snap toggle turns back on. Without it, switching snapping off
     // and on again silently moved an adaptive grid to fixed - the two controls

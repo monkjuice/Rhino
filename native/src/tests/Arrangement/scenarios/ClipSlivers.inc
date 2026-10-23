@@ -89,4 +89,48 @@
             require(clipStarting(8.0) != te::EditItemID()
                         && close(slivers.findClip(clipStarting(8.0))->getPosition().time.getEnd().inSeconds(), 8.0 + beat * 0.5),
                     "A clip crossing an edge by more than a split must leave is still cut there");
+
+            // One cell of the grid at the deepest zoom, a few samples wide,
+            // swept inside a clip: copy takes exactly it, cut takes exactly it
+            // out and leaves both sides, and pasting it into a clip cuts a hole
+            // of exactly its size. The engine will not split within a
+            // millisecond of a clip's end, so it refused the second cut of
+            // each, and the clip from the cell on was deleted with the cell.
+            {
+                const auto exactly = [](double a, double b) { return std::abs(a - b) < 1.0e-7; };
+                const auto cell = beat / 4096.0;
+                const auto around = [&spans](double from, double to)
+                {
+                    std::vector<std::pair<double, double>> found;
+                    for (const auto& span : spans())
+                        if (span.first >= from - 1.0e-9 && span.second <= to + 1.0e-9)
+                            found.push_back(span);
+                    return found;
+                };
+                const auto clipEnd = 12.0 + beat + sampleSeconds;
+                require(slivers.importAudioAt(longBeat.getFile(), lane, 12.0).wasOk(), "A sample to cut one cell out of");
+                const auto taken = slivers.copyClipRegion(12.2, 12.2 + cell, lane, lane);
+                require(taken.clips.size() == 1 && exactly(taken.clips.front().end - taken.clips.front().start, cell),
+                        "Copying one deepest-zoom cell inside a clip copies exactly that cell");
+                require(slivers.clearClipRegion(12.2, 12.2 + cell, lane, lane).wasOk(), "Cut that cell out");
+                const auto cut = around(12.0, clipEnd);
+                require(cut.size() == 2 && exactly(cut[0].first, 12.0) && exactly(cut[0].second, 12.2)
+                            && exactly(cut[1].first, 12.2 + cell) && exactly(cut[1].second, clipEnd),
+                        "Cutting it leaves both sides of the clip, missing only that cell");
+                std::vector<te::EditItemID> pasted;
+                require(slivers.pasteClipRegion(taken, 12.3, lane, pasted).wasOk() && pasted.size() == 1,
+                        "Paste the cell further on");
+                const auto filled = around(12.0, clipEnd);
+                require(filled.size() == 4 && exactly(filled[1].second, 12.3) && exactly(filled[2].first, 12.3)
+                            && exactly(filled[2].second, 12.3 + cell) && exactly(filled[3].first, 12.3 + cell)
+                            && exactly(filled[3].second, clipEnd),
+                        "Pasting it lands on exactly its cell, the clip either side intact");
+                // Half a millisecond into a clip, which the engine will not cut either.
+                require(slivers.importAudioAt(longBeat.getFile(), lane, 14.0).wasOk(), "A sample to cut near its start");
+                require(slivers.clearClipRegion(14.0005, 14.0005 + cell, lane, lane).wasOk(), "Cut a cell half a millisecond in");
+                const auto nearStart = around(14.0, 14.0 + beat + sampleSeconds);
+                require(nearStart.size() == 2 && exactly(nearStart[0].second, 14.0005)
+                            && exactly(nearStart[1].first, 14.0005 + cell) && exactly(nearStart[1].second, 14.0 + beat + sampleSeconds),
+                        "A cell half a millisecond into a clip is cut out, the half millisecond before it kept");
+            }
         }

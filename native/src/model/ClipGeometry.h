@@ -15,13 +15,25 @@ enum class ClipGesture { move, trimLeft, trimRight };
 // timeline, deciding which clips a line is drawn through, and the model, doing
 // the cutting, ask this, which is what stops them disagreeing about whether a
 // clip is splittable. Making room for a clip and copying a region keep to the
-// same floor (SessionRegion.cpp): neither leaves a piece shorter than this.
+// same floor, scaled down for a region shorter than a tenth of a second
+// (minimumRegionPieceSeconds).
 inline constexpr double minimumSplitSeconds = 0.01;
 inline bool canSplitClipAt(ClipGeometry clip, double seconds)
 {
     return std::isfinite(seconds)
         && seconds > clip.start + minimumSplitSeconds
         && seconds < clip.end - minimumSplitSeconds;
+}
+
+// The shortest piece of a clip a region may take, or leave behind when it cuts:
+// the 10 ms a split by hand must leave, or a tenth of the region when that is
+// shorter. A region a beat long still drops the one sample a drum sample
+// reaches past a grid line, but one cell of the grid at the deepest zoom, a few
+// samples wide, cuts and copies exactly what it covers. Held at 10 ms for
+// every region, that cell copied nothing.
+inline double minimumRegionPieceSeconds(double regionSeconds)
+{
+    return std::min(minimumSplitSeconds, std::max(0.0, regionSeconds) * 0.1);
 }
 
 inline ClipGeometry previewClipEdit(ClipGeometry original, ClipGesture gesture,

@@ -66,9 +66,19 @@ int runArrangementGeometryTest()
         if (adaptiveGridDivision(deepestZoomPixelsPerBeat, 4.0, AdaptiveGridWidth::medium) != GridDivision::note16384)
             throw std::runtime_error("The deepest zoom reaches the finest division");
         // 1/64 across two minutes of a 2,000 px lane is half a pixel a line.
-        if (!close(drawnGridBeats(0.0625, 8.3, 1.0, 4.0), 1.0) || !close(drawnGridBeats(0.0625, 0.5, 1.0, 4.0), 4.0)
+        if (!close(drawnGridBeats(0.0625, 8.3, 1.0, 4.0), 1.0) || !close(drawnGridBeats(0.0625, 2.0, 1.0, 4.0), 4.0)
             || !close(drawnGridBeats(0.0625, 100.0, 1.0, 4.0), 0.0625) || !close(drawnGridBeats(0.0625, 2.0, 0.5, 3.0), 3.0))
             throw std::runtime_error("A grid too fine to draw is drawn at its counts, then its bars");
+        if (!close(drawnGridBeats(4.0, 0.5, 1.0, 4.0), 8.0) || !close(drawnGridBeats(4.0, 0.25, 1.0, 4.0), 16.0))
+            throw std::runtime_error("Bars too close to draw are drawn every other one, and so on");
+
+        // A region takes or leaves a piece of a clip down to 10 ms, or a tenth
+        // of itself when that is shorter.
+        if (!close(minimumRegionPieceSeconds(2.0), minimumSplitSeconds) || !close(minimumRegionPieceSeconds(0.1), minimumSplitSeconds)
+            || std::abs(minimumRegionPieceSeconds(0.05) - 0.005) > 1.0e-12
+            || std::abs(minimumRegionPieceSeconds(0.5 / 4096.0) - 0.05 / 4096.0) > 1.0e-12
+            || minimumRegionPieceSeconds(-1.0) != 0.0)
+            throw std::runtime_error("The shortest piece a region keeps scales with a short region");
         GridSettings fixed {GridMode::fixed, AdaptiveGridWidth::medium, GridDivision::eighth, false};
         if (!close(resolvedGridBeats(fixed, 1.0, 4.0), resolvedGridBeats(fixed, 1000.0, 4.0)))
             throw std::runtime_error("Fixed grid ignores zoom");

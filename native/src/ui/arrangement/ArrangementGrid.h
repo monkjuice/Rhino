@@ -112,7 +112,9 @@ inline constexpr double deepestZoomPixelsPerBeat =
 // the zoom can show - 1/64 across two minutes is nearly four thousand lines -
 // and the painter stops at a cap, so drawing every one left the right of the
 // view bare. Lines too close together step out to the counts and then to the
-// bars, which every signature's bar lines fall on; snapping keeps the division.
+// bars, which every signature's bar lines fall on, and bars too close together
+// are drawn every other one, and so on, which a fixed one-bar grid across a
+// long song needs. Snapping keeps the division.
 inline constexpr double gridLineMinimumPixels = 4.0;
 
 inline double drawnGridBeats(double gridBeats, double pixelsPerBeat, double countBeats, double barBeats)
@@ -121,6 +123,8 @@ inline double drawnGridBeats(double gridBeats, double pixelsPerBeat, double coun
     for (const auto coarser : {countBeats, barBeats})
         if (drawn * pixelsPerBeat < gridLineMinimumPixels && coarser > drawn)
             drawn = coarser;
+    while (drawn >= barBeats && drawn * pixelsPerBeat < gridLineMinimumPixels && drawn < barBeats * 4096.0)
+        drawn *= 2.0;
     return drawn;
 }
 

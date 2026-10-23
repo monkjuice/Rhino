@@ -33,6 +33,34 @@ bool crossesEdge(tracktion::core::TimeRange clip, double edge)
     return clip.getStart().inSeconds() < edge - regionTolerance
         && clip.getEnd().inSeconds() > edge + regionTolerance;
 }
+
+// Tracktion's split refuses a time within a millisecond of either end of the
+// clip, and one cell of the grid at the deepest zoom is a fraction of one. A
+// refused split left the whole clip overlapping the region, and the pass that
+// empties the region then deleted all of it: a cell swept inside a long clip
+// and deleted took everything from the cell to the clip's end. Where the
+// engine will cut, it does; nearer an end, the cut is made the way it makes
+// one - the clip's state, under new ids, takes the right-hand part, the
+// original keeps the left, and neither keeps a fade at the cut. The engine
+// also re-wraps a looped clip's offset; arrangement clips never loop.
+te::Clip* splitClipAt(te::ClipTrack& track, te::Clip& clip, double seconds)
+{
+    const auto at = tracktion::core::TimePosition::fromSeconds(seconds);
+    if (clip.getPosition().time.reduced(tracktion::core::TimeDuration::fromSeconds(0.001)).contains(at))
+        return track.splitClip(clip, at);
+    auto state = clip.state.createCopy();
+    te::EditItemID::remapIDs(state, nullptr, clip.edit);
+    auto* right = track.insertClipWithState(state);
+    if (right == nullptr)
+        return nullptr;
+    if (auto* audio = dynamic_cast<te::AudioClipBase*>(right))
+        audio->setFadeIn({});
+    if (auto* audio = dynamic_cast<te::AudioClipBase*>(&clip))
+        audio->setFadeOut({});
+    right->setStart(at, true, false);
+    clip.setEnd(at, true);
+    return right;
+}
 }
 
 Session::ClipRegion Session::copyClipRegion(double startSeconds, double endSeconds,
@@ -50,6 +78,7 @@ Session::ClipRegion Session::copyClipRegion(double startSeconds, double endSecon
     // with nothing on it is still part of what was copied.
     region.spanSeconds = endSeconds - startSeconds;
     region.trackSpan = lastTrack - firstTrack;
+    const auto shortestPiece = minimumRegionPieceSeconds(region.spanSeconds);
     for (int track = firstTrack; track <= lastTrack; ++track)
         for (auto* clip : tracks[track]->getClips())
         {
@@ -65,9 +94,10 @@ Session::ClipRegion Session::copyClipRegion(double startSeconds, double endSecon
             // A clip that only grazes the region - a sample one sample longer
             // than a beat reaches across the next grid line - would paste as a
             // clip nobody could hear or grab. One wholly inside is copied
-            // however short it is.
+            // however short it is, and so is any piece as long as a tenth of
+            // the region, so a few samples swept out at the deepest zoom copy.
             const auto cropped = clipStart < startSeconds - regionTolerance || clipEnd > endSeconds + regionTolerance;
-            if (cropped && visibleEnd - visibleStart < minimumSplitSeconds)
+            if (cropped && visibleEnd - visibleStart < shortestPiece)
                 continue;
             ClipSnapshot snapshot;
             snapshot.name = clip->getName();
@@ -139,6 +169,7 @@ bool Session::clearClipRegionInEdit(double startSeconds, double endSeconds, int 
         return std::find(keep.begin(), keep.end(), clip.itemID) != keep.end();
     };
     auto changed = false;
+    const auto shortestPiece = minimumRegionPieceSeconds(endSeconds - startSeconds);
     for (int track = firstTrack; track <= lastTrack; ++track)
     {
         auto* clipTrack = tracks[track];
@@ -155,12 +186,12 @@ bool Session::clearClipRegionInEdit(double startSeconds, double endSeconds, int 
             changed = true;
         }
         // A clip is cut at an edge only when the part left outside is long
-        // enough to be a clip: the same 10 ms a split by hand has to leave. The
-        // engine refuses a cut within a millisecond of an edge on its own, but
-        // a clip crossing by a few milliseconds was cut, and the stub drew as a
-        // sliver nobody could grab. A clip that crosses by less is left whole,
-        // and as it still overlaps the region the pass below deletes it,
-        // losing less than anyone could hear.
+        // enough to be a clip: the same 10 ms a split by hand has to leave, or
+        // a tenth of a region shorter than a tenth of a second. A clip crossing
+        // by a few milliseconds used to be cut, and the stub drew as a sliver
+        // nobody could grab. A clip that crosses by less is left whole, and as
+        // it still overlaps the region the pass below deletes it, losing less
+        // than anyone could hear.
         for (const auto atStart : {true, false})
         {
             const auto edge = atStart ? startSeconds : endSeconds;
@@ -173,11 +204,11 @@ bool Session::clearClipRegionInEdit(double startSeconds, double endSeconds, int 
                     continue;
                 const auto time = clip->getPosition().time;
                 const auto outside = atStart ? edge - time.getStart().inSeconds() : time.getEnd().inSeconds() - edge;
-                if (outside >= minimumSplitSeconds)
+                if (outside >= shortestPiece)
                     crossing.push_back(clip);
             }
             for (auto* clip : crossing)
-                if (clipTrack->splitClip(*clip, tracktion::core::TimePosition::fromSeconds(edge)) != nullptr)
+                if (splitClipAt(*clipTrack, *clip, edge) != nullptr)
                     changed = true;
         }
         std::vector<te::Clip*> inside;

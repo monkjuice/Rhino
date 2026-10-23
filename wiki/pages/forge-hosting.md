@@ -4,7 +4,7 @@ type: component
 summary: How Rhino finds, loads and talks to the Forge VST3, and what does and does not cross the plugin boundary.
 tags: [both, vst3, devices, hosting]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-22
 ---
 
 # Hosting Forge in Rhino
@@ -35,10 +35,10 @@ A description qualifies if its name contains "Rhino Forge", or "Forge" with a ma
 
 ## Pitfalls
 
-- A running RhinoDAW with Forge loaded holds the `.vst3`, and Forge's build then fails to relink with LNK1104. Build the tests and the standalone instead and say the VST3 is stale ([LNK1104 means a running binary holds the file](locked-executable-lnk1104.md)).
+- A running RhinoDAW with Forge loaded holds the `.vst3`, and Forge's build then fails to relink with LNK1104. Move the held binary aside and relink, or build the tests and the standalone and say the VST3 is stale ([LNK1104 means a running binary holds the file](locked-executable-lnk1104.md)). Doing only the second for a month left RhinoDAW hosting a VST3 dated 2026-09-24 until 2026-10-22.
 - The suite covers Forge only where one can be found: `--self-test` skips external devices, and `native/src/tests/Pattern/scenarios/DeviceParameters.inc` runs its Forge checks only when discovery succeeded. A green run on a machine without a Forge build proves nothing about hosting.
 - A VST3 counts as shipped only after it has been loaded and automated in at least one external host.
-- **Unloading Forge after its editor has painted can freeze RhinoDAW.** Forge's static Direct2D images are released at DLL detach under the loader lock, and NVIDIA's driver deadlocks there. This was seen at RhinoDAW's shutdown on 2026-10-12. It is believed, not proven, to be the freeze on deleting Forge from the rack. Pinning the module in Rhino only moves the freeze to exit; the fix belongs in Forge ([A plugin's static Direct2D images deadlock NVIDIA's driver at unload](plugin-static-images-deadlock-on-unload.md)).
+- **Unloading Forge after its editor had painted froze RhinoDAW at shutdown**, leaving it running with no window, until commit `f2a972e` (2026-10-22). Forge's static Direct2D images were released at DLL detach under the loader lock, and NVIDIA's driver deadlocks there; they now live in JUCE's `ImageCache`, and closing RhinoDAW after Forge's window was open exited cleanly in 3 of 3 runs. The freeze on deleting Forge from the rack is believed, not proven, to be the same, and was not retested. The detach happens at the message thread's next `PeekMessage`, not at the host's `FreeLibrary` ([A JUCE plugin's DLL is freed at the host's next PeekMessage](plugin-dll-freed-at-next-peekmessage.md)), and pinning the module in Rhino would only move a freeze to exit ([A plugin's static Direct2D images deadlock NVIDIA's driver at unload](plugin-static-images-deadlock-on-unload.md)).
 
 ## Related
 
@@ -50,3 +50,4 @@ A description qualifies if its name contains "Rhino Forge", or "Forge" with a ma
 - [Track automation](automation.md)
 - [Mapped parameters, an external plugin's rack](mapped-parameters.md)
 - [A plugin's static Direct2D images deadlock NVIDIA's driver at unload](plugin-static-images-deadlock-on-unload.md)
+- [A JUCE plugin's DLL is freed at the host's next PeekMessage](plugin-dll-freed-at-next-peekmessage.md)

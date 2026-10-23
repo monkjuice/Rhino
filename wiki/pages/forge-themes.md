@@ -4,7 +4,7 @@ type: component
 summary: Every Forge chrome colour is a token in ui/ForgeTheme.h with a value per theme; the theme is a machine setting read once before the first Editor, and Merli, the second theme, redraws the chrome as fur and matte plates over the identical layout.
 tags: [forge, ui, theme]
 sources: []
-updated: 2026-10-19
+updated: 2026-10-22
 ---
 
 # Forge themes and Merli
@@ -42,7 +42,7 @@ The `PresetPlate` is therefore the one component whose rectangle differs between
 
 ## Rules that bite
 
-- **No static `juce::Image`.** Textures come from `merli::image()` at the point of use ([A plugin's static Direct2D images deadlock NVIDIA's driver at unload](plugin-static-images-deadlock-on-unload.md)).
+- **No static `juce::Image`.** Textures come from `merli::image()` at the point of use, the pattern Forge's own images adopted in commit `f2a972e` ([A plugin's static Direct2D images deadlock NVIDIA's driver at unload](plugin-static-images-deadlock-on-unload.md)).
 - **Merli's textures only in the cached layers.** What Merli draws per frame is fills and strokes with no clip push; the one image is the wheel's own art, which Forge already draws per frame and Merli re-draws as its wash.
 - **A new chrome colour is a token** with a value in every palette, never a literal.
 - **`ForgePanels.h` is the only includer of `ForgeMerliChassis.h`**, which forward-declares `drawArpSky`, defined later in `ForgePanels.h`.

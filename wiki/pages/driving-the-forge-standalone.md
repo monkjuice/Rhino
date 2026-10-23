@@ -4,7 +4,7 @@ type: guide
 summary: Run, click and capture the Forge standalone without costing the developer their patch, pointer or screen, or use a headless test.
 tags: [forge, ui, windows, debugging]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-22
 ---
 
 # Driving Forge's standalone on Windows
@@ -29,7 +29,9 @@ the point.
 Synthetic window messages do not work. JUCE takes Windows pointer input (`WM_POINTERDOWN`) here, so a posted
 `WM_LBUTTONDOWN`/`WM_LBUTTONUP` is silently ignored. Only real `SendInput` or `mouse_event` clicks land, and those take
 over the developer's pointer for as long as they run: say so first, check what they are doing (`GetForegroundWindow`
-and its title), and keep it short.
+and its title), and keep it short. For a JUCE `TextButton` or a popup-menu item, UI Automation's `Invoke` needs no
+pointer; it drove RhinoDAW's on 2026-10-22, and has not been tried on Forge's own controls
+([Reading a hung RhinoDAW's stacks without a debugger](reading-a-hung-process.md#reproducing-a-shutdown-hang-without-the-pointer)).
 
 To check that a new control is wired up, a test is better. `createEditor()` runs headless under
 `ScopedJuceInitialiser_GUI`, and the control is reachable through `getChildren()` and a `dynamic_cast`, the way

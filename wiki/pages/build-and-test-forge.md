@@ -4,7 +4,7 @@ type: guide
 summary: Configure Forge against the JUCE and zstd checkouts Rhino's script fetches, build around the toolchain's traps, fix /W4 warnings at their source, run one test area at a time, and audition or convert any preset from the command line.
 tags: [forge, build, testing, windows, warnings]
 sources: []
-updated: 2026-10-19
+updated: 2026-10-22
 ---
 
 # Build and test Forge
@@ -49,7 +49,9 @@ that far ([Forge oscillators and wavetables](forge-oscillators.md)). Hosts load 
 by its discovery ([Hosting Forge in Rhino](forge-hosting.md)), and Ableton Live 12 on the development machine because
 its plugin database (`%LOCALAPPDATA%\Ableton\Live Database\Live-plugins-1.db`, checked 2026-10-13) records that path.
 The VST3 cannot relink while RhinoDAW or a DAW has it loaded, which is the normal state
-mid-session; build `--target RhinoForgeTests RhinoForge_Standalone` instead and report the VST3 as stale
+mid-session. Move the held binary aside first (`Move-Item` it to `Rhino Forge.vst3.inuse`, inside
+`Contents/x86_64-win`; first done 2026-10-22) and `RhinoForge_VST3` relinks; failing that, build
+`--target RhinoForgeTests RhinoForge_Standalone` and report the VST3 as stale
 ([LNK1104 means a running binary holds the file](locked-executable-lnk1104.md)). Never commit a bundle, and install one
 only after validating it in a host.
 

@@ -990,3 +990,18 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/forge-mixer-and-fx.md (the compressor meter's look, its end-to-end needle test, about 14 dB off the default patch, and the cache, not the art, behind "greyed out")
 - updated: pages/headless-ui-snapshots.md (a snapshot paints once and never shows a kept layer)
 - updated: index.md (new gotcha page)
+
+## [2026-10-22] update | Forge keeps no image in a static, so RhinoDAW exits after Forge's window was open (f2a972e)
+- source: the change's brief, checked against instruments/rhino-forge/ui/ForgeChrome.h, ui/ForgePerformanceWheel.h, tests/ForgeTestsTheme.cpp
+- created: pages/plugin-dll-freed-at-next-peekmessage.md (gotcha: JUCE's dark-mode WH_CALLWNDPROC hook holds the plugin's DLL, so it detaches at the next PeekMessage, inside DestroyWindow's MSCTF teardown or OleUninitialize; the rhino.log tell; JUCE's GUI singletons die with the last plugin object, so only C++ statics reach the detach)
+- updated: pages/plugin-static-images-deadlock-on-unload.md (the close-button ghost of 2026-10-22, confirmed from two processes' stacks; the fix applied through ImageCache and `cachedImage`, neither proposed option; ImageCache's purge rules and key spaces; `releasedImagesSuite`; snapshot, profile and end-to-end verification; deleting from the rack still not retested; summary)
+- updated: pages/forge-hosting.md (both pitfalls: relinking the held VST3, the month-old VST3, the freeze fixed)
+- updated: pages/forge.md (the known issue is fixed)
+- updated: pages/forge-editor.md (the static-image rule as it now stands: getFromMemory or `cachedImage`, a row in the test's table)
+- updated: pages/forge-themes.md (Merli's pattern is now Forge's)
+- updated: pages/proving-a-forge-change-changed-nothing.md (a binary copied out of the build tree finds no tables/ and differs on OSC and TABLE; step 4 put back in the list)
+- updated: pages/locked-executable-lnk1104.md (renaming works on the VST3; the month-old VST3 the other habit left; the shutdown ghost and its log; summary)
+- updated: pages/build-and-test-forge.md (move the held VST3 aside to relink)
+- updated: pages/reading-a-hung-process.md (the rhino.log tell; 64-bit ctypes argtypes; driving RhinoDAW through UI Automation, the two "Edit" buttons, WM_CLOSE as the close button's path; summary)
+- updated: pages/driving-the-forge-standalone.md (UI Automation invokes JUCE buttons and menu items without the pointer)
+- updated: index.md (new gotcha page; three summaries)

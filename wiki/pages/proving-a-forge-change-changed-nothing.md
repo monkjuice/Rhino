@@ -4,7 +4,7 @@ type: guide
 summary: Hash --render audio and --snapshot PNGs against a worktree build of the old revision, and time intended changes by --profile medians.
 tags: [forge, testing, refactoring, performance]
 sources: []
-updated: 2026-10-17
+updated: 2026-10-22
 ---
 
 # Proving a Forge change changed nothing
@@ -37,14 +37,21 @@ bytes and identical PNGs of all five tabs ([Forge's engine splits into headers o
 3. From one scratch directory (both tools resolve paths against it), run `--render` and a `--snapshot` per tab with
    each binary, then compare hashes (`Get-FileHash`). Any differing byte is a finding, not noise. First check the
    control: a build of the unchanged revision should reproduce the baseline byte for byte.
+4. Remove the worktree with `git worktree remove` when done.
+
+**Run both binaries from the same kind of location**: both in build trees, or both copied aside. Forge finds its
+`tables/` folder by walking up from the executable, so a `RhinoForgeTests.exe` copied out of its build tree finds none
+and paints the wavetable field's "next table" arrow dim. Against a build-tree binary its OSC and TABLE snapshots then
+differ by about 156 and 52 pixels in a band near y 150 at 1440x900; with both copied to the scratchpad, all ten snapshots
+(five pages in both themes) hashed identical (2026-10-22).
 
 ## Which pages hash
 
 OSC, TABLE, MATRIX, MIX and FX are byte-stable: the theme tokens (commit `425b253`) were proven free by hashing those
-five at 1440x900 and OSC at 1180x820 against the previous revision ([Forge themes and Merli](forge-themes.md)). The
+five at 1440x900 and OSC at 1180x820 against the previous revision ([Forge themes and Merli](forge-themes.md)), and
+commit `f2a972e` by all five in both themes at 1440x900. The
 ARP page is not: its falling sparks depend on timing, and three renders of one binary gave three hashes. Compare it per
 pixel outside the waterfall well instead (at 1440x900 the well is x 1050-1122, y 811-836).
-4. Remove the worktree with `git worktree remove` when done.
 
 ## When the change is meant to change something
 

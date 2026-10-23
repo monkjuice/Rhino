@@ -1,10 +1,10 @@
 ---
 title: LNK1104 means a running binary holds the file
 type: gotcha
-summary: A link that fails with LNK1104 after every file compiled means a running RhinoDAW, DAW or Forge standalone holds the output.
+summary: A link that fails with LNK1104 after every file compiled means a running RhinoDAW, DAW or Forge standalone holds the output; renaming the held binary, Forge's VST3 included, lets the link succeed while the holder runs on.
 tags: [both, build, windows]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-22
 ---
 
 # LNK1104 means a running binary holds the file
@@ -26,13 +26,14 @@ Windows will not let the linker overwrite an image that a running process has lo
 ## Confirm
 
 - `tasklist | findstr /i rhino` names the holder. Also check for any DAW the user has open.
-- The holder may have no visible window. On 2026-10-12, one of two RhinoDAWs blocking a build had frozen during shutdown and stayed alive unseen. To check its windows, see [Reading a hung RhinoDAW's stacks without a debugger](reading-a-hung-process.md).
+- The holder may have no visible window. On 2026-10-12, one of two RhinoDAWs blocking a build had frozen during shutdown and stayed alive unseen. Until commit `f2a972e` (2026-10-22) closing RhinoDAW after Forge's window had been open very often left such a process, stuck in Forge's unload; its `rhino.log` ends at `Cleaning up temp files..` ([A plugin's static Direct2D images deadlock NVIDIA's driver at unload](plugin-static-images-deadlock-on-unload.md)). To check its windows, see [Reading a hung RhinoDAW's stacks without a debugger](reading-a-hung-process.md).
 - Grep the build output for `error C`. If the only error is `LNK1104`, the code compiled and is fine. The compiler diagnostics from the same run can still be trusted.
 
 ## What to do
 
-- **Rename the running binary.** Windows refuses to overwrite a running image but lets it be renamed. `Move-Item RhinoDAW.exe RhinoDAW.exe.inuse` frees the name, and the link succeeds while the app keeps running from the renamed file. This worked twice on `RhinoDAW.exe` in September 2026; it has not been tried on a `.vst3`. Tell the user the app in front of them is now the old build, and delete the `.inuse` copy once they close it.
-- **For Forge, build the targets that are not locked.** `--target RhinoForgeTests RhinoForge_Standalone` covers everything except the plugin wrapper. Report that the VST3 is out of date, and relink it later.
+- **Rename the running binary.** Windows refuses to overwrite a running image but lets it be renamed. `Move-Item RhinoDAW.exe RhinoDAW.exe.inuse` frees the name, and the link succeeds while the app keeps running from the renamed file. This worked twice on `RhinoDAW.exe` in September 2026. Tell the user the app in front of them is now the old build, and delete the `.inuse` copy once they close it.
+- **It works on Forge's VST3 too** (first done 2026-10-22). Rename the binary inside the bundle, `...\VST3\Rhino Forge.vst3\Contents\x86_64-win\Rhino Forge.vst3`, to `Rhino Forge.vst3.inuse`, and `RhinoForge_VST3` relinks while the old process keeps running from the renamed file. Delete the `.inuse` once that process is gone.
+- **Otherwise build the Forge targets that are not locked.** `--target RhinoForgeTests RhinoForge_Standalone` covers everything except the plugin wrapper. Report that the VST3 is out of date, and relink it soon: until 2026-10-22 the VST3 on disk was dated 2026-09-24, because sessions had kept to these two targets while a RhinoDAW, often a shutdown ghost, held the plugin, so RhinoDAW had been hosting a month-old Forge.
 - **A leftover `Rhino Forge.exe` standalone is safe to kill.** RhinoDAW and a DAW are not. They are the user's working session and may hold unsaved work, so always ask before `taskkill`.
 - **Do not configure a second build tree to get round it.** On 2026-10-10, with RhinoDAW holding the file, the user asked for the app to be closed and for no more build directories to be made; `native/build-dj` was deleted and `native/build` is the one tree ([Build and test Rhino](build-and-test-rhino.md)).
 

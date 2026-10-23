@@ -311,7 +311,7 @@ struct FilterState
 //
 // One per voice per channel, because a comb shared between voices is a comb fed
 // several notes at once, which is a different effect and not a filter. That
-// costs about 440 KB in a Core at 48 kHz, on the heap where it belongs.
+// costs about 440 KB a filter in a Core at 48 kHz, on the heap where it belongs.
 //
 // Lengths are rounded up to a power of two so a read wraps with a mask.
 struct FilterDelays

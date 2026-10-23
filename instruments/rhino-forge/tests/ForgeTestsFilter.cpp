@@ -214,13 +214,13 @@ rhino::forge::Patch filteredSine(int type, float cutoff, float resonance, float 
     patch.oscillators[2].enable = 0.0f;
     patch.subEnable = 0.0f;
     patch.noiseEnable = 0.0f;
-    patch.filterEnable = 1.0f;
-    patch.filterType = static_cast<float>(type);
-    patch.cutoff = cutoff;
-    patch.resonance = resonance;
-    patch.filterFreq = second;
-    patch.drive = 0.0f;
-    patch.routeOscillators[0] = 1.0f;
+    patch.filters[0].enable = 1.0f;
+    patch.filters[0].type = static_cast<float>(type);
+    patch.filters[0].cutoff = cutoff;
+    patch.filters[0].resonance = resonance;
+    patch.filters[0].freq = second;
+    patch.filters[0].drive = 0.0f;
+    patch.filters[0].routeOscillators[0] = 1.0f;
     patch.envs[rhino::forge::ampEnv].attack = 0.001f;
     patch.envs[rhino::forge::ampEnv].sustain = 1.0f;
     return patch;
@@ -533,7 +533,7 @@ void filterResponseSuite()
     {
         const auto type = static_cast<int>(held.type);
         auto open = filteredSine(type, cutoff, held.resonance, held.second);
-        open.filterEnable = 0.0f;
+        open.filters[0].enable = 0.0f;
 
         const auto filtered = filteredSine(type, cutoff, held.resonance, held.second);
         const rhino::forge::FilterShape shape {held.type, cutoff, held.resonance,
@@ -698,7 +698,7 @@ void filterCombTuningSuite()
         patch.oscillators[0].enable = 0.0f;
         patch.noiseEnable = 1.0f;
         patch.noiseLevel = 0.5f;
-        patch.routeNoise = 1.0f;
+        patch.filters[0].routeNoise = 1.0f;
         return renderedSpectrum(patch, 57, rate);
     };
 
@@ -790,7 +790,7 @@ void filterRingModSuite()
 
     // SPREAD opens a second modulator above the first, so a second pair of
     // sidebands appears where there was none.
-    patch.filterFreq = 1.0f;                            // an octave up: 600 Hz
+    patch.filters[0].freq = 1.0f;                            // an octave up: 600 Hz
     const auto spread = renderedSpectrum(patch, note, rate);
     const auto spreadAt = [&spread] (double hz)
     {
@@ -814,11 +814,11 @@ void filterRingModSuite()
 void filterKeyTrackSuite()
 {
     rhino::forge::Patch patch;
-    patch.cutoff = 1000.0f;
-    patch.filterKeyTrack = 1.0f;
+    patch.filters[0].cutoff = 1000.0f;
+    patch.filters[0].keyTrack = 1.0f;
     const auto cornerAt = [&patch] (float voiceHz)
     {
-        return rhino::forge::filterShapeOf(patch, 48000.0, voiceHz).cutoff;
+        return rhino::forge::filterShapeOf(patch.filters[0], 48000.0, voiceHz).cutoff;
     };
 
     requireClose(cornerAt(rhino::forge::filterKeyTrackHz), 1000.0f, 0.5f,
@@ -829,7 +829,7 @@ void filterKeyTrackSuite()
                  "and an octave down takes it an octave down");
     // Nobody asking on behalf of a note is the panel drawing the curve, and
     // what it draws is the knob's own corner.
-    requireClose(rhino::forge::filterShapeOf(patch, 48000.0).cutoff, 1000.0f, 0.5f,
+    requireClose(rhino::forge::filterShapeOf(patch.filters[0], 48000.0).cutoff, 1000.0f, 0.5f,
                  "with no voice asking, the corner is the one on the knob");
     // Never past the ends of the knob's own travel, whichever way it is pushed.
     require(cornerAt(rhino::forge::filterKeyTrackHz * 32.0f) <= rhino::forge::filterCutoffHighHz,
@@ -837,7 +837,7 @@ void filterKeyTrackSuite()
     require(cornerAt(rhino::forge::filterKeyTrackHz / 64.0f) >= rhino::forge::filterCutoffLowHz,
             "nor drag it under the bottom of it");
 
-    patch.filterKeyTrack = 0.0f;
+    patch.filters[0].keyTrack = 0.0f;
     requireClose(cornerAt(rhino::forge::filterKeyTrackHz * 4.0f), 1000.0f, 0.5f,
                  "and with KEY off the note moves nothing");
 
@@ -878,9 +878,159 @@ void filterKeyTrackSuite()
     require(highOn > highOff * 3.0f, "tracked, it keeps the brightness the corner was set for");
 }
 
+// --------------------------------------------------------------- FILTER 2 ---
+
+// FILTER 2 is FILTER 1's control set again, fed by routing chips of its own,
+// with a channel of its own, and FILTER 1 can run on into it. Every claim is
+// measured in the audio rather than read back out of the patch.
+void twoFiltersSuite()
+{
+    constexpr int samples = 8192;
+    constexpr int settled = 1024;
+    juce::AudioBuffer<float> buffer(2, samples);
+
+    // Nothing reaches FILTER 2 until something is routed into it, and a filter
+    // nothing reaches is not run: however it is set, a patch renders to the bit
+    // what it rendered before there was a second filter.
+    {
+        const auto render = [] (bool setSecond, juce::AudioBuffer<float>& into)
+        {
+            Processor processor;
+            soloSineOnA(processor);
+            setValue(processor, "filterEnable", 1.0f);
+            setValue(processor, "cutoff", 900.0f);
+            setValue(processor, "resonance", 0.6f);
+            if (setSecond)
+            {
+                setValue(processor, "filter2Type", static_cast<float>(FilterType::comb));
+                setValue(processor, "filter2Cutoff", 60.0f);
+                setValue(processor, "filter2Resonance", 1.0f);
+                setValue(processor, "filter2Drive", 1.0f);
+                setValue(processor, "filter2Level", 0.0f);
+                setValue(processor, "filter2Send1", 1.0f);
+                setValue(processor, "bus1Level", 1.0f);
+            }
+            renderNote(processor, into);
+        };
+        juce::AudioBuffer<float> before(2, samples);
+        render(false, before);
+        render(true, buffer);
+        require(identical(before, buffer), "FILTER 2 with nothing routed into it changes nothing, to the bit");
+    }
+
+    // Oscillator A on its own, routed into neither filter unless a case says
+    // so, through filters that neither drive nor ring.
+    const auto level = [&buffer] (const std::function<void (Processor&)>& setUp, int channel = 0)
+    {
+        Processor processor;
+        soloSineOnA(processor);
+        setValue(processor, "routeA", 0.0f);
+        setValue(processor, "resonance", 0.0f);
+        setValue(processor, "filter2Resonance", 0.0f);
+        setValue(processor, "filter2Drive", 0.0f);
+        setUp(processor);
+        renderNote(processor, buffer);
+        return rms(buffer, channel, settled);
+    };
+    const auto intoSecond = [] (Processor& processor, float cutoff)
+    {
+        setValue(processor, "filter2RouteA", 1.0f);
+        setValue(processor, "filter2Cutoff", cutoff);
+    };
+
+    const auto dry = level([] (Processor&) {});
+    const auto secondOpen = level([&] (Processor& p) { intoSecond(p, 18000.0f); });
+    require(dry > 0.0f, "a source routed into neither filter is heard");
+    requireClose(secondOpen, dry, dry * 0.02f, "an open FILTER 2 passes what is routed into it");
+
+    // A source routed into FILTER 2 alone answers FILTER 2's cutoff and not
+    // FILTER 1's.
+    require(level([&] (Processor& p) { intoSecond(p, 60.0f); }) < secondOpen * 0.25f,
+            "closing FILTER 2's cutoff attenuates a source routed into it");
+    requireClose(level([&] (Processor& p)
+                 {
+                     intoSecond(p, 18000.0f);
+                     setValue(p, "filterEnable", 1.0f);
+                     setValue(p, "cutoff", 60.0f);
+                 }),
+                 secondOpen, secondOpen * 0.01f,
+                 "FILTER 1's cutoff does not touch a source routed only into FILTER 2");
+
+    // Switched off, it passes what is routed into it, as FILTER 1 does.
+    requireClose(level([&] (Processor& p)
+                 {
+                     intoSecond(p, 60.0f);
+                     setValue(p, "filter2Enable", 0.0f);
+                 }),
+                 dry, dry * 0.02f, "a switched-off FILTER 2 passes what is routed into it");
+
+    // Routed into both, a source is heard through both: two open filters are
+    // the source twice.
+    requireClose(level([&] (Processor& p)
+                 {
+                     intoSecond(p, 18000.0f);
+                     setValue(p, "routeA", 1.0f);
+                     setValue(p, "filterEnable", 1.0f);
+                     setValue(p, "cutoff", 18000.0f);
+                 }),
+                 secondOpen * 2.0f, secondOpen * 0.08f,
+                 "a source routed into both filters is heard through both, in parallel");
+
+    // In series, FILTER 1's channel goes on into FILTER 2 rather than to the
+    // output: FILTER 2 then shapes it, and it is heard once, not twice.
+    const auto throughFirst = [] (Processor& p, bool serial, float secondCutoff)
+    {
+        setValue(p, "routeA", 1.0f);
+        setValue(p, "filterEnable", 1.0f);
+        setValue(p, "cutoff", 18000.0f);
+        setValue(p, "filterSerial", serial ? 1.0f : 0.0f);
+        setValue(p, "filter2Cutoff", secondCutoff);
+    };
+    requireClose(level([&] (Processor& p) { throughFirst(p, false, 60.0f); }), secondOpen, secondOpen * 0.02f,
+                 "in parallel, FILTER 2 does not touch what only FILTER 1 is fed");
+    require(level([&] (Processor& p) { throughFirst(p, true, 60.0f); }) < secondOpen * 0.25f,
+            "in series, FILTER 2 shapes what FILTER 1 hands it");
+    requireClose(level([&] (Processor& p) { throughFirst(p, true, 18000.0f); }), secondOpen, secondOpen * 0.02f,
+                 "in series, FILTER 1 reaches the output only through FILTER 2");
+
+    // FILTER 2's channel: its fader, its place in the image and its sends.
+    require(level([&] (Processor& p)
+            {
+                intoSecond(p, 18000.0f);
+                setValue(p, "filter2Level", 0.0f);
+            }) < dry * 0.001f,
+            "FILTER 2's fader silences its channel");
+    const auto hardRight = [&] (Processor& p)
+    {
+        intoSecond(p, 18000.0f);
+        setValue(p, "filter2Pan", 1.0f);
+    };
+    require(level(hardRight, 0) < dry * 0.01f, "a FILTER 2 panned hard right is silent on the left");
+    require(level(hardRight, 1) > dry, "and heard on the right");
+    require(level([&] (Processor& p)
+            {
+                intoSecond(p, 18000.0f);
+                setValue(p, "filter2Send1", 1.0f);
+                setValue(p, "bus1Level", 1.0f);
+            }) > secondOpen * 1.5f,
+            "FILTER 2's channel sends to a bus on top of where it goes");
+
+    // The matrix reaches it: a macro taking F2 CUTOFF all the way down closes
+    // the filter the knob left open.
+    require(level([&] (Processor& p)
+            {
+                intoSecond(p, 18000.0f);
+                setSlot(p, 1, static_cast<float>(ModSource::macro1),
+                        static_cast<float>(filter2DestinationBase), -1.0f);
+                setValue(p, "macro1", 1.0f);
+            }) < secondOpen * 0.25f,
+            "a modulation slot pointed at F2 CUTOFF moves FILTER 2's corner");
+}
+
 void filterTests()
 {
     filterRoutingSuite();
+    twoFiltersSuite();
     filterListSuite();
     filterStabilitySuite();
     filterFatLongRunSuite();

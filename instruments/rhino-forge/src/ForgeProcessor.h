@@ -251,14 +251,14 @@ public:
     // Which type a slot holds, and therefore what its controls are.
     const FxTypeInfo& fxSlotType(int rack, int slot) const;
 
-    // The filter's type as it stands, and what its second field reads as in
+    // A filter's type as it stands, and what its second field reads as in
     // whichever unit that type gives it. The same pair the rack has, for the
     // same reason: one field whose meaning is the type's, so the reading has to
     // be worked out where the type can be read rather than declared with the
     // parameter. Both reach only atomic parameter reads, so either thread may
-    // ask.
-    float filterTypeValue() const;
-    juce::String filterFreqText(float value) const;
+    // ask. `filter` counts from zero: FILTER 1 is 0.
+    float filterTypeValue(int filter) const;
+    juce::String filterFreqText(int filter, float value) const;
 
     // The colour a module's panel is drawn in, as a PanelColour's index.
     //

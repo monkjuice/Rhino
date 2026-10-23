@@ -111,6 +111,21 @@ void layoutSuite()
         if (module.enableId != nullptr)
             require(processor.state.getParameter(module.enableId) != nullptr,
                     "a module's enable id names a real parameter");
+        // A module whose banks are switched one by one names a switch for each
+        // of them, the first being the module's own, and the LED drives
+        // whichever is showing.
+        if (!module.bankEnables.empty())
+        {
+            require(static_cast<int>(module.bankEnables.size()) == rhino::forge::ui::bankCount(module),
+                    "a module switched bank by bank names a switch for every bank");
+            require(module.enableId != nullptr && juce::String(module.bankEnables.front()) == module.enableId,
+                    "and the first bank's switch is the module's own enable");
+            for (const auto* id : module.bankEnables)
+            {
+                require(processor.state.getParameter(id) != nullptr, "a bank's switch names a real parameter");
+                require(rhino::forge::ui::tooltipFor(id).length() > 8, "and says what it does");
+            }
+        }
         for (const auto& row : module.rows)
             for (const auto& control : row.controls)
                 require(processor.state.getParameter(control.id) != nullptr,
@@ -247,12 +262,21 @@ void layoutSuite()
                 }
         }
         // A banked module with no drag handle draws its own title, and its
-        // cards start just past it — so that title has to be short enough to
-        // fit the gutter they leave. Three characters at the header's font is
-        // what bankTitleGutter covers.
+        // cards start just past it — so that title has to fit the gutter they
+        // leave, measured at the header's own font. The title is drawn from two
+        // pixels further right than the gutter is counted from (ForgePanels.h
+        // and ForgeMerliChassis.h both reduce the header by 12, the cards start
+        // at 10), and keeps two pixels clear of the first card.
         if (banks > 1 && module.handleSource == 0)
-            require(juce::String(module.title).length() <= 3,
-                    "a banked module that draws its own title keeps it short enough for its cards");
+        {
+            const auto title = juce::GlyphArrangement::getStringWidth(
+                rhino::forge::ui::panelFont(rhino::forge::ui::Face::header, 14.5f), module.title);
+            require(title <= static_cast<float>(rhino::forge::ui::bankTitleGutterOf(module) - 4),
+                    "a banked module that draws its own title leaves its cards room after it");
+            if (title > static_cast<float>(rhino::forge::ui::bankTitleGutterOf(module) - 4))
+                std::cerr << "       " << module.title << " is " << title << " px against a gutter of "
+                          << rhino::forge::ui::bankTitleGutterOf(module) << '\n';
+        }
 
         // A module that is a source and shows several banks drags a different
         // source per bank, so all of them have to be real sources.
@@ -1247,6 +1271,106 @@ void switchedOffControlsStaySuite()
             "and does not bring back the wavetable knobs it stands in for");
 }
 
+// FILTER 1 and FILTER 2 share the FILTER module, one shown at a time behind the
+// two cards on the end of its title plate. Choosing a card brings that filter's
+// own controls up — its routing chips and its knobs — and makes the header LED
+// that filter's switch, leaving the other filter as it was.
+void filterBanksSuite()
+{
+    rhino::forge::Processor processor;
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    const ui::Module* filter = nullptr;
+    for (const auto& module : ui::modules())
+        if (module.display == ui::Display::filter) filter = &module;
+    require(filter != nullptr, "the panel has a filter module");
+    if (filter == nullptr) return;
+
+    const auto card = [&] (int number) -> ui::BankCard*
+    {
+        for (auto* child : editor->getChildren())
+            if (auto* found = dynamic_cast<ui::BankCard*>(child))
+                if (found->getTooltip() == "Show FILTER " + juce::String(number)) return found;
+        return nullptr;
+    };
+    const auto shown = [&] (juce::Rectangle<int> area)
+    {
+        std::vector<juce::Component*> found;
+        for (auto* child : editor->getChildren())
+            if (child->isVisible() && area.contains(child->getBounds().getCentre())
+                && (dynamic_cast<ui::ToggleChip*>(child) != nullptr || dynamic_cast<ui::ModKnob*>(child) != nullptr))
+                found.push_back(child);
+        return found;
+    };
+
+    // At the narrowest window and the one the panel opens at, the cards stand
+    // in the header after the title, clear of the LED and of each other.
+    for (const auto width : {ui::minPanelWidth, ui::defaultPanelWidth})
+    {
+        editor->setSize(width, width == ui::minPanelWidth ? ui::minPanelHeight : ui::defaultPanelHeight);
+        const auto area = ui::moduleBounds(editor->getLocalBounds(), *filter);
+        require(card(1) != nullptr && card(2) != nullptr, "the FILTER module carries a card for each filter");
+        if (card(1) == nullptr || card(2) == nullptr) return;
+        const auto header = area.withHeight(ui::headerHeight);
+        require(header.contains(card(1)->getBounds()) && header.contains(card(2)->getBounds()),
+                "the filter cards stand in the module's header");
+        require(card(1)->getRight() <= card(2)->getX(), "and do not overlap each other");
+        for (auto* child : editor->getChildren())
+            if (auto* led = dynamic_cast<ui::EnableLed*>(child); led != nullptr && led->isVisible()
+                && header.contains(led->getBounds()))
+                require(led->getRight() <= card(1)->getX(), "and stand clear of the LED");
+    }
+
+    const auto area = ui::moduleBounds(editor->getLocalBounds(), *filter);
+    ui::EnableLed* lamp = nullptr;
+    for (auto* child : editor->getChildren())
+        if (auto* led = dynamic_cast<ui::EnableLed*>(child); led != nullptr && led->isVisible()
+            && area.withHeight(ui::headerHeight).contains(led->getBounds()))
+            lamp = led;
+    require(lamp != nullptr, "the FILTER module has its LED");
+    if (lamp == nullptr) return;
+
+    require(card(1)->getToggleState() && !card(2)->getToggleState(), "the panel opens on FILTER 1");
+    require(lamp->getTooltip().contains("FILTER 1"), "with the LED switching FILTER 1");
+
+    card(2)->onClick();
+    require(card(2)->getToggleState() && !card(1)->getToggleState(), "choosing FILTER 2 lights its card");
+    require(lamp->getTooltip().contains("FILTER 2"), "and the LED becomes FILTER 2's switch");
+    const auto first = value(processor, "filterEnable");
+    lamp->setToggleState(false, juce::sendNotificationSync);
+    require(value(processor, "filter2Enable") < 0.5f, "the LED switches FILTER 2 off");
+    requireClose(value(processor, "filterEnable"), first, 0.0f, "and leaves FILTER 1 as it was");
+    lamp->setToggleState(true, juce::sendNotificationSync);
+
+    // What the module shows is FILTER 2's: six chips and six knobs, and every
+    // one that names a filter names the second.
+    auto chips = 0, knobs = 0;
+    for (auto* component : shown(area))
+    {
+        auto* tip = dynamic_cast<juce::SettableTooltipClient*>(component);
+        const auto text = tip != nullptr ? tip->getTooltip() : juce::String();
+        if (text.contains("FILTER"))
+            require(text.contains("FILTER 2") && !text.contains("FILTER 1"),
+                    "every control on screen with FILTER 2 chosen is FILTER 2's");
+        if (dynamic_cast<ui::ToggleChip*>(component) != nullptr) ++chips;
+        else ++knobs;
+    }
+    require(chips == 6 && knobs == 6, "FILTER 2 shows its five routes, KEY and its six knobs");
+
+    // Its A chip routes oscillator A into FILTER 2, and only there.
+    const auto routeA = value(processor, "routeA");
+    for (auto* component : shown(area))
+        if (auto* chip = dynamic_cast<ui::ToggleChip*>(component); chip != nullptr && chip->getButtonText() == "A")
+            chip->setToggleState(true, juce::sendNotificationSync);
+    require(value(processor, "filter2RouteA") >= 0.5f, "FILTER 2's A chip routes oscillator A into it");
+    requireClose(value(processor, "routeA"), routeA, 0.0f, "and leaves oscillator A's route into FILTER 1 alone");
+
+    // And back: the LED is FILTER 1's switch again, showing its state.
+    setValue(processor, "filterEnable", 0.0f);
+    card(1)->onClick();
+    require(lamp->getTooltip().contains("FILTER 1") && !lamp->getToggleState(),
+            "choosing FILTER 1 again puts the LED back on FILTER 1, as it stands");
+}
+
 // Every caption on the panel is set at one size. A label too narrow for its
 // word does not overflow: JUCE squashes the glyphs and then drops to a smaller
 // size, so the word reads as a different font from the captions beside it —
@@ -1514,6 +1638,7 @@ void layoutTests()
     layoutSuite();
     steppedFieldSuite();
     switchedOffControlsStaySuite();
+    filterBanksSuite();
     captionsKeepTheirSizeSuite();
     matrixGrowsWithRoutingsSuite();
     rackCaptionsFitSuite();

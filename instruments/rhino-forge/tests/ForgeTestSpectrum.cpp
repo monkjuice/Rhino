@@ -90,7 +90,7 @@ rhino::forge::Patch sawOnly()
     patch.oscillators[2].enable = 0.0f;
     patch.subEnable = 0.0f;
     patch.noiseEnable = 0.0f;
-    patch.filterEnable = 0.0f;
+    patch.filters[0].enable = 0.0f;
     patch.envs[rhino::forge::ampEnv].attack = 0.001f;
     patch.envs[rhino::forge::ampEnv].sustain = 1.0f;
     return patch;

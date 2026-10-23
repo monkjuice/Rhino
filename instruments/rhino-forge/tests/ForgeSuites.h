@@ -34,7 +34,7 @@ void filterTests();
 // nothing about changing one of them clicks.
 void noiseTests();
 
-// ForgeTestsMixer.cpp — the nine channels, the sends and the two busses.
+// ForgeTestsMixer.cpp — the ten channels, the sends and the two busses.
 void mixerTests();
 
 // ForgeTestsFx.cpp — the three effects racks, rendered and drawn.

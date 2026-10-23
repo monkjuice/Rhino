@@ -430,25 +430,33 @@ inline juce::String tooltipFor(const juce::String& id)
         {"noiseStereo", "Pull the two channels apart. At nothing both ears hear the same "
                         "samples; at the top they share no state at all"},
         {"noiseLevel", "Blend in broadband noise"},
-        {"filterEnable", "Switch the filter out of the voice, drive and all"},
-        {"cutoff", "Open or close the filter. On a comb or a ring modulator this sets the "
+        {"filterEnable", "Switch FILTER 1 out of the voice, drive and all. What is routed into it "
+                         "then passes through untouched"},
+        {"cutoff", "Open or close FILTER 1. On a comb or a ring modulator this sets the "
                    "frequency they are tuned to, and on a formant filter it moves the vowel"},
-        {"resonance", "Emphasise the filter edge"},
-        {"drive", "Saturate what is routed into the filter"},
-        {"filterType", "Which filter this is. Click for the list, grouped by family, or step "
+        {"resonance", "Emphasise FILTER 1's edge"},
+        {"drive", "Saturate what is routed into FILTER 1"},
+        {"filterType", "Which filter FILTER 1 is. Click for the list, grouped by family, or step "
                        "through it with the arrows"},
-        {"filterFreq", "The one control the filter type decides the meaning of: a second corner, "
+        {"filterFreq", "The one control FILTER 1's type decides the meaning of: a second corner, "
                        "a morph position, a damping. Its label says which"},
-        // One switch with two drawings: a lettered chip on the FILTER module,
-        // and the TO field at the top of the channel's mixer strip.
-        {"filterKeyTrack", "Make the cutoff follow the note, an octave for an octave, "
+        {"filterKeyTrack", "Make FILTER 1's cutoff follow the note, an octave for an octave, "
                            "measured from middle C. Off, the corner stays where CUTOFF puts it "
                            "whatever is played"},
-        {"routeA", "Send oscillator A through the filter, or straight to the main output"},
-        {"routeB", "Send oscillator B through the filter, or straight to the main output"},
-        {"routeC", "Send oscillator C through the filter, or straight to the main output"},
-        {"routeSub", "Send the sub through the filter, or straight to the main output"},
-        {"routeNoise", "Send the noise through the filter, or straight to the main output"},
+        // One switch with two drawings: a lettered chip on the FILTER module,
+        // and the F1 chip at the top of the source's mixer strip.
+        {"routeA", "Send oscillator A through FILTER 1. A source routed into neither filter goes "
+                   "straight to the main output"},
+        {"routeB", "Send oscillator B through FILTER 1. A source routed into neither filter goes "
+                   "straight to the main output"},
+        {"routeC", "Send oscillator C through FILTER 1. A source routed into neither filter goes "
+                   "straight to the main output"},
+        {"routeSub", "Send the sub through FILTER 1. A source routed into neither filter goes "
+                     "straight to the main output"},
+        {"routeNoise", "Send the noise through FILTER 1. A source routed into neither filter goes "
+                       "straight to the main output"},
+        {"filterSerial", "Where FILTER 1 goes: the main output, or on into FILTER 2, which runs the "
+                         "two filters in series"},
 
         // The mixer. A channel's own controls read the same way whichever
         // channel they belong to, so each says what it does to that channel.
@@ -458,11 +466,11 @@ inline juce::String tooltipFor(const juce::String& id)
         {"subSend2", "How much of the sub is sent to BUS 2, on top of where it already goes"},
         {"noiseSend1", "How much of the noise is sent to BUS 1, on top of where it already goes"},
         {"noiseSend2", "How much of the noise is sent to BUS 2, on top of where it already goes"},
-        {"filterPan", "Place the filter's output in the stereo field"},
-        {"filterMix", "Blend the filter's output against what was sent into it"},
-        {"filterLevel", "Set the level of everything coming out of the filter"},
-        {"filterSend1", "How much of the filter's output is sent to BUS 1, as well as to the output"},
-        {"filterSend2", "How much of the filter's output is sent to BUS 2, as well as to the output"},
+        {"filterPan", "Place FILTER 1's output in the stereo field"},
+        {"filterMix", "Blend FILTER 1's output against what was sent into it"},
+        {"filterLevel", "Set the level of everything coming out of FILTER 1"},
+        {"filterSend1", "How much of FILTER 1's output is sent to BUS 1, as well as to where it goes"},
+        {"filterSend2", "How much of FILTER 1's output is sent to BUS 2, as well as to where it goes"},
         {"bus1Enable", "Switch BUS 1 out of the mix; what is sent to it is then heard nowhere"},
         {"bus2Enable", "Switch BUS 2 out of the mix; what is sent to it is then heard nowhere"},
         {"bus1Dest", "Send BUS 1 to the main output, or across into BUS 2"},
@@ -587,6 +595,16 @@ inline juce::String tooltipFor(const juce::String& id)
         if (id.endsWith("Bypass"))
             return id.contains("s") ? "Take this slot out of the rack without removing what is set on it"
                                     : "Take this whole rack out of the signal";
+    }
+
+    // FILTER 2 is FILTER 1's control set again, so each of its controls says
+    // what filter 1's does, about filter 2. Its ids are filter 1's spelt with
+    // its number, which is what maps one onto the other.
+    if (id.startsWith("filter2"))
+    {
+        const auto first = filterParameterId(0, id.fromFirstOccurrenceOf("filter2", false, false).toRawUTF8());
+        if (const auto found = tips.find(first); found != tips.end())
+            return found->second.replace("FILTER 1", "FILTER 2");
     }
 
     if (id.startsWith("macro"))

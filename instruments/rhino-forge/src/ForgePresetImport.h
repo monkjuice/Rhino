@@ -12,8 +12,9 @@
 // (Processor::applySavedState), and copying one into the bank is writing that
 // tree to a file, so there is one way a patch arrives whatever it was.
 //
-// What a conversion cannot carry — a second filter, a seventh LFO, a source
-// Forge has no equivalent of, an effect it does not have — is left out and said
+// What a conversion cannot carry — the other synth's second filter, which the
+// converters do not yet put in Forge's, a seventh LFO, a source Forge has no
+// equivalent of, an effect it does not have — is left out and said
 // in a warning, one line each, rather than approximated by something that
 // would sound like a mistake. The plate and the browser show them.
 //

@@ -15,9 +15,10 @@
 // the main output and the two busses. The matrix scales a source by an amount
 // of the destination's range exactly as Serum's does, and Forge's BI is
 // Serum's bipolar switch, so a routing's depth is the same amount sent through
-// both synths' knob laws. What does not land — Serum's second filter, its
-// sample, multisample, granular and spectral oscillators, LFOs past the six
-// Forge has, its chaos generators — is left out with a warning each.
+// both synths' knob laws. What does not land — Serum's second filter, which
+// is not yet carried into Forge's, its sample, multisample, granular and
+// spectral oscillators, LFOs past the six Forge has, its chaos generators — is
+// left out with a warning each.
 #include "ForgePresetImportInternal.h"
 #include "ForgeCbor.h"
 #include "ForgeProcessor.h"
@@ -283,8 +284,9 @@ private:
     {
         const auto first = number(params("VoiceFilter0"), "kParamEnable", 0.0f) >= 0.5f;
         const auto second = number(params("VoiceFilter1"), "kParamEnable", 0.0f) >= 0.5f;
-        // Forge's one filter is whichever of Serum's the sources actually
-        // reach the more of, filter 1 when they tie.
+        // One of Serum's filters is converted, into Forge's FILTER 1: whichever
+        // the sources actually reach the more of, filter 1 when they tie.
+        // Filling Forge's FILTER 2 from Serum's second is not done yet.
         const auto listeners = [this] (int which)
         {
             auto count = 0;
@@ -294,8 +296,8 @@ private:
         filter = first && second ? (listeners(1) > listeners(0) ? 1 : 0) : first ? 0 : second ? 1 : -1;
         out.setOn("filterEnable", filter >= 0);
         if (first && second)
-            out.warn("FILTER " + juce::String(filter == 0 ? 2 : 1) + ": Forge has one filter, so only FILTER "
-                     + juce::String(filter + 1) + " was converted");
+            out.warn("FILTER " + juce::String(filter == 0 ? 2 : 1) + ": only one of Serum's filters is converted, "
+                     "so only FILTER " + juce::String(filter + 1) + " was");
         if (filter < 0) return;
 
         const auto settings = params("VoiceFilter" + juce::String(filter));

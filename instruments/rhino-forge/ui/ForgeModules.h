@@ -72,7 +72,13 @@ inline std::vector<Row> completeMatrixRows(std::vector<Row> rows)
 }
 
 inline constexpr float oscillatorColumnSpan = 16.0f / 3.0f;
-inline constexpr float mixerColumnSpan = static_cast<float>(gridColumns) / 9.0f;
+inline constexpr float mixerColumnSpan = static_cast<float>(gridColumns) / 10.0f;
+
+// The FILTER module's two cards. Narrower than the numbered default, because
+// they stand on the end of a title plate that already says FILTER, and the
+// plate's part number has to keep its place at the far end of the header at
+// the narrowest window.
+inline constexpr int filterBankWidth = 22;
 
 // The two halves of a cell an oscillator's mode chooses between.
 //
@@ -412,21 +418,40 @@ inline const std::vector<Module>& modules()
         // FAT leads the second row so it stays beside the DRIVE above it, which
         // is the knob it is most often moved with.
         //
-        // The five buttons: four sources, and KEY, which makes the corner
-        // follow the note. The fifth is the one that is not a routing, so it
+        // The five buttons: the sources, and KEY, which makes the corner
+        // follow the note. The last is the one that is not a routing, so it
         // sits at the end of the strip rather than among them, and it carries a
         // keyboard rather than a letter.
+        //
+        // Two filters in the one module, FILTER 1 and FILTER 2, one shown at a
+        // time behind the numbered cards on the end of its title plate: the
+        // arrangement the envelopes and the LFOs use, and the reason a second
+        // filter costs the panel no width. Each bank is the whole module, its
+        // routing included, and the LED in the header is the filter showing.
+        // Whether FILTER 1 runs on into FILTER 2 is the TO field of its mixer
+        // strip, the same field a bus's destination is.
         {"filter", "FILTER", "", "filterEnable", false, Display::filter, 0, 20, 4, false,
-         {{displaySelectorHeight, {{"filterType", "TYPE", Style::selector}},
-           1, Seat::displayTop},
+         {{displaySelectorHeight, {{"filterType", "TYPE", Style::selector},
+                                   {"filter2Type", "TYPE", Style::selector}},
+           filterCount, Seat::displayTop},
           {displayButtonHeight, {{"routeA", "A", Style::chip}, {"routeB", "B", Style::chip},
                                  {"routeC", "C", Style::chip}, {"routeSub", "S", Style::chip},
                                  {"routeNoise", "N", Style::chip},
-                                 {"filterKeyTrack", "KEY", Style::chip}},
-           1, Seat::displayFoot},
-          {50, {{"cutoff", "CUTOFF"}, {"resonance", "RES"}, {"drive", "DRIVE"}}},
-          {50, {{"filterFreq", "FREQ"}, {"filterPan", "PAN"}, {"filterMix", "MIX"}}}},
-         0, everyPageBut(Page::mix, Page::fx), 1, 0, 0, filterDisplayPercent},
+                                 {"filterKeyTrack", "KEY", Style::chip},
+
+                                 {"filter2RouteA", "A", Style::chip}, {"filter2RouteB", "B", Style::chip},
+                                 {"filter2RouteC", "C", Style::chip}, {"filter2RouteSub", "S", Style::chip},
+                                 {"filter2RouteNoise", "N", Style::chip},
+                                 {"filter2KeyTrack", "KEY", Style::chip}},
+           filterCount, Seat::displayFoot},
+          {50, {{"cutoff", "CUTOFF"}, {"resonance", "RES"}, {"drive", "DRIVE"},
+                {"filter2Cutoff", "CUTOFF"}, {"filter2Resonance", "RES"}, {"filter2Drive", "DRIVE"}},
+           filterCount},
+          {50, {{"filterFreq", "FREQ"}, {"filterPan", "PAN"}, {"filterMix", "MIX"},
+                {"filter2Freq", "FREQ"}, {"filter2Pan", "PAN"}, {"filter2Mix", "MIX"}},
+           filterCount}},
+         0, everyPageBut(Page::mix, Page::fx), 1, 0, 0, filterDisplayPercent, filterBankWidth, nullptr,
+         {"filterEnable", "filter2Enable"}},
         // GLOBAL is a narrow column rather than a wide box, and it opens the
         // lower row: what the voice is, before anything that shapes it. Five
         // controls in a row want more width than this panel has to give beside
@@ -652,20 +677,24 @@ inline const std::vector<Module>& modules()
 
         // --- The mixer -------------------------------------------------------
         //
-        // Nine equal channels across the whole signal row.
+        // Ten equal channels across the whole signal row.
         // The MIX tab is the only one that takes the row entire: the mixer is
-        // the view of SUB, NOISE and the filter, so those three modules stand
-        // down rather than sitting beside strips of themselves.
+        // the view of SUB, NOISE and the filters, so those modules stand down
+        // rather than sitting beside strips of themselves.
         //
         // The order is the signal path read left to right, the same order the
-        // OSC tab is in, and it ends where the signal does: the two busses the
-        // sends arrive at, then the main output.
+        // OSC tab is in, and it ends where the signal does: the two filters,
+        // the two busses the sends arrive at, then the main output.
         //
         // A strip declares the same four rows whatever it carries, so TO sits
         // on one line across the mixer, the sends on the next, the pans on the
         // third and the faders along the foot. A channel with nothing to put in
         // a row leaves the row out and the rows below it keep their weights, so
         // its fader still lands on the same line as every other.
+        //
+        // A source's TO is two chips, F1 and F2: the same switches the FILTER
+        // module's lettered chips are, one per filter, because a source can go
+        // through either filter, both, or neither and straight to the output.
         //
         // Every strip is compact: its knobs are sized to its own cells and held
         // under the diameter the rest of the panel shares. Without that, eight
@@ -677,63 +706,71 @@ inline const std::vector<Module>& modules()
         // what gives every channel the mute it has no separate control for.
         {"mixSub", "SUB", "", "subEnable", false, Display::none,
          0, 0.0f, mixerColumnSpan, true,
-         {{16, {{"routeSub", "TO", Style::stepper}}},
+         {{16, {{"routeSub", "F1", Style::chip}, {"filter2RouteSub", "F2", Style::chip}}},
           {26, {{"subSend1", "BUS 1"}, {"subSend2", "BUS 2"}}},
           {26, {{"subPan", "PAN"}}},
           {32, {{"subLevel", "LEVEL", Style::fader}}}},
          0, only(Page::mix)},
         {"mixOscA", "OSC A", "", "oscAEnable", false, Display::none,
          0, mixerColumnSpan, mixerColumnSpan, true,
-         {{16, {{"routeA", "TO", Style::stepper}}},
+         {{16, {{"routeA", "F1", Style::chip}, {"filter2RouteA", "F2", Style::chip}}},
           {26, {{"oscASend1", "BUS 1"}, {"oscASend2", "BUS 2"}}},
           {26, {{"oscAPan", "PAN"}}},
           {32, {{"oscALevel", "LEVEL", Style::fader}}}},
          0, only(Page::mix)},
         {"mixOscB", "OSC B", "", "oscBEnable", false, Display::none,
          0, 2.0f * mixerColumnSpan, mixerColumnSpan, true,
-         {{16, {{"routeB", "TO", Style::stepper}}},
+         {{16, {{"routeB", "F1", Style::chip}, {"filter2RouteB", "F2", Style::chip}}},
           {26, {{"oscBSend1", "BUS 1"}, {"oscBSend2", "BUS 2"}}},
           {26, {{"oscBPan", "PAN"}}},
           {32, {{"oscBLevel", "LEVEL", Style::fader}}}},
          0, only(Page::mix)},
         {"mixOscC", "OSC C", "", "oscCEnable", false, Display::none,
          0, 3.0f * mixerColumnSpan, mixerColumnSpan, true,
-         {{16, {{"routeC", "TO", Style::stepper}}},
+         {{16, {{"routeC", "F1", Style::chip}, {"filter2RouteC", "F2", Style::chip}}},
           {26, {{"oscCSend1", "BUS 1"}, {"oscCSend2", "BUS 2"}}},
           {26, {{"oscCPan", "PAN"}}},
           {32, {{"oscCLevel", "LEVEL", Style::fader}}}},
          0, only(Page::mix)},
         {"mixNoise", "NOISE", "", "noiseEnable", true, Display::none,
          0, 4.0f * mixerColumnSpan, mixerColumnSpan, true,
-         {{16, {{"routeNoise", "TO", Style::stepper}}},
+         {{16, {{"routeNoise", "F1", Style::chip}, {"filter2RouteNoise", "F2", Style::chip}}},
           {26, {{"noiseSend1", "BUS 1"}, {"noiseSend2", "BUS 2"}}},
           {26, {{"noisePan", "PAN"}}},
           {32, {{"noiseLevel", "LEVEL", Style::fader}}}},
          0, only(Page::mix)},
-        // The filter's own channel. It has no TO field, because everything the
-        // filter passes goes to the main output and the only other place it
-        // could go is a bus, which the sends already reach. MIX shares the pan
-        // row instead, where TYPE would have been.
-        {"mixFilter", "FILTER", "", "filterEnable", false, Display::none,
+        // The filters' own channels. FILTER 1's TO says where it goes: the main
+        // output, or on into FILTER 2, which is the two in series. FILTER 2's
+        // has nowhere else to go, since the only other places are the busses
+        // and the sends already reach those. MIX shares the pan row in both,
+        // where TYPE would have been.
+        {"mixFilter", "FILTER 1", "", "filterEnable", false, Display::none,
          0, 5.0f * mixerColumnSpan, mixerColumnSpan, true,
-         {{16, {}},
+         {{16, {{"filterSerial", "TO", Style::stepper}}},
           {26, {{"filterSend1", "BUS 1"}, {"filterSend2", "BUS 2"}}},
           {26, {{"filterPan", "PAN"}, {"filterMix", "MIX"}}},
           {32, {{"filterLevel", "LEVEL", Style::fader}}}},
+         0, only(Page::mix)},
+        {"mixFilter2", "FILTER 2", "", "filter2Enable", false, Display::none,
+         0, 6.0f * mixerColumnSpan, mixerColumnSpan, true,
+         {{16, {}},
+          {26, {{"filter2Send1", "BUS 1"}, {"filter2Send2", "BUS 2"}}},
+          {26, {{"filter2Pan", "PAN"}, {"filter2Mix", "MIX"}}},
+          {32, {{"filter2Level", "LEVEL", Style::fader}}}},
          0, only(Page::mix)},
         // The two busses. They carry no sends — a bus receives them rather than
         // making them, and where it goes afterwards is the TO field — so that
         // row holds the switch that takes the bus's own effects rack out of
         // the signal, which is the button Serum puts on this channel too.
         {"mixBus1", "BUS 1", "", "bus1Enable", true, Display::none,
-         0, 6.0f * mixerColumnSpan, mixerColumnSpan, true,
+         0, 7.0f * mixerColumnSpan, mixerColumnSpan, true,
          {{16, {{"bus1Dest", "TO", Style::stepper}}},
           {26, {{"fx2Bypass", "FX", Style::chip}}},
           {26, {{"bus1Pan", "PAN"}}},
           {32, {{"bus1Level", "LEVEL", Style::fader}}}},
          0, only(Page::mix)},
         {"mixBus2", "BUS 2", "", "bus2Enable", true, Display::none,
-         0, 7.0f * mixerColumnSpan, mixerColumnSpan, true,
+         0, 8.0f * mixerColumnSpan, mixerColumnSpan, true,
          {{16, {{"bus2Dest", "TO", Style::stepper}}},
           {26, {{"fx3Bypass", "FX", Style::chip}}},
           {26, {{"bus2Pan", "PAN"}}},
@@ -743,7 +780,7 @@ inline const std::vector<Module>& modules()
         // the fader at the end of the row: one setting, and the mixer is where
         // a final level is actually read against the channels feeding it.
         {"mixMain", "MAIN", "", nullptr, false, Display::none,
-         0, 8.0f * mixerColumnSpan, mixerColumnSpan, true,
+         0, 9.0f * mixerColumnSpan, mixerColumnSpan, true,
          {{16, {}},
           {26, {{"fx1Bypass", "FX", Style::chip}}},
           {26, {}},
@@ -850,12 +887,18 @@ inline int bankCount(const Module& module)
 // One bank button in a module's header. They start after whatever the header
 // already carries on the left: the enable LED, and the drag handle of a module
 // that is itself a source.
-// Room for a short title, for a banked module that draws one. The envelopes and
-// the LFOs do not: their drag handle carries the name and stands where the
-// title would. The rack has no handle, so its title is drawn and its cards have
-// to start past it. The layout test holds such a title to three characters,
-// which is what this width covers at the header's font.
+// Room for the title of a banked module that draws one. The envelopes and the
+// LFOs do not: their drag handle carries the name and stands where the title
+// would. The rack and the filters have no handle, so their titles are drawn and
+// their cards start just past them, on the end of the title plate: 34 is what
+// the rack's FX wants, and a longer title is given about nine pixels a letter
+// at the header's font. The layout test measures the title against this.
 inline constexpr int bankTitleGutter = 34;
+
+inline int bankTitleGutterOf(const Module& module)
+{
+    return juce::jmax(bankTitleGutter, juce::String(module.title).length() * 9 - 4);
+}
 
 inline juce::Rectangle<int> bankButtonBounds(juce::Rectangle<int> moduleArea, const Module& module,
                                              int bank, int handleWidth)
@@ -863,7 +906,7 @@ inline juce::Rectangle<int> bankButtonBounds(juce::Rectangle<int> moduleArea, co
     auto left = moduleArea.getX() + 10;
     if (module.enableId != nullptr) left += headerHeight;
     if (module.handleSource != 0) left += handleWidth + 8;
-    else left += bankTitleGutter;
+    else left += bankTitleGutterOf(module);
     const auto width = bankWidthOf(module);
     return {left + bank * (width + bankButtonGap), moduleArea.getY(), width, headerHeight};
 }

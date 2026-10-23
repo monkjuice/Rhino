@@ -373,18 +373,22 @@ private:
     // One oscillator's two warp stages, resolved as the engine resolves them,
     // so the display draws the warp the voice is rendering.
     std::array<WarpStage, warpSlots> warpStagesOf(const char* prefix) const;
-    // The filter's TYPE field wears the same component for the same reason the
+    // A filter's TYPE field wears the same component for the same reason the
     // warp does, and is driven the same way: thirty-four types are a fixed
     // list, so the parameter is a real choice and its value is the index.
-    void setFilterType(int choice);
-    // What TYPE is showing and what FREQ is called, refreshed when either has
-    // moved - from the panel, from a preset or from a host.
+    // `filter` counts from zero, FILTER 1 first.
+    void setFilterType(int filter, int choice);
+    // What each TYPE is showing and what each FREQ is called, refreshed when
+    // either has moved - from the panel, from a preset or from a host.
     void refreshFilterFields();
     // The type list, grouped by family.
     void showFilterMenu(Control&);
-    // The four settings the filter display is drawn from, read off the
+    // The four settings a filter's display is drawn from, read off the
     // parameters the voice will render from.
-    FilterShape filterShape() const;
+    FilterShape filterShape(int filter) const;
+    // Which filter the FILTER module is showing: its chosen bank, and so the
+    // one its display draws and its header LED switches.
+    int shownFilter() const;
     // The noise module's SOURCE field, which wears the same component again and
     // is the plainest of the four: the value is the index and nothing else
     // moves with it.
@@ -585,6 +589,9 @@ private:
 
     void buildBankButtons();
     void showBank(ModuleUi&, int bank);
+    // Points a module's header LED at the switch of the bank it is showing:
+    // the module's one enable, or for the filters, the filter on screen.
+    void attachEnable(ModuleUi&);
     void applyEnableStates();
 
     // The colour a module is drawn in. Everything that draws one asks this

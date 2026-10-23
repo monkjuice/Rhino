@@ -255,7 +255,6 @@ void Editor::buildModules()
         {
             module.enable = std::make_unique<ui::EnableLed>();
             module.enable->accent = accent;
-            module.enable->setTooltip(ui::tooltipFor(descriptor.enableId));
             if (descriptor.display == ui::Display::oscillator)
             {
                 const auto* held = &descriptor;
@@ -265,8 +264,7 @@ void Editor::buildModules()
             // its display and every knob inside it, not just the dot.
             module.enable->onClick = [this] { applyEnableStates(); repaint(); };
             addAndMakeVisible(*module.enable);
-            module.enableAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-                processor.state, descriptor.enableId, *module.enable);
+            attachEnable(module);
         }
 
         for (int r = 0; r < static_cast<int>(descriptor.rows.size()); ++r)
@@ -311,14 +309,14 @@ void Editor::buildModules()
                         };
                         control->selector->onOpenList = [this, held] { showWarpMenu(*held); };
                     }
-                    // The filter's type is a fixed list like the warp's, so
-                    // the index is the value; it differs only in stepping the
+                    // A filter's type is a fixed list like the warp's, so the
+                    // index is the value; it differs only in stepping the
                     // field also moving FREQ when FREQ stops meaning what it
                     // meant. See setFilterType.
-                    else if (juce::String(declared.id) == "filterType")
+                    else if (const auto filter = filterOfTypeControl(declared.id); filter >= 0)
                     {
                         control->selector->accent = accent;
-                        control->selector->onChoose = [this] (int choice) { setFilterType(choice); };
+                        control->selector->onChoose = [this, filter] (int choice) { setFilterType(filter, choice); };
                         control->selector->onOpenList = [this, held] { showFilterMenu(*held); };
                     }
                     // A spectral oscillator's loop. Asked before the
@@ -382,7 +380,7 @@ void Editor::buildModules()
                     control->slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
                     if (isWarpControl(declared.id))
                         control->slider.onValueChange = [this] { refreshWarpFields(); repaint(); };
-                    else if (juce::String(declared.id) == "filterType")
+                    else if (isFilterTypeControl(declared.id))
                         control->slider.onValueChange = [this] { refreshFilterFields(); repaint(); };
                     else if (juce::String(declared.id) == "noiseSource")
                         control->slider.onValueChange = [this] { refreshNoiseField(); repaint(); };
@@ -672,11 +670,12 @@ void Editor::buildBankButtons()
         if (banks <= 1) continue;
         const auto accent = accentOf(*module.descriptor);
         // A bank is usually one of several numbered copies of one thing — ENV 3,
-        // LFO 5 — and the card says the number. The rack's three banks are not
-        // copies: they are the main output and the two busses, and a card
-        // reading "2" would not say which. A module that asks for wider cards
-        // is one whose banks have names.
-        const auto named = module.descriptor->bankWidth > 0;
+        // LFO 5, FILTER 2 — and the card says the number. The rack's three
+        // banks are not copies: they are the main output and the two busses,
+        // and a card reading "2" would not say which. A module that asks for
+        // wider cards is one whose banks have names; the filters ask for
+        // narrower ones.
+        const auto named = module.descriptor->bankWidth > ui::bankButtonWidth;
         for (int bank = 0; bank < banks; ++bank)
         {
             const auto caption = named ? juce::String(rackName(bank)) : juce::String(bank + 1);

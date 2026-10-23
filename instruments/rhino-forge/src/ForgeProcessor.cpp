@@ -387,21 +387,21 @@ const FxTypeInfo& Processor::fxSlotType(int rack, int slot) const
     return fxTypeInfo(state.getRawParameterValue(fxParameterId(rack, slot, "Type"))->load());
 }
 
-float Processor::filterTypeValue() const
+float Processor::filterTypeValue(int filter) const
 {
-    return state.getRawParameterValue("filterType")->load();
+    return state.getRawParameterValue(filterParameterId(filter, "Type"))->load();
 }
 
-// The filter's second field is a plain 0..1 and means whatever the type says it
+// A filter's second field is a plain 0..1 and means whatever the type says it
 // means, so this is where a number becomes a reading. Every line of it runs the
 // arithmetic the engine runs, out of ForgeFilter.h rather than copied, which is
 // what binds "2.00 kHz" in the bubble to the corner that is actually there.
-juce::String Processor::filterFreqText(float value) const
+juce::String Processor::filterFreqText(int filter, float value) const
 {
-    const auto type = filterTypeOf(filterTypeValue());
+    const auto type = filterTypeOf(filterTypeValue(filter));
     const auto held = juce::jlimit(0.0f, 1.0f, value);
-    const FilterShape shape {type, state.getRawParameterValue("cutoff")->load(),
-                             state.getRawParameterValue("resonance")->load(), held,
+    const FilterShape shape {type, state.getRawParameterValue(filterParameterId(filter, "Cutoff"))->load(),
+                             state.getRawParameterValue(filterParameterId(filter, "Resonance"))->load(), held,
                              getSampleRate() > 0.0 ? getSampleRate() : 48000.0};
     const auto percent = [held] { return juce::String(juce::roundToInt(held * 100.0f)) + " %"; };
     const auto hertz = [] (float hz)
@@ -706,20 +706,30 @@ void Processor::bindParameters()
     bind(result.noiseStereo, "noiseStereo");
     bind(result.noiseLevel, "noiseLevel");
     bind(result.noisePan, "noisePan");
-    bind(result.filterEnable, "filterEnable");
-    bind(result.filterType, "filterType");
-    for (int oscillator = 0; oscillator < oscillatorCount; ++oscillator)
-        bind(result.routeOscillators[static_cast<size_t>(oscillator)], "route" + oscillatorLetter(oscillator));
-    bind(result.routeSub, "routeSub");
-    bind(result.routeNoise, "routeNoise");
-    bind(result.cutoff, "cutoff");
-    bind(result.filterKeyTrack, "filterKeyTrack");
-    bind(result.resonance, "resonance");
-    bind(result.drive, "drive");
-    bind(result.filterFreq, "filterFreq");
-    bind(result.filterPan, "filterPan");
-    bind(result.filterMix, "filterMix");
-    bind(result.filterLevel, "filterLevel");
+    for (int filter = 0; filter < filterCount; ++filter)
+    {
+        const auto id = [filter] (const char* suffix) { return filterParameterId(filter, suffix); };
+        auto& settings = result.filters[static_cast<size_t>(filter)];
+        bind(settings.enable, id("Enable"));
+        bind(settings.type, id("Type"));
+        for (int oscillator = 0; oscillator < oscillatorCount; ++oscillator)
+            bind(settings.routeOscillators[static_cast<size_t>(oscillator)],
+                 id("Route") + oscillatorLetter(oscillator));
+        bind(settings.routeSub, id("RouteSub"));
+        bind(settings.routeNoise, id("RouteNoise"));
+        bind(settings.cutoff, id("Cutoff"));
+        bind(settings.keyTrack, id("KeyTrack"));
+        bind(settings.resonance, id("Resonance"));
+        bind(settings.drive, id("Drive"));
+        bind(settings.freq, id("Freq"));
+        bind(settings.pan, id("Pan"));
+        bind(settings.mix, id("Mix"));
+        bind(settings.level, id("Level"));
+        for (int bus = 0; bus < busCount; ++bus)
+            bind(settings.sends.amount[static_cast<size_t>(bus)],
+                 id(("Send" + juce::String(bus + 1)).toRawUTF8()));
+    }
+    bind(result.filterSerial, "filterSerial");
     const auto bindSends = [&bind] (Sends& sends, const char* prefix)
     {
         for (int bus = 0; bus < busCount; ++bus)
@@ -729,7 +739,6 @@ void Processor::bindParameters()
         bindSends(result.oscillatorSends[static_cast<size_t>(oscillator)], oscillatorPrefix(oscillator));
     bindSends(result.sendSub, "sub");
     bindSends(result.sendNoise, "noise");
-    bindSends(result.sendFilter, "filter");
     for (int bus = 0; bus < busCount; ++bus)
     {
         const auto id = [bus] (const char* suffix) { return "bus" + juce::String(bus + 1) + suffix; };

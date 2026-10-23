@@ -10,11 +10,11 @@
 // playing at both ends of the sweep, whatever the two synths' curves are
 // between them.
 //
-// Forge has one filter to Vital's two, four envelopes to six, six LFOs to
-// eight and eight macros to four. Vital's envelopes and LFOs are given Forge's
-// in the order the patch uses them, ENV 1 staying the amplitude; a second
-// filter, anything past what Forge has and the random sources are left out
-// with a warning each. See ForgePresetImport.h.
+// Forge has four envelopes to Vital's six, six LFOs to eight and eight macros
+// to four. Vital's envelopes and LFOs are given Forge's in the order the patch
+// uses them, ENV 1 staying the amplitude; one of Vital's two filters is
+// converted, into FILTER 1, and the other, anything past what Forge has and
+// the random sources are left out with a warning each. See ForgePresetImport.h.
 #include "ForgePresetImportInternal.h"
 #include <optional>
 
@@ -172,8 +172,8 @@ private:
         out.setOn("filterEnable", filter != 0);
         if (filter == 0) return;
         if (first && second)
-            out.warn("FILTER " + juce::String(filter == 1 ? 2 : 1) + ": Forge has one filter, so only FILTER "
-                     + juce::String(filter) + " was converted");
+            out.warn("FILTER " + juce::String(filter == 1 ? 2 : 1) + ": only one of Vital's filters is converted, "
+                     "so only FILTER " + juce::String(filter) + " was");
 
         const auto key = [this] (const char* suffix) { return "filter_" + juce::String(filter) + "_" + suffix; };
         const auto model = juce::roundToInt(get(key("model"), 0.0f));

@@ -248,7 +248,20 @@ struct Module
     // two separate plates they read as two, which is the whole reason this
     // exists.
     const char* group = nullptr;
+    // The switch each bank answers to, for a module whose banks can each be
+    // switched off on their own: FILTER 1 and FILTER 2 are two filters, and
+    // the LED in the header is whichever one is showing. Empty means enableId
+    // serves every bank, which is what an envelope or a rack has.
+    std::vector<const char*> bankEnables {};
 };
+
+// The parameter a module's header LED drives while a bank is showing.
+inline const char* enableIdFor(const Module& module, int bank)
+{
+    if (bank >= 0 && bank < static_cast<int>(module.bankEnables.size()))
+        return module.bankEnables[static_cast<size_t>(bank)];
+    return module.enableId;
+}
 
 // Whether a module seats one of its rows in its header. Asked by the title
 // plate, which gives up width to it, and by the row geometry.

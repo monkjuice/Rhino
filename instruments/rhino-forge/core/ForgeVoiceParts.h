@@ -637,6 +637,24 @@ inline juce::String envParameterId(int env, const char* suffix)
     return "env" + juce::String(env + 1) + suffix;
 }
 
+// Two filters, as Serum 2 has. They are the same control set and the panel
+// shows one at a time, behind the numbered cards in the FILTER module's header.
+inline constexpr int filterCount = 2;
+
+// A parameter id belonging to one filter: filterParameterId(1, "Cutoff") is
+// "filter2Cutoff". Filter 1's are the ids it had before there was a second,
+// which presets and host automation already name, so they keep their old
+// spellings: three bare ("cutoff"), the routes as "routeA", the rest as
+// "filterType". Filter 2 spells every one with its number.
+inline juce::String filterParameterId(int filter, const char* suffix)
+{
+    const juce::String control(suffix);
+    if (filter > 0) return "filter" + juce::String(filter + 1) + control;
+    if (control == "Cutoff" || control == "Resonance" || control == "Drive") return control.toLowerCase();
+    if (control.startsWith("Route")) return "route" + control.substring(5);
+    return "filter" + control;
+}
+
 inline constexpr int macroCount = 8;
 
 // How many mixer busses there are. Two, as Serum has: enough for the two

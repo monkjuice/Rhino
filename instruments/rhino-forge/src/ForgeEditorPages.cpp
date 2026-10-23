@@ -2,6 +2,7 @@
 // an envelope or an LFO, the colour a module's plate is painted, and the
 // enables that grey out what a setting has made meaningless.
 #include "ForgeEditorInternal.h"
+#include "../ui/ForgeTooltips.h"
 
 namespace rhino::forge
 {
@@ -153,12 +154,27 @@ void Editor::applyPanelColours()
     repaint();
 }
 
+void Editor::attachEnable(ModuleUi& module)
+{
+    if (module.enable == nullptr) return;
+    const auto* id = ui::enableIdFor(*module.descriptor, module.bank);
+    // The old attachment goes first, so the button is never listened to by two
+    // parameters at once; the new one reads its own parameter into the LED.
+    module.enableAttachment.reset();
+    module.enable->setTooltip(ui::tooltipFor(id));
+    module.enableAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+        processor.state, id, *module.enable);
+}
+
 void Editor::showBank(ModuleUi& module, int bank)
 {
     if (module.bank == bank) return;
     module.bank = bank;
     for (int i = 0; i < static_cast<int>(module.bankButtons.size()); ++i)
         module.bankButtons[static_cast<size_t>(i)]->setToggleState(i == bank, juce::dontSendNotification);
+    // The LED of a module whose banks are switched one by one is the switch of
+    // the one showing.
+    if (!module.descriptor->bankEnables.empty()) attachEnable(module);
     // The handle in the header drags whichever of them is showing, so the
     // layout has to run again to put the right one there.
     applyEnableStates();

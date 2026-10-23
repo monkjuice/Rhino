@@ -315,8 +315,8 @@ void Editor::paint(juce::Graphics& g)
                 // this well and the routing buttons along its foot are inside
                 // the display, so the response is plotted in what remains
                 // rather than underneath them.
-                ui::drawFilterResponse(g, ui::displayPlotBounds(area, descriptor), filterShape(),
-                                       accent, alpha);
+                ui::drawFilterResponse(g, ui::displayPlotBounds(area, descriptor),
+                                       filterShape(shownFilter()), accent, alpha);
                 break;
             case ui::Display::none:
                 break;

@@ -384,6 +384,27 @@ void appendedDestinationsSuite()
                                  .slots[static_cast<size_t>(slot)].level,
                     "each appended FX LEVEL destination moves its own slot");
         }
+    // FILTER 2's knobs came after all of it, in the order filter 1's run: the
+    // shaping three, FREQ, then its channel.
+    require(filter2DestinationBase == fxLevelDestinationBase + fxLevelDestinationCount,
+            "FILTER 2's destinations were appended after every earlier destination");
+    {
+        auto& second = patch.filters[1];
+        const std::array<std::pair<const char*, float*>, filter2DestinationCount> fields {{
+            {"Cutoff", &second.cutoff}, {"Resonance", &second.resonance}, {"Drive", &second.drive},
+            {"Freq", &second.freq}, {"Pan", &second.pan}, {"Mix", &second.mix}, {"Level", &second.level}}};
+        for (int i = 0; i < filter2DestinationCount; ++i)
+        {
+            const auto destination = filter2DestinationBase + i;
+            const auto& [suffix, field] = fields[static_cast<size_t>(i)];
+            requireText(list[static_cast<size_t>(destination)].id, filterParameterId(1, suffix),
+                        "each FILTER 2 destination names its knob's parameter");
+            require(destinationField(patch, destination) == field, "and moves FILTER 2's own field");
+            // A rack destination is taken from the loudest voice; a filter is
+            // per voice and must not be.
+            require(!isFxDestination(destination), "a FILTER 2 destination is not a rack control");
+        }
+    }
     require(destinationField(patch, destinationCount) == nullptr,
             "an index past the end of the list points at nothing");
 

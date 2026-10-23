@@ -473,7 +473,7 @@ void subSuite()
         rhino::forge::Patch patch;
         for (auto& oscillator : patch.oscillators) oscillator.enable = 0.0f;
         patch.noiseEnable = 0.0f;
-        patch.filterEnable = 0.0f;
+        patch.filters[0].enable = 0.0f;
         patch.subEnable = 1.0f;
         patch.subLevel = 1.0f;
         patch.subWave = static_cast<float>(wave);

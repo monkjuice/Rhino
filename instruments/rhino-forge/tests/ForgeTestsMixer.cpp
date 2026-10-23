@@ -1,4 +1,4 @@
-﻿// The eight mixer channels, their sends, and the two busses.
+﻿// The ten mixer channels, their sends, and the two busses.
 #include "ForgeTestSupport.h"
 
 namespace rhino::forge::tests
@@ -169,9 +169,9 @@ void mixerSuite()
     //
     // The mixer's defaults have to leave the synth where they found it, or
     // every patch written before it quietly changed.
-    require(rhino::forge::Patch {}.filterMix == 1.0f, "the filter is all wet by default");
-    require(rhino::forge::Patch {}.filterLevel == 1.0f, "the filter channel opens at unity");
-    require(rhino::forge::Patch {}.filterPan == 0.0f, "the filter channel opens centred");
+    require(rhino::forge::Patch {}.filters[0].mix == 1.0f, "the filter is all wet by default");
+    require(rhino::forge::Patch {}.filters[0].level == 1.0f, "the filter channel opens at unity");
+    require(rhino::forge::Patch {}.filters[0].pan == 0.0f, "the filter channel opens centred");
     for (int bus = 0; bus < rhino::forge::busCount; ++bus)
     {
         const auto& settings = rhino::forge::Patch {}.buses[static_cast<size_t>(bus)];
@@ -186,7 +186,7 @@ void mixerSuite()
 // Modulating anything leaves the busses as they are set. A modulated rack is
 // taken from the loudest voice, and that once took the busses with it from a
 // copy where they stood at their defaults: switched on, at the main output. A
-// warp depth, FLT FREQ or a noise control also counted as a rack, because they
+// warp depth, F1 FREQ or a noise control also counted as a rack, because they
 // were appended after the racks in the destination list.
 void modulatedBusSuite()
 {

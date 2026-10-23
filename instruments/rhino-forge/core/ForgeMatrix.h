@@ -142,9 +142,9 @@ inline const std::array<DestinationInfo, namedDestinationCount>& namedDestinatio
         {"oscCPosition", "C POS"},   {"oscCLevel", "C LEVEL"}, {"oscCPan", "C PAN"},
         {"oscCDetune", "C DETUNE"},  {"oscCSemitone", "C PITCH"},
         {"subLevel", "SUB"},         {"noiseLevel", "NOISE"},
-        {"cutoff", "CUTOFF"},        {"resonance", "RES"},     {"drive", "DRIVE"},
+        {"cutoff", "F1 CUTOFF"},     {"resonance", "F1 RES"},  {"drive", "F1 DRIVE"},
         {"subPan", "SUB PAN"},       {"noisePan", "NOISE PAN"},
-        {"filterPan", "FLT PAN"},    {"filterMix", "FLT MIX"}, {"filterLevel", "FLT LEVEL"},
+        {"filterPan", "F1 PAN"},     {"filterMix", "F1 MIX"},  {"filterLevel", "F1 LEVEL"},
     }};
     return table;
 }
@@ -229,7 +229,13 @@ inline constexpr int tuningDestinationCount = oscillatorCount * tuningDestinatio
 // shift every later slot and silently retarget saved matrix routings.
 inline constexpr int fxLevelDestinationBase = tuningDestinationBase + tuningDestinationCount;
 inline constexpr int fxLevelDestinationCount = rackCount * fxSlotCount;
-inline constexpr int destinationCount = fxLevelDestinationBase + fxLevelDestinationCount;
+
+// FILTER 2's continuous controls, which came after everything else: the knobs
+// filter 1 has in the named list and the run after it, in the same order --
+// CUTOFF, RES, DRIVE, FREQ, then its channel's PAN, MIX and LEVEL.
+inline constexpr int filter2DestinationBase = fxLevelDestinationBase + fxLevelDestinationCount;
+inline constexpr int filter2DestinationCount = 7;
+inline constexpr int destinationCount = filter2DestinationBase + filter2DestinationCount;
 
 inline constexpr bool isFxDestination(int destination)
 {
@@ -245,6 +251,16 @@ inline const std::array<DestinationInfo, tuningDestinationCount>& tuningDestinat
         {"oscAOctave", "A OCT"}, {"oscAFine", "A FINE"},
         {"oscBOctave", "B OCT"}, {"oscBFine", "B FINE"},
         {"oscCOctave", "C OCT"}, {"oscCFine", "C FINE"},
+    }};
+    return table;
+}
+
+inline const std::array<DestinationInfo, filter2DestinationCount>& filter2Destinations()
+{
+    static const std::array<DestinationInfo, filter2DestinationCount> table {{
+        {"filter2Cutoff", "F2 CUTOFF"}, {"filter2Resonance", "F2 RES"}, {"filter2Drive", "F2 DRIVE"},
+        {"filter2Freq", "F2 FREQ"},     {"filter2Pan", "F2 PAN"},       {"filter2Mix", "F2 MIX"},
+        {"filter2Level", "F2 LEVEL"},
     }};
     return table;
 }
@@ -332,7 +348,7 @@ inline const std::vector<DestinationInfo>& destinations()
 
         for (const auto& named : warpDestinations()) built.push_back(named);
 
-        built.push_back({"filterFreq", "FLT FREQ"});
+        built.push_back({"filterFreq", "F1 FREQ"});
         built.push_back({"noiseTone", "NOISE TONE"});
         built.push_back({"noiseStereo", "NOISE WIDTH"});
 
@@ -363,6 +379,8 @@ inline const std::vector<DestinationInfo>& destinations()
                                + " LEVEL");
                 built.push_back({pool[pool.size() - 2].toRawUTF8(), pool.back().toRawUTF8()});
             }
+
+        for (const auto& named : filter2Destinations()) built.push_back(named);
         return built;
     }();
     return table;

@@ -35,13 +35,13 @@ Spectral mode separates pitch from time: play a loaded sample chromatically whil
 
 Four envelopes, six LFOs, eight macros, velocity, key tracking, aftertouch, and performance controls route through an eight-slot modulation matrix. Each LFO is a drawn shape, a two-axis path with X and Y outputs, or a sample-and-hold with smoothing, read forward, in reverse, or ping-pong. Drag a source onto a control, set the depth, and keep working; visual feedback follows the same values the audio engine uses.
 
-### A filter built for character
+### Two filters built for character
 
-Thirty-four filter types cover state-variable shapes, dual filters, morphing responses, analogue ladders, resonators, combs, vowels, ring modulation, sample-and-hold, and diffusion. The response display is calculated from the same filter code that processes the sound.
+Thirty-four filter types cover state-variable shapes, dual filters, morphing responses, analogue ladders, resonators, combs, vowels, ring modulation, sample-and-hold, and diffusion. There are two filters, switched with the **1** and **2** cards in the FILTER module's header: route each source into either, both, or neither, and run them side by side or send FILTER 1 on into FILTER 2 in series. The response display is calculated from the same filter code that processes the sound.
 
 ### Route, mix, and finish inside the patch
 
-The mixer gives the sub, three oscillators, noise, and filter their own level, pan, routing, and sends. Two effect buses and the main output each carry an ordered eight-slot rack with reverb, delay, chorus, distortion, EQ, filter, compression, and phaser.
+The mixer gives the sub, three oscillators, noise, and both filters their own level, pan, routing, and sends. Two effect buses and the main output each carry an ordered eight-slot rack with reverb, delay, chorus, distortion, EQ, filter, compression, and phaser.
 
 ![Rhino Forge mixer with individual source channels, two effect buses, main output, envelopes, LFO, macros, and keyboard](../../docs/images/forge-mixer.png)
 
@@ -55,7 +55,7 @@ Forge's arpeggiator turns held chords into musical motion with multiple directio
 
 **LOAD** opens the preset browser over the modules, so the keys keep playing while you browse. It lists your bank in `Documents\Rhino Forge\Presets`, which starts with the factory set in `Factory\` and is yours to arrange: make, rename and delete folders, rename and move presets, drag one onto a folder, and star favourites. Search and the style chips filter any folder, and the columns sort. **SAVE** writes the patch into the bank with its name, author, style and notes.
 
-The browser also lists the Serum 2 and Vital presets installed on this machine. Clicking one converts it on the spot, and dragging it into a bank folder converts it into a Forge preset. Whatever Forge has no counterpart for, such as a second filter, a random or chaos source, a multisample oscillator or a flanger, is left out and listed in the browser and on the title plate. You can also drop any `.forgepreset`, `.SerumPreset` or `.vital` file onto the window.
+The browser also lists the Serum 2 and Vital presets installed on this machine. Clicking one converts it on the spot, and dragging it into a bank folder converts it into a Forge preset. Whatever Forge has no counterpart for, such as a random or chaos source or a multisample oscillator, is left out and listed in the browser and on the title plate. So, for now, is the second of a preset's two filters: a conversion fills FILTER 1 only. You can also drop any `.forgepreset`, `.SerumPreset` or `.vital` file onto the window.
 
 ## Use Forge three ways
 

@@ -36,6 +36,44 @@ struct Bus
     float level = 0.75f;
 };
 
+// Everything one filter owns: the module's settings, which sources are routed
+// into it, and its own channel in the mixer. Both filters are this shape, and
+// the defaults here are filter 1's, which are what it opened on before there
+// was a second; see Patch for where filter 2 differs.
+struct FilterSetting
+{
+    float enable = 1.0f, type = 0.0f;
+    // The one field whose meaning is the type's: the second corner on a dual
+    // filter, the position on a morph, the damping on a comb. Nothing, because
+    // nothing is what a patch written before it existed loads it at, and on the
+    // five basic types nothing is the setting that leaves the filter doing
+    // exactly what it always did. See filterSecondLabel in ForgeFilter.h.
+    float freq = 0.0f;
+    // Each source either passes through this filter or does not, exactly as
+    // Serum's per-source routing buttons work. A source routed into neither
+    // filter goes straight to the voice sum; one routed into both is heard
+    // through both.
+    std::array<float, oscillatorCount> routeOscillators = []
+    {
+        std::array<float, oscillatorCount> routes {};
+        routes.fill(1.0f);
+        return routes;
+    }();
+    float routeSub = 1.0f, routeNoise = 1.0f;
+    float cutoff = 7800.0f, resonance = 0.12f, drive = 0.08f;
+    // Whether the corner follows the note. Off, because a patch written before
+    // this existed was played with a corner that stayed where it was put, and
+    // that is what it has to keep sounding like.
+    float keyTrack = 0.0f;
+    // The filter's own channel in the mixer: where its output sits in the
+    // image, how much of it is the filtered signal rather than what went in,
+    // and how loud the whole channel is. The defaults leave the filter exactly
+    // as it behaved before it had a channel.
+    float pan = 0.0f, mix = 1.0f, level = 1.0f;
+    // What the channel sends to each bus, after its fader.
+    Sends sends;
+};
+
 struct Patch
 {
     std::array<Oscillator, oscillatorCount> oscillators {};
@@ -57,36 +95,27 @@ struct Patch
     // is. Their levels above carry the 3 dB that law costs at centre, which is
     // why they are not the 0.12 and 0.25 they were before the mixer.
     float subPan = 0.0f, noisePan = 0.0f;
-    float filterEnable = 1.0f, filterType = 0.0f;
-    // The one field whose meaning is the type's: the second corner on a dual
-    // filter, the position on a morph, the damping on a comb. Nothing, because
-    // nothing is what a patch written before it existed loads it at, and on the
-    // five basic types nothing is the setting that leaves the filter doing
-    // exactly what it always did. See filterSecondLabel in ForgeFilter.h.
-    float filterFreq = 0.0f;
-    // Each source either passes through the filter or bypasses it straight to
-    // the voice sum, exactly as Serum's per-source routing buttons work.
-    std::array<float, oscillatorCount> routeOscillators = []
+    // FILTER 1 and FILTER 2. The second opens with nothing routed into it, so
+    // a patch written before it existed, which loads it at its defaults, is
+    // heard exactly as it was: a filter nothing reaches is not run at all.
+    std::array<FilterSetting, filterCount> filters = []
     {
-        std::array<float, oscillatorCount> routes {};
-        routes.fill(1.0f);
-        return routes;
+        std::array<FilterSetting, filterCount> made {};
+        for (size_t filter = 1; filter < made.size(); ++filter)
+        {
+            made[filter].routeOscillators.fill(0.0f);
+            made[filter].routeSub = made[filter].routeNoise = 0.0f;
+        }
+        return made;
     }();
-    float routeSub = 1.0f, routeNoise = 1.0f;
-    float cutoff = 7800.0f, resonance = 0.12f, drive = 0.08f;
-    // Whether the corner follows the note. Off, because a patch written before
-    // this existed was played with a corner that stayed where it was put, and
-    // that is what it has to keep sounding like.
-    float filterKeyTrack = 0.0f;
-    // The filter's own channel in the mixer: where its output sits in the
-    // image, how much of it is the filtered signal rather than what went in,
-    // and how loud the whole channel is. The defaults leave the filter exactly
-    // as it behaved before it had a channel.
-    float filterPan = 0.0f, filterMix = 1.0f, filterLevel = 1.0f;
+    // Where FILTER 1's channel goes: the main output, or on into FILTER 2, which
+    // is the two in series. A destination rather than a send, as a bus's is, so
+    // in series nothing of filter 1 reaches the output but through filter 2.
+    float filterSerial = 0.0f;
     // What each channel sends to each bus, parallel to wherever it is already
     // going.
     std::array<Sends, oscillatorCount> oscillatorSends {};
-    Sends sendSub, sendNoise, sendFilter;
+    Sends sendSub, sendNoise;
     std::array<Bus, busCount> buses {};
     // One effects rack on the main output and one on each bus, in that order.
     // They run on the summed voices rather than inside them, which is what an
@@ -151,21 +180,22 @@ inline float* destinationField(Patch& patch, int destination)
             default: break;
         }
     }
+    auto& first = patch.filters[0];
     switch (destination)
     {
         case subLevelDestination:    return &patch.subLevel;
         case noiseLevelDestination:  return &patch.noiseLevel;
-        case cutoffDestination:      return &patch.cutoff;
-        case resonanceDestination:   return &patch.resonance;
-        case driveDestination:       return &patch.drive;
+        case cutoffDestination:      return &first.cutoff;
+        case resonanceDestination:   return &first.resonance;
+        case driveDestination:       return &first.drive;
         case subPanDestination:      return &patch.subPan;
         case noisePanDestination:    return &patch.noisePan;
-        case filterPanDestination:   return &patch.filterPan;
-        case filterMixDestination:   return &patch.filterMix;
-        case filterLevelDestination: return &patch.filterLevel;
+        case filterPanDestination:   return &first.pan;
+        case filterMixDestination:   return &first.mix;
+        case filterLevelDestination: return &first.level;
         default: break;
     }
-    if (destination == filterDestination) return &patch.filterFreq;
+    if (destination == filterDestination) return &first.freq;
     if (destination == noiseToneDestination) return &patch.noiseTone;
     if (destination == noiseStereoDestination) return &patch.noiseStereo;
     // The warp depths are laid out oscillator by oscillator, then stage.
@@ -190,6 +220,20 @@ inline float* destinationField(Patch& patch, int destination)
         return &patch.racks[static_cast<size_t>(fxLevel / fxSlotCount)]
                      .slots[static_cast<size_t>(fxLevel % fxSlotCount)].level;
 
+    // FILTER 2, in the order filter2Destinations lists it.
+    auto& second = patch.filters[1];
+    switch (destination - filter2DestinationBase)
+    {
+        case 0: return &second.cutoff;
+        case 1: return &second.resonance;
+        case 2: return &second.drive;
+        case 3: return &second.freq;
+        case 4: return &second.pan;
+        case 5: return &second.mix;
+        case 6: return &second.level;
+        default: break;
+    }
+
     const auto fx = destination - fxDestinationBase;
     if (fx < 0 || fx >= fxDestinationCount) return nullptr;
     const auto control = fx % fxDestinationsPerSlot;
@@ -199,15 +243,30 @@ inline float* destinationField(Patch& patch, int destination)
     return control < fxKnobCount ? &held.knobs[static_cast<size_t>(control)] : &held.mix;
 }
 
-inline FilterType filterTypeOf(const Patch& patch) { return filterTypeOf(patch.filterType); }
+inline FilterType filterTypeOf(const FilterSetting& filter) { return filterTypeOf(filter.type); }
+
+// Whether anything reaches a filter: a source routed into it or, for FILTER 2,
+// FILTER 1 in series. Filter 1 always answers yes, because it has always been
+// run whatever was routed into it and a render of an existing patch has to
+// stay what it was to the bit. A later filter nothing reaches is skipped, which
+// is what keeps a patch that never uses it at the price it always cost.
+inline bool filterFed(const Patch& patch, int filter)
+{
+    if (filter <= 0) return true;
+    const auto& setting = patch.filters[static_cast<size_t>(filter)];
+    if (on(setting.routeSub) || on(setting.routeNoise)) return true;
+    for (const auto route : setting.routeOscillators)
+        if (on(route)) return true;
+    return filter == 1 && on(patch.filterSerial);
+}
 
 // The pitch key tracking is measured from: middle C, so a patch set up around
 // the middle of the keyboard sounds where it was set and the tracking is what
 // happens either side of it.
 inline constexpr float filterKeyTrackHz = 261.6256f;
 
-// The four settings that decide the filter's shape, pulled out of a patch. One
-// reading, so the curve the panel draws and the audio the voice renders can
+// The four settings that decide a filter's shape, pulled out of its settings.
+// One reading, so the curve the panel draws and the audio the voice renders can
 // never be two different filters — see ForgeFilter.h.
 //
 // `voiceHz` is the pitch the voice asking is actually sounding, and it is the
@@ -222,13 +281,13 @@ inline constexpr float filterKeyTrackHz = 261.6256f;
 // Clamped to the cutoff knob's own travel, so tracking can neither push the
 // corner past the top of the range nor drag it under the bottom: five octaves
 // up from a corner already at 10 kHz is not a filter, it is silence.
-inline FilterShape filterShapeOf(const Patch& patch, double sampleRate, float voiceHz = 0.0f)
+inline FilterShape filterShapeOf(const FilterSetting& filter, double sampleRate, float voiceHz = 0.0f)
 {
-    auto cutoff = patch.cutoff;
-    if (on(patch.filterKeyTrack) && voiceHz > 0.0f)
+    auto cutoff = filter.cutoff;
+    if (on(filter.keyTrack) && voiceHz > 0.0f)
         cutoff = juce::jlimit(filterCutoffLowHz, filterCutoffHighHz,
                               cutoff * voiceHz / filterKeyTrackHz);
-    return {filterTypeOf(patch), cutoff, patch.resonance, patch.filterFreq, sampleRate};
+    return {filterTypeOf(filter), cutoff, filter.resonance, filter.freq, sampleRate};
 }
 
 // Drive at zero is genuinely clean: the saturation is skipped rather than run

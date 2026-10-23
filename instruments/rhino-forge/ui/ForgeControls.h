@@ -495,11 +495,12 @@ public:
     }
 };
 
-// Which chips carry a picture instead of their caption. One switch does, and it
-// is the one that stands in a row of routing buttons without being a routing.
+// Which chips carry a picture instead of their caption. One switch a filter
+// does, and it is the one that stands in a row of routing buttons without
+// being a routing.
 inline ChipGlyph chipGlyphFor(const juce::String& id)
 {
-    return id == "filterKeyTrack" ? ChipGlyph::keyboard : ChipGlyph::caption;
+    return id == "filterKeyTrack" || id == "filter2KeyTrack" ? ChipGlyph::keyboard : ChipGlyph::caption;
 }
 
 class BankCard final : public juce::Button

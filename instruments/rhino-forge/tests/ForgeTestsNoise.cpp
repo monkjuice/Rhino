@@ -26,11 +26,11 @@ Patch noiseOnly(int source)
     Patch patch;
     for (auto& oscillator : patch.oscillators) oscillator.enable = 0.0f;
     patch.subEnable = 0.0f;
-    patch.filterEnable = 0.0f;
+    patch.filters[0].enable = 0.0f;
     patch.noiseEnable = 1.0f;
     patch.noiseLevel = 1.0f;
     patch.noiseSource = static_cast<float>(source);
-    patch.routeNoise = 0.0f;
+    patch.filters[0].routeNoise = 0.0f;
     // Flat and full by the time the window opens. A decay still running under
     // the measurement would read as a spectrum sliding, and a sustain below
     // full would make two sources measured at different moments look like two

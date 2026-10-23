@@ -1,11 +1,11 @@
-// The filter's TYPE field: the menu grouped by family, and the one knob beside
-// it whose label the chosen type decides.
+// The filters' TYPE fields: the menu grouped by family, and the one knob beside
+// each whose label the chosen type decides.
 #include "ForgeEditorInternal.h"
 #include "../ui/ForgeTooltips.h"
 
 namespace rhino::forge
 {
-// --- The filter ---------------------------------------------------------------
+// --- The filters --------------------------------------------------------------
 //
 // TYPE wears the component a rack slot's mode fields and an oscillator's warp
 // fields wear, and behaves like the warp behind it rather than like the rack: a
@@ -18,11 +18,15 @@ namespace rhino::forge
 // called and what it reads as are looked up from the type rather than declared
 // with it. Both halves read ForgeFilter.h, which is also what the engine reads,
 // so a field cannot be labelled as one thing and rendered as another.
-void Editor::setFilterType(int choice)
+//
+// FILTER 1 and FILTER 2 are the same pair of fields twice, each answering to
+// its own type; nothing here is shared between them but the code.
+void Editor::setFilterType(int filter, int choice)
 {
-    auto* parameter = processor.state.getParameter("filterType");
+    const auto typeId = filterParameterId(filter, "Type");
+    auto* parameter = processor.state.getParameter(typeId);
     if (parameter == nullptr) return;
-    const auto was = filterTypeOf(value("filterType"));
+    const auto was = filterTypeOf(value(typeId));
     const auto now = filterTypeOf(static_cast<float>(choice));
     parameter->setValueNotifyingHost(
         parameter->convertTo0to1(static_cast<float>(juce::jlimit(0, filterTypeCount - 1, choice))));
@@ -34,25 +38,24 @@ void Editor::setFilterType(int choice)
     // does the same thing when a slot's type changes, and for the same reason
     // — see initialiseFxSlot.
     if (juce::String(filterSecondLabel(was)) == filterSecondLabel(now)) return;
-    if (auto* second = processor.state.getParameter("filterFreq"))
+    if (auto* second = processor.state.getParameter(filterParameterId(filter, "Freq")))
         second->setValueNotifyingHost(second->convertTo0to1(filterSecondInit(now)));
 }
 
-// What the two fields are showing. Called on the way in, on every tab change
-// and on every tick, because either can move without the panel being touched —
-// a preset loaded, a host automating it, a second editor on the same plugin —
-// and the field has to say what the engine is running.
+// What the fields are showing. Called on the way in, on every tab change and
+// on every tick, because any of them can move without the panel being touched
+// — a preset loaded, a host automating it, a second editor on the same plugin
+// — and the field has to say what the engine is running.
 void Editor::refreshFilterFields()
 {
-    const auto type = filterTypeOf(value("filterType"));
-
     for (auto& module : moduleUis)
         for (auto& held : module.controls)
         {
             auto& control = *held;
 
-            if (control.id == "filterFreq")
+            if (const auto filter = filterOfFreqControl(control.id); filter >= 0)
             {
+                const auto type = filterTypeOf(value(filterParameterId(filter, "Type")));
                 // The label is the type's word for this knob, and the
                 // double-click is the setting that type opens on — which is
                 // the only way the middle of a field this overloaded is
@@ -67,7 +70,7 @@ void Editor::refreshFilterFields()
                 continue;
             }
 
-            if (control.id != "filterType" || control.selector == nullptr) continue;
+            if (!isFilterTypeControl(control.id) || control.selector == nullptr) continue;
 
             const auto chosen = juce::jlimit(0, filterTypeCount - 1, juce::roundToInt(value(control.id)));
             const auto listed = control.selector->count() == filterTypeCount;
@@ -91,7 +94,8 @@ void Editor::refreshFilterFields()
 // actually chosen: you know you want a ladder before you know which one.
 void Editor::showFilterMenu(Control& control)
 {
-    if (control.selector == nullptr) return;
+    const auto filter = filterOfTypeControl(control.id);
+    if (control.selector == nullptr || filter < 0) return;
     const auto current = juce::jlimit(0, filterTypeCount - 1, juce::roundToInt(value(control.id)));
     const auto currentCategory = filterCategoryOf(filterTypeOf(static_cast<float>(current)));
 
@@ -117,24 +121,35 @@ void Editor::showFilterMenu(Control& control)
 
     const auto safe = juce::Component::SafePointer<Editor>(this);
     menu.showMenuAsync(juce::PopupMenu::Options {}.withTargetComponent(control.selector.get()),
-                       [safe] (int choice)
+                       [safe, filter] (int choice)
     {
         if (safe == nullptr || choice == 0) return;
-        safe->setFilterType(choice - 1);
+        safe->setFilterType(filter, choice - 1);
         safe->refreshFilterFields();
         safe->repaint();
     });
 }
 
-// The settings the display is drawn from, resolved the way the engine resolves
+// The settings a display is drawn from, resolved the way the engine resolves
 // them, so the curve on the tube is the filter the voice is rendering. The
 // sample rate is the one the engine is actually running at where there is one:
 // how low a comb can be tuned depends on it, and so therefore does where the
 // display puts the comb's teeth.
-FilterShape Editor::filterShape() const
+FilterShape Editor::filterShape(int filter) const
 {
     const auto rate = processor.getSampleRate();
-    return {filterTypeOf(value("filterType")), value("cutoff"), value("resonance"),
-            value("filterFreq"), rate > 0.0 ? rate : 48000.0};
+    const auto id = [filter] (const char* suffix) { return filterParameterId(filter, suffix); };
+    return {filterTypeOf(value(id("Type"))), value(id("Cutoff")), value(id("Resonance")),
+            value(id("Freq")), rate > 0.0 ? rate : 48000.0};
+}
+
+// Which filter the panel is showing. The module is the one that declares the
+// filter display, so nothing here has to know its id.
+int Editor::shownFilter() const
+{
+    for (const auto& module : moduleUis)
+        if (module.descriptor->display == ui::Display::filter)
+            return juce::jlimit(0, filterCount - 1, module.bank);
+    return 0;
 }
 }

@@ -64,8 +64,9 @@ public:
         // They live here rather than in the voice because a fresh note resets
         // a voice by assigning over it — see FilterDelays in ForgeFilter.h.
         for (auto& voice : filterDelays)
-            for (auto& channel : voice)
-                channel.prepare(sampleRate);
+            for (auto& filter : voice)
+                for (auto& channel : filter)
+                    channel.prepare(sampleRate);
         // The spectral bank, on the heap and never inside a voice. It is about
         // three and a half megabytes across sixteen voices and three
         // oscillators, and Core is constructed on the stack by most of the test
@@ -85,8 +86,10 @@ public:
     {
         voices = {};
         for (auto& voice : filterDelays)
-            for (auto& channel : voice)
-                channel.reset();
+            for (auto& filter : voice)
+                for (auto& channel : filter)
+                    channel.reset();
+        filtersFed = {};
         nextVoice = 0;
         freePhase = {};
         freeSteps = {};
@@ -370,6 +373,22 @@ public:
         meterOffsets = {};
         meterScan = {};
 
+        // Which filters anything reaches. A filter nothing reaches is skipped
+        // rather than run on silence, so its state stands where it stopped;
+        // the moment something reaches it again it starts from nothing, as a
+        // filter switched on cold does, rather than from a ring left over
+        // from whenever it was last fed.
+        // Filter 1 is always run, so it is never in that position.
+        std::array<bool, filterCount> fed {};
+        fed[0] = true;
+        for (int filter = 1; filter < filterCount; ++filter)
+        {
+            const auto index = static_cast<size_t>(filter);
+            fed[index] = filterFed(patch, filter);
+            if (fed[index] && !filtersFed[index]) resetFilter(filter);
+            filtersFed[index] = fed[index];
+        }
+
         // What every voice has sent to each bus. Filled inside the loop and
         // resolved once after it.
         std::array<float, busCount> busLeft {}, busRight {};
@@ -508,49 +527,41 @@ public:
             Buses buses;
             renderOscillators(voiceIndex, voice, active, buses);
 
-            // Drive belongs to the filter, so only what is routed into it is
-            // driven, and switching the module off bypasses the drive with it.
-            // The filter state keeps running either way, so switching the
-            // module or a route back on does not click.
-            const auto inputLeft = buses.wetLeft, inputRight = buses.wetRight;
-            auto routedLeft = inputLeft, routedRight = inputRight;
-            // Worked out once for the voice and read by both its channels. The
-            // corners are per voice because the matrix is — a modulated cutoff
-            // is a different frequency in every note — so this cannot move up
-            // out of the loop, but it can and does stop being computed twice.
-            const auto coefficients =
-                filterCoefficientsFor(filterShapeOf(active, sampleRate, voice.currentHz));
+            // FILTER 1, then FILTER 2. Filter 1's channel goes to the main
+            // output, or in series on into filter 2 alongside whatever is
+            // routed there; filter 2's goes to the main output.
+            static_assert(filterCount == 2, "the voice runs FILTER 1 into the output or into FILTER 2");
             auto& delays = filterDelays[voiceIndex];
-            if (on(active.filterEnable))
+            auto firstLeft = buses.wetLeft[0], firstRight = buses.wetRight[0];
+            renderFilter(active.filters[0], voice.filters[0], delays[0], voice.currentHz,
+                         firstLeft, firstRight, buses);
+            auto mainLeft = buses.dryLeft, mainRight = buses.dryRight;
+            if (fed[1])
             {
-                routedLeft = filterSample(voice.filters[0], delays[0],
-                                          saturate(routedLeft, active.drive), coefficients);
-                routedRight = filterSample(voice.filters[1], delays[1],
-                                           saturate(routedRight, active.drive), coefficients);
-                // MIX blends what came out against what went in. With the
-                // module switched off there is nothing to blend — the two are
-                // the same signal — so the knob is skipped rather than applied
-                // to a pair of identical values.
-                const auto mix = juce::jlimit(0.0f, 1.0f, active.filterMix);
-                routedLeft = routedLeft * mix + inputLeft * (1.0f - mix);
-                routedRight = routedRight * mix + inputRight * (1.0f - mix);
+                auto secondLeft = buses.wetLeft[1], secondRight = buses.wetRight[1];
+                if (on(active.filterSerial))
+                {
+                    secondLeft += firstLeft;
+                    secondRight += firstRight;
+                }
+                else
+                {
+                    mainLeft += firstLeft;
+                    mainRight += firstRight;
+                }
+                renderFilter(active.filters[1], voice.filters[1], delays[1], voice.currentHz,
+                             secondLeft, secondRight, buses);
+                mainLeft += secondLeft;
+                mainRight += secondRight;
             }
             else
             {
-                filterSample(voice.filters[0], delays[0], routedLeft, coefficients);
-                filterSample(voice.filters[1], delays[1], routedRight, coefficients);
+                mainLeft += firstLeft;
+                mainRight += firstRight;
             }
 
-            // The rest of the filter's channel: its place in the image and its
-            // own fader, then its sends, which are taken after that fader
-            // exactly as every other channel's are.
-            const auto filterGain = juce::jlimit(0.0f, 1.0f, active.filterLevel);
-            routedLeft *= filterGain * channelPanLeft(active.filterPan);
-            routedRight *= filterGain * channelPanRight(active.filterPan);
-            send(routedLeft, routedRight, active.sendFilter, buses);
-
-            left += (routedLeft + buses.dryLeft) * voice.tail;
-            right += (routedRight + buses.dryRight) * voice.tail;
+            left += mainLeft * voice.tail;
+            right += mainRight * voice.tail;
             // The busses are one sum across every voice rather than one per
             // voice. It makes no difference to a gain, and it is what an
             // effects rack will need when one arrives: a reverb on a bus is a
@@ -655,28 +666,49 @@ private:
 
     enum class EnvelopeStage { idle, attack, decay, sustain, release };
 
-    // What a voice accumulates into: the sources routed through the filter, the
-    // sources that bypass it, and what every channel has sent to each bus.
+    // What a voice accumulates into: the sources routed into each filter, the
+    // sources that reach neither, and what every channel has sent to each bus.
     //
     // A send is parallel to wherever the channel is already going, so a source
-    // appears in one of the first two pairs and in as many of the send pairs as
-    // it is sent to.
+    // appears in as many of the filters' pairs as it is routed into, in the
+    // dry pair if that is none of them, and in as many of the send pairs as it
+    // is sent to.
     struct Buses
     {
-        float wetLeft = 0.0f, wetRight = 0.0f, dryLeft = 0.0f, dryRight = 0.0f;
+        std::array<float, filterCount> wetLeft {}, wetRight {};
+        float dryLeft = 0.0f, dryRight = 0.0f;
         std::array<float, busCount> sendLeft {}, sendRight {};
     };
 
-    // One channel's signal handed to the destination it names and to whichever
-    // busses it is sent to. The routing decision is made here, once, rather
-    // than being threaded through everything downstream.
-    static void distribute(float left, float right, bool throughFilter,
+    // One channel's signal handed to the filters it is routed into, or past
+    // them both, and to whichever busses it is sent to. The routing decision
+    // is made here, once, rather than being threaded through everything
+    // downstream. `source` is the route's place in a FilterSetting: an
+    // oscillator's index, then the sub, then the noise.
+    static void distribute(float left, float right, const Patch& patch, int source,
                            const Sends& sends, Buses& buses)
     {
-        (throughFilter ? buses.wetLeft : buses.dryLeft) += left;
-        (throughFilter ? buses.wetRight : buses.dryRight) += right;
+        auto routed = false;
+        for (int filter = 0; filter < filterCount; ++filter)
+        {
+            const auto& setting = patch.filters[static_cast<size_t>(filter)];
+            const auto route = source < oscillatorCount ? setting.routeOscillators[static_cast<size_t>(source)]
+                             : source == subRouteIndex ? setting.routeSub : setting.routeNoise;
+            if (!on(route)) continue;
+            buses.wetLeft[static_cast<size_t>(filter)] += left;
+            buses.wetRight[static_cast<size_t>(filter)] += right;
+            routed = true;
+        }
+        if (!routed)
+        {
+            buses.dryLeft += left;
+            buses.dryRight += right;
+        }
         send(left, right, sends, buses);
     }
+
+    static constexpr int subRouteIndex = oscillatorCount;
+    static constexpr int noiseRouteIndex = oscillatorCount + 1;
 
     static void send(float left, float right, const Sends& sends, Buses& buses)
     {
@@ -688,6 +720,61 @@ private:
             buses.sendLeft[index] += left * amount;
             buses.sendRight[index] += right * amount;
         }
+    }
+
+    // One filter's channel in one voice, on the pair routed into it: the
+    // filter, then its place in the image and its own fader, then its sends,
+    // which are taken after that fader exactly as every other channel's are.
+    //
+    // Drive belongs to the filter, so only what is routed into it is driven,
+    // and switching the module off bypasses the drive with it. The filter state
+    // keeps running either way, so switching the module or a route back on
+    // does not click.
+    void renderFilter(const FilterSetting& filter, std::array<FilterState, 2>& states,
+                      std::array<FilterDelays, 2>& delays, float voiceHz,
+                      float& left, float& right, Buses& buses) const
+    {
+        const auto inputLeft = left, inputRight = right;
+        // Worked out once for the voice and read by both its channels. The
+        // corners are per voice because the matrix is — a modulated cutoff
+        // is a different frequency in every note — so this cannot move up
+        // out of the loop, but it can and does stop being computed twice.
+        const auto coefficients = filterCoefficientsFor(filterShapeOf(filter, sampleRate, voiceHz));
+        if (on(filter.enable))
+        {
+            left = filterSample(states[0], delays[0], saturate(left, filter.drive), coefficients);
+            right = filterSample(states[1], delays[1], saturate(right, filter.drive), coefficients);
+            // MIX blends what came out against what went in. With the
+            // module switched off there is nothing to blend — the two are
+            // the same signal — so the knob is skipped rather than applied
+            // to a pair of identical values.
+            const auto mix = juce::jlimit(0.0f, 1.0f, filter.mix);
+            left = left * mix + inputLeft * (1.0f - mix);
+            right = right * mix + inputRight * (1.0f - mix);
+        }
+        else
+        {
+            filterSample(states[0], delays[0], left, coefficients);
+            filterSample(states[1], delays[1], right, coefficients);
+        }
+
+        const auto gain = juce::jlimit(0.0f, 1.0f, filter.level);
+        left *= gain * channelPanLeft(filter.pan);
+        right *= gain * channelPanRight(filter.pan);
+        send(left, right, filter.sends, buses);
+    }
+
+    // Every voice's state for one filter back to nothing, lines and all. Only
+    // ever asked of a filter something has just started reaching again, which
+    // a hand on the panel does, so the lines are emptied once rather than
+    // every sample nothing reaches it.
+    void resetFilter(int filter)
+    {
+        const auto index = static_cast<size_t>(filter);
+        for (auto& voice : voices) voice.filters[index] = {};
+        for (auto& voice : filterDelays)
+            for (auto& channel : voice[index])
+                channel.reset();
     }
 
     struct Voice
@@ -725,12 +812,13 @@ private:
         // cut off. It is also what guarantees the voice comes back: a filter
         // pushed hard would otherwise ring for a long time.
         float tail = 1.0f;
-        // One filter per channel. Both run whatever the type is, so switching
-        // the module or a route back on never starts a filter from silence —
-        // and a comb keeps its line, which is the one type where starting from
-        // silence would be audible for several milliseconds rather than one
-        // sample. See ForgeFilter.h for what is in each of them.
-        std::array<FilterState, 2> filters {};
+        // Each filter's state, one per channel. Both channels run whatever the
+        // type is, so switching the module or a route back on never starts a
+        // filter from silence — and a comb keeps its line, which is the one
+        // type where starting from silence would be audible for several
+        // milliseconds rather than one sample. See ForgeFilter.h for what is in
+        // each of them.
+        std::array<std::array<FilterState, 2>, filterCount> filters {};
         std::array<EnvelopeStage, envCount> envStage {};
         // Every LFO that answers the keyboard runs a copy of itself inside each
         // voice, which is what makes TRIG and ENV mean anything: a new note
@@ -1435,8 +1523,7 @@ private:
                 renderOscillator(voice.oscillatorPhases[index], voice.oscillatorWarps[index],
                                  voice.oscillatorDc[index], patch.oscillators[index], hz, dt,
                                  oscillatorWarp[index], left, right);
-            distribute(left, right, on(patch.routeOscillators[index]),
-                       patch.oscillatorSends[index], buses);
+            distribute(left, right, patch, oscillator, patch.oscillatorSends[index], buses);
         }
 
         // The sub and the noise generator are their own sources: each is silent
@@ -1447,7 +1534,7 @@ private:
         {
             const auto sub = subSample() * patch.subLevel;
             distribute(sub * sourcePanLeft(patch.subPan), sub * sourcePanRight(patch.subPan),
-                       on(patch.routeSub), patch.sendSub, buses);
+                       patch, subRouteIndex, patch.sendSub, buses);
         }
         // The noise module, which is a small oscillator rather than a hiss
         // knob: four sources, a tilt across them and a decorrelation between
@@ -1465,7 +1552,7 @@ private:
             const auto level = patch.noiseLevel;
             distribute(hiss.left * level * sourcePanLeft(patch.noisePan),
                        hiss.right * level * sourcePanRight(patch.noisePan),
-                       on(patch.routeNoise), patch.sendNoise, buses);
+                       patch, noiseRouteIndex, patch.sendNoise, buses);
         }
 
         // The amp envelope reaches the sends as well as the two destinations.
@@ -1473,8 +1560,11 @@ private:
         // what that fader amounts to, so a note that has finished must be
         // sending nothing.
         const auto level = voice.envelope[ampEnv] * voice.velocity;
-        buses.wetLeft *= level;
-        buses.wetRight *= level;
+        for (int filter = 0; filter < filterCount; ++filter)
+        {
+            buses.wetLeft[static_cast<size_t>(filter)] *= level;
+            buses.wetRight[static_cast<size_t>(filter)] *= level;
+        }
         buses.dryLeft *= level;
         buses.dryRight *= level;
         for (int bus = 0; bus < busCount; ++bus)
@@ -1508,7 +1598,13 @@ private:
     // whether or not initialise() has run: an unprepared one holds empty lines
     // and reports itself not ready, which the four types that read a line
     // check. A vector would instead have to be size-checked per sample.
-    std::array<std::array<FilterDelays, 2>, 16> filterDelays {};
+    //
+    // One set per filter, so each filter's lines are its own: a comb in both
+    // filters is two combs. About 880 KB at 48 kHz across both.
+    std::array<std::array<std::array<FilterDelays, 2>, filterCount>, 16> filterDelays {};
+    // Which filters something reached on the last sample, so a filter that has
+    // just started being reached again is noticed and started from nothing.
+    std::array<bool, filterCount> filtersFed {};
     double sampleRate = 48000.0;
     float pitchRatio = 1.0f;
     float modWheel = 0.0f;

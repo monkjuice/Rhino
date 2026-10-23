@@ -46,4 +46,36 @@ inline bool isFxModule(const ui::Module& module)
 {
     return module.id != nullptr && module.id[0] == 'f' && module.id[1] == 'x' && module.id[2] == '\0';
 }
+
+// Which filter's TYPE or FREQ a control is, by its id, or -1 for any other
+// control. Filter 1's ids are its old ones and filter 2's carry its number, so
+// both are spelt by filterParameterId, once: the panel asks on every tick.
+inline int filterIndexIn(const juce::String& id, const std::array<juce::String, filterCount>& ids)
+{
+    for (int filter = 0; filter < filterCount; ++filter)
+        if (id == ids[static_cast<size_t>(filter)]) return filter;
+    return -1;
+}
+
+inline std::array<juce::String, filterCount> filterIdsOf(const char* suffix)
+{
+    std::array<juce::String, filterCount> ids;
+    for (int filter = 0; filter < filterCount; ++filter)
+        ids[static_cast<size_t>(filter)] = filterParameterId(filter, suffix);
+    return ids;
+}
+
+inline int filterOfTypeControl(const juce::String& id)
+{
+    static const auto ids = filterIdsOf("Type");
+    return filterIndexIn(id, ids);
+}
+
+inline int filterOfFreqControl(const juce::String& id)
+{
+    static const auto ids = filterIdsOf("Freq");
+    return filterIndexIn(id, ids);
+}
+
+inline bool isFilterTypeControl(const juce::String& id) { return filterOfTypeControl(id) >= 0; }
 }

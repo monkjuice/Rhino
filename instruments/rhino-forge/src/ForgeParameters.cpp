@@ -108,9 +108,9 @@ std::unique_ptr<juce::RangedAudioParameter> parameter(const juce::String& id, co
 // to be stepped.
 //
 // A switch whose two states have names of their own says them: the mixer draws
-// the filter routing as a field rather than as a chip, and "FILTER" or "MAIN"
-// is what that field has to read. The chips on the FILTER module are unaffected
-// — they carry their own caption and never print a value.
+// a bus's destination, and FILTER 1's, as a field rather than as a chip, and
+// "MAIN" or "BUS 2" is what that field has to read. A chip is unaffected — it
+// carries its own caption and never prints a value.
 std::unique_ptr<juce::RangedAudioParameter> toggle(const juce::String& id, const juce::String& name,
                                                    bool initial, const char* whenOff = nullptr,
                                                    const char* whenOn = nullptr)
@@ -299,27 +299,31 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     for (int type = 0; type < filterTypeCount; ++type) filterTypeNames.add(filterTypeName(type));
     result.push_back(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID {"filterType", 1}, "Filter Type", filterTypeNames, 0));
-    // Where a source goes. One switch, two readings: the FILTER module draws it
-    // as a lettered chip, the mixer as a field that says the destination out.
+    // Whether a source goes through FILTER 1. One switch, two drawings: a
+    // lettered chip on the FILTER module, and the F1 chip in the source's mixer
+    // strip. A source can go through both filters, so this says nothing about
+    // where else it goes and reads as a plain on or off.
     for (int index = 0; index < oscillatorCount; ++index)
     {
         const auto letter = oscillatorLetter(index);
-        result.push_back(toggle("route" + letter, "Filter Route Osc " + letter,
-                                true, "MAIN", "FILTER"));
+        result.push_back(toggle("route" + letter, "Filter Route Osc " + letter, true));
     }
-    result.push_back(toggle("routeSub", "Filter Route Sub", true, "MAIN", "FILTER"));
-    result.push_back(toggle("routeNoise", "Filter Route Noise", true, "MAIN", "FILTER"));
+    result.push_back(toggle("routeSub", "Filter Route Sub", true));
+    result.push_back(toggle("routeNoise", "Filter Route Noise", true));
     // CUTOFF reads as a vowel while a formant filter is in charge, because
     // that is what the knob is doing there: a formant filter has no corner to
     // set and the knob moves the mouth instead. Read out of the same function
     // the engine tunes the resonators from.
-    result.push_back(parameter("cutoff", "Cutoff", {30.0f, 18000.0f, 0.0f, 0.25f}, 7800.0f,
-                               [this] (float value)
-                               {
-                                   if (filterTypeOf(filterTypeValue()) == FilterType::formant)
-                                       return juce::String("VOWEL ") + filterVowelName(value);
-                                   return asHertz(value);
-                               }));
+    const auto cutoffText = [this] (int filter)
+    {
+        return [this, filter] (float value)
+        {
+            if (filterTypeOf(filterTypeValue(filter)) == FilterType::formant)
+                return juce::String("VOWEL ") + filterVowelName(value);
+            return asHertz(value);
+        };
+    };
+    result.push_back(parameter("cutoff", "Cutoff", {30.0f, 18000.0f, 0.0f, 0.25f}, 7800.0f, cutoffText(0)));
     // Off by default: every patch written before this switch existed was
     // played with a corner that stayed where it was put.
     result.push_back(toggle("filterKeyTrack", "Filter Key Track", false));
@@ -332,7 +336,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     // stages — filterFreqText below, reading the same table the engine does,
     // so a field cannot be labelled as one thing and rendered as another.
     result.push_back(parameter("filterFreq", "Filter Freq", {0.0f, 1.0f}, 0.0f,
-                               [this] (float value) { return filterFreqText(value); }));
+                               [this] (float value) { return filterFreqText(0, value); }));
 
     // --- The mixer ------------------------------------------------------------
     //
@@ -666,6 +670,44 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     result.push_back(toggle("arpVelRetrig", "Arp Velocity Retrigger", false));
     result.push_back(parameter("arpVelDecay", "Arp Velocity Decay", {0.0f, 1.0f}, 0.15f, asPercent));
     result.push_back(parameter("arpVelTarget", "Arp Velocity Target", {0.0f, 1.0f}, 0.0f, asPercent));
+
+    // --- The second filter ----------------------------------------------------
+    //
+    // FILTER 2 is FILTER 1's control set again, behind the second card in the
+    // FILTER module's header and in a mixer strip of its own. Declared last
+    // rather than beside the first so that no parameter a host or a project
+    // already knows by its place in the list moves.
+    //
+    // Everything opens where filter 1 does except the routes, which open off:
+    // a filter nothing reaches is not run, so a patch written before this
+    // existed loads it at its defaults and sounds exactly as it did.
+    {
+        const auto id = [] (const char* suffix) { return filterParameterId(1, suffix); };
+        result.push_back(toggle(id("Enable"), "Filter 2 Enable", true));
+        result.push_back(std::make_unique<juce::AudioParameterChoice>(
+            juce::ParameterID {id("Type"), 1}, "Filter 2 Type", filterTypeNames, 0));
+        for (int index = 0; index < oscillatorCount; ++index)
+        {
+            const auto letter = oscillatorLetter(index);
+            result.push_back(toggle(id("Route") + letter, "Filter 2 Route Osc " + letter, false));
+        }
+        result.push_back(toggle(id("RouteSub"), "Filter 2 Route Sub", false));
+        result.push_back(toggle(id("RouteNoise"), "Filter 2 Route Noise", false));
+        result.push_back(parameter(id("Cutoff"), "Filter 2 Cutoff", {30.0f, 18000.0f, 0.0f, 0.25f}, 7800.0f,
+                                   cutoffText(1)));
+        result.push_back(toggle(id("KeyTrack"), "Filter 2 Key Track", false));
+        result.push_back(parameter(id("Resonance"), "Filter 2 Resonance", {0.0f, 1.0f}, 0.12f, asPercent));
+        result.push_back(parameter(id("Drive"), "Filter 2 Drive", {0.0f, 1.0f}, 0.08f, asPercent));
+        result.push_back(parameter(id("Freq"), "Filter 2 Freq", {0.0f, 1.0f}, 0.0f,
+                                   [this] (float value) { return filterFreqText(1, value); }));
+        result.push_back(parameter(id("Pan"), "Filter 2 Pan", {-1.0f, 1.0f}, 0.0f, asPan));
+        result.push_back(parameter(id("Mix"), "Filter 2 Mix", {0.0f, 1.0f}, 1.0f, asPercent));
+        result.push_back(parameter(id("Level"), "Filter 2 Level", {0.0f, 1.0f}, 1.0f, asDecibels));
+        sends(id(""), "Filter 2");
+    }
+    // Where FILTER 1's channel goes: the main output, or on into FILTER 2, which
+    // runs the two in series. Its mixer strip's TO field, as a bus's is.
+    result.push_back(toggle("filterSerial", "Filter 1 Destination", false, "MAIN", "FILTER 2"));
 
     return {result.begin(), result.end()};
 }

@@ -29,9 +29,8 @@ namespace rhino::forge::ui::merli
 // over the header plates before they start.
 inline constexpr float furBandTop = 28.0f;
 
-// Where the title and cat plates start: a row above the tabs well, so the
-// three line up, and eight rows into the fur. Down here, rather than higher,
-// the left ear shows its pink above the title plate instead of only its tip.
+// Where the cat plate and the wordmark's box start: a row above the tabs well,
+// so the three line up, and eight rows into the fur.
 inline constexpr float headerPlateTop = 36.0f;
 
 // The ears as drawn: their width on the panel, and where the art's box sits so
@@ -119,26 +118,193 @@ inline void drawModuleWell(juce::Graphics& g, juce::Rectangle<float> box)
     g.strokePath(wall, juce::PathStrokeType(1.0f));
 }
 
-// The plate the wordmark sits on. Forge sets the logo at a fixed origin on an
-// irregular header piece; Merli's plate is a rectangle, so the logo is simply
-// centred on it, fitted to the plate less its margins: 40 px tall, three under
-// Forge's 43, because the plate starts at headerPlateTop.
-inline void drawTitlePlate(juce::Graphics& g, juce::Rectangle<float> box)
-{
-    drawRoundedPlate(g, box, 6.0f, 1.0f, true);
-    // A whisper of brushed grain, inside the hairline so the edge stays crisp.
-    juce::Path face;
-    face.addRoundedRectangle(box.reduced(1.5f), 4.5f);
-    fillTexture(g, face, Asset::plate, 1.0f, 0.10f, {box.getX(), box.getY()});
+// The wordmark's geometry is worked out for letters 40 px tall, the size the
+// header gives them, and scaled with them when a narrow panel fits them
+// smaller, so the shadow and the hairs keep to the letters.
+inline constexpr float wordmarkDesignHeight = 40.0f;
 
+// The shadow the letters cast on the fur: a wide soft one that sinks them into
+// the coat and a tight one where they rest on it. Blurred from the letters'
+// own alpha at the layer's resolution, in an image padded wider than the blur
+// reaches, because a drop shadow is blurred inside its source's bounds.
+inline void drawLetterShadows(juce::Graphics& g, const juce::Image& logo, juce::Rectangle<float> target)
+{
+    const auto scale = juce::jmax(1.0f, g.getInternalContext().getPhysicalPixelScaleFactor());
+    const auto size = target.getHeight() / wordmarkDesignHeight;
+    const auto area = target.expanded(12.0f * size);
+    juce::Image letters(juce::Image::ARGB, juce::roundToInt(area.getWidth() * scale),
+                        juce::roundToInt(area.getHeight() * scale), true, juce::SoftwareImageType());
+    {
+        juce::Graphics into(letters);
+        into.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
+        into.drawImage(logo, (target - area.getPosition()) * scale, juce::RectanglePlacement::stretchToFit);
+    }
+    juce::Graphics::ScopedSaveState state(g);
+    g.addTransform(juce::AffineTransform::scale(1.0f / scale).translated(area.getX(), area.getY()));
+    const auto cast = [&] (float radius, float drop, float alpha)
+    {
+        juce::DropShadow(juce::Colours::black.withAlpha(alpha), juce::jmax(1, juce::roundToInt(radius * size * scale)),
+                         {0, juce::roundToInt(drop * size * scale)}).drawForImage(g, letters);
+    };
+    cast(5.0f, 3.0f, 0.85f);
+    cast(2.0f, 1.5f, 0.9f);
+}
+
+// Where the letters meet the fur: in every column of the logo, its lowest
+// opaque pixel and the outward normal of the edge there. A column whose lowest
+// edge faces sideways more than down is a letter's flank and grows no hair;
+// the inner edges, the counters and the undersides of arms with metal below
+// them, are never a column's lowest and grow none either, which is what keeps
+// the letters resting on the coat rather than furred themselves.
+struct LetterFoot { float x, y, nx, ny; };
+
+inline std::vector<LetterFoot> letterFeet(const juce::Image& logo)
+{
+    std::vector<LetterFoot> feet;
+    const juce::Image::BitmapData pixels(logo, juce::Image::BitmapData::readOnly);
+    const auto w = logo.getWidth(), h = logo.getHeight();
+    const auto opacity = [&] (int x, int y)
+    {
+        return x < 0 || y < 0 || x >= w || y >= h ? 0.0f : pixels.getPixelColour(x, y).getFloatAlpha();
+    };
+    for (int x = 0; x < w; ++x)
+        for (int y = h - 1; y >= 0; --y)
+        {
+            if (opacity(x, y) < 0.5f) continue;
+            const auto gx = opacity(x + 1, y - 1) + 2.0f * opacity(x + 1, y) + opacity(x + 1, y + 1)
+                          - opacity(x - 1, y - 1) - 2.0f * opacity(x - 1, y) - opacity(x - 1, y + 1);
+            const auto gy = opacity(x - 1, y + 1) + 2.0f * opacity(x, y + 1) + opacity(x + 1, y + 1)
+                          - opacity(x - 1, y - 1) - 2.0f * opacity(x, y - 1) - opacity(x + 1, y - 1);
+            const auto length = std::hypot(gx, gy);
+            if (length > 0.001f && -gy / length > 0.3f)
+                feet.push_back({static_cast<float>(x) + 0.5f, static_cast<float>(y) + 0.5f, -gx / length, -gy / length});
+            break;
+        }
+    return feet;
+}
+
+// A value every `period` along the foot, eased between, so neighbouring hairs
+// grow to like heights and lean alike: that is what reads as a coat rather
+// than as stubble.
+struct FurNoise
+{
+    FurNoise(juce::Random& random, float span, float periodToUse) : period(periodToUse)
+    {
+        for (int i = 0, count = static_cast<int>(span / period) + 2; i < count; ++i)
+            knots.push_back(random.nextFloat());
+    }
+
+    float operator()(float at) const
+    {
+        const auto t = juce::jmax(0.0f, at / period);
+        const auto i = juce::jmin(static_cast<int>(t), static_cast<int>(knots.size()) - 2);
+        auto u = juce::jlimit(0.0f, 1.0f, t - static_cast<float>(i));
+        u = u * u * (3.0f - 2.0f * u);
+        return knots[static_cast<size_t>(i)] + (knots[static_cast<size_t>(i) + 1] - knots[static_cast<size_t>(i)]) * u;
+    }
+
+    float period;
+    std::vector<float> knots;
+};
+
+// One hair: a tapered blade from its root in the fur to a fine tip over the
+// letter, bending a little along its length. Its outer half also goes into
+// `tips`, which is lit the way the coat's own hairs are lit at their ends.
+inline void addHair(juce::Path& hairs, juce::Path& tips, juce::Point<float> root, float angle, float bend,
+                    float length, float width)
+{
+    constexpr int segments = 6;
+    std::array<juce::Point<float>, segments + 1> left, right;
+    for (int i = 0; i <= segments; ++i)
+    {
+        const auto t = static_cast<float>(i) / static_cast<float>(segments);
+        const auto heading = angle + bend * t;
+        const auto spine = root + juce::Point<float>(std::cos(heading), std::sin(heading)) * (length * t);
+        const auto half = width * 0.5f * std::pow(1.0f - t, 0.8f) + 0.08f;
+        const auto across = juce::Point<float>(-std::sin(heading), std::cos(heading)) * half;
+        left[static_cast<size_t>(i)] = spine + across;
+        right[static_cast<size_t>(i)] = spine - across;
+    }
+    const auto outline = [&] (juce::Path& into, int from)
+    {
+        into.startNewSubPath(left[static_cast<size_t>(from)]);
+        for (int i = from + 1; i <= segments; ++i) into.lineTo(left[static_cast<size_t>(i)]);
+        for (int i = segments; i >= from; --i) into.lineTo(right[static_cast<size_t>(i)]);
+        into.closeSubPath();
+    };
+    outline(hairs, 0);
+    outline(tips, segments / 2);
+}
+
+// The fringe of fur over the letters' feet: two hairs rooted a pixel or two
+// out in the coat below every column's foot, growing back over the metal. The
+// hairs are filled with the fur tile from the band's own origin, so each one
+// is the coat around it carried over the edge, lit toward its tip; a shadow
+// under each, on the letters alone, lifts it off the metal. The seed is fixed,
+// so every rebuild grows the same coat.
+inline void drawFurOverLetters(juce::Graphics& g, const juce::Image& logo, juce::Rectangle<float> target)
+{
+    // Logo pixels to design units, and design units to the panel.
+    const auto unit = wordmarkDesignHeight / static_cast<float>(logo.getHeight());
+    const auto size = target.getHeight() / wordmarkDesignHeight;
+    juce::Random random(0x5eed);
+    // The noise is read along x at 1.3 and down at 0.7; twice the width covers
+    // both.
+    const auto span = static_cast<float>(logo.getWidth()) * unit * 2.0f;
+    const FurNoise tall(random, span, 5.0f), leaning(random, span, 14.0f);
+
+    juce::Path hairs, tips;
+    for (const auto& foot : letterFeet(logo))
+        for (int i = 0; i < 2; ++i)
+        {
+            const auto x = foot.x * unit, y = foot.y * unit;
+            const auto key = x * 1.3f + y * 0.7f;
+            const auto height = (1.0f + 4.5f * std::pow(tall(key), 1.6f)) * (0.6f + 0.55f * random.nextFloat());
+            const auto angle = std::atan2(-foot.ny, -foot.nx) + (leaning(key) - 0.5f) * 1.4f
+                             + (random.nextFloat() - 0.5f) * 0.36f;
+            const auto along = (random.nextFloat() - 0.5f) * 1.2f;
+            const auto depth = 0.8f + 1.2f * random.nextFloat();
+            const juce::Point<float> root(x + foot.nx * depth - foot.ny * along, y + foot.ny * depth + foot.nx * along);
+            const auto bend = (random.nextFloat() - 0.5f) * 0.7f;
+            addHair(hairs, tips, root, angle, bend, height + depth, 0.45f + 0.4f * random.nextFloat());
+        }
+    const auto toPanel = juce::AffineTransform::scale(size).translated(target.getX(), target.getY());
+    hairs.applyTransform(toPanel);
+    tips.applyTransform(toPanel);
+
+    {
+        juce::Graphics::ScopedSaveState state(g);
+        g.reduceClipRegion(logo, juce::AffineTransform::scale(size * unit).translated(target.getX(), target.getY()));
+        g.setColour(juce::Colours::black.withAlpha(0.45f));
+        g.fillPath(hairs, juce::AffineTransform::translation(0.0f, 0.8f * size));
+    }
+    fillTexture(g, hairs, Asset::fur, 1.0f, 1.0f, furOrigin());
+    g.setColour(furRimLit.withAlpha(0.45f));
+    g.fillPath(tips);
+}
+
+// The wordmark, standing in the fur with no plate under it. Forge sets the logo
+// at a fixed origin on an irregular header piece; Merli centres it in the box
+// a plate would fill, less a plate's margins: 40 px tall, three under Forge's
+// 43, because the box starts at headerPlateTop.
+inline void drawWordmarkOnFur(juce::Graphics& g, juce::Rectangle<float> box)
+{
     const auto logo = juce::ImageCache::getFromMemory(BinaryData::forge_logo_png, BinaryData::forge_logo_pngSize);
     if (logo.isNull()) return;
-    juce::Graphics::ScopedSaveState state(g);
-    g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
-    // Full strength, whatever the plate's screws left the colour at: an image
-    // takes the current colour's alpha.
-    g.setOpacity(1.0f);
-    g.drawImage(logo, box.reduced(14.0f, 7.0f), juce::RectanglePlacement::centred);
+    const auto target = juce::RectanglePlacement(juce::RectanglePlacement::centred)
+                            .appliedTo(logo.getBounds().toFloat(), box.reduced(14.0f, 7.0f));
+    if (target.getHeight() < 4.0f) return;
+
+    drawLetterShadows(g, logo, target);
+    {
+        juce::Graphics::ScopedSaveState state(g);
+        g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
+        // Full strength, whatever the fur's rim left the colour at: an image
+        // takes the current colour's alpha.
+        g.setOpacity(1.0f);
+        g.drawImage(logo, target, juce::RectanglePlacement::stretchToFit);
+    }
+    drawFurOverLetters(g, logo, target);
 }
 
 // The cat, lifted off merli_title_plate.png as a mask. The asset's cat sits on
@@ -278,10 +444,10 @@ inline void drawBackdrop(juce::Graphics& g, juce::Rectangle<int> componentBounds
     const auto shelfTop = static_cast<float>(keyboardStrip(componentBounds).getY());
     drawModuleWell(g, {9.0f, 97.0f, w - 18.0f, shelfTop - 6.0f - 97.0f});
 
-    // The header. The tabs well is Forge's; the title plate ends short of it,
-    // which at the minimum width is well inside Forge's fixed plate edge.
+    // The header. The tabs well is Forge's; the wordmark's box ends short of
+    // it, which at the minimum width is well inside Forge's fixed plate edge.
     const auto tabs = tabBounds(0, width).getUnion(tabBounds(tabCount - 1, width)).toFloat().expanded(6.0f, 5.0f);
-    drawTitlePlate(g, juce::Rectangle<float>::leftTopRightBottom(12.0f, headerPlateTop, tabs.getX() - 11.0f, 90.0f));
+    drawWordmarkOnFur(g, juce::Rectangle<float>::leftTopRightBottom(12.0f, headerPlateTop, tabs.getX() - 11.0f, 90.0f));
     drawRoundedWell(g, tabs, tabWellFloor, 1.0f, 6.0f);
 
     // The right-hand end is two plates: the cat's, and a housing carrying the

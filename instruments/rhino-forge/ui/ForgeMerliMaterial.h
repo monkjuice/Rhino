@@ -16,7 +16,7 @@ namespace rhino::forge::ui::merli
 {
 // The ears are the cat's own: earRight is the ear on the viewer's left, as it
 // is on a cat facing you.
-enum class Asset { fur, panel, plate, earLeft, earRight, screwSmall, screwLarge, titlePlate };
+enum class Asset { fur, panel, earLeft, earRight, screwSmall, screwLarge, titlePlate };
 
 // The decoded PNG. The two screws are trimmed to their opaque pixels, so a
 // radius handed to drawScrew describes the hardware and not the gutter the
@@ -28,7 +28,6 @@ inline juce::Image image(Asset asset)
     {
         case Asset::fur:        return from(BinaryData::merli_fur_png, BinaryData::merli_fur_pngSize);
         case Asset::panel:      return from(BinaryData::merli_panel_png, BinaryData::merli_panel_pngSize);
-        case Asset::plate:      return from(BinaryData::merli_plate_png, BinaryData::merli_plate_pngSize);
         case Asset::earLeft:    return from(BinaryData::merli_ear_left_png, BinaryData::merli_ear_left_pngSize);
         case Asset::earRight:   return from(BinaryData::merli_ear_right_png, BinaryData::merli_ear_right_pngSize);
         case Asset::screwSmall: return from(BinaryData::merli_screw_small_png, BinaryData::merli_screw_small_pngSize)

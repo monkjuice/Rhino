@@ -93,12 +93,14 @@ juce_add_plugin(RhinoForge
 # for what was cut and how to re-cut them; unsubsetted they are 988 KB, and
 # juce_add_binary_data expands an asset to roughly three bytes of C++ per byte.
 #
-# The Merli theme's eight images under ui/assets/themes/merli/ are about
-# 0.87 MB together and so become roughly 2.6 MB of generated C++, rebuilt on
+# The Merli theme's seven images under ui/assets/themes/merli/ are about
+# 0.83 MB together and so become roughly 2.5 MB of generated C++, rebuilt on
 # every clean build. The fur tile is most of it (0.59 MB): it is the theme's
 # whole look, rebuilt from the designer's 2 MB swatch as a seamless tile at the
 # size it is drawn. Everything else is a tile the panel repeats or a small
-# part, never a whole screen; a ninth image should earn its place the same way.
+# part, never a whole screen; an eighth image should earn its place the same
+# way. merli_plate.png sits beside them uncompiled: the title plate it grained
+# is gone, and the wordmark stands on the fur.
 juce_add_binary_data(RhinoForgeAssets SOURCES
     ui/assets/forge_logo.png
     ui/assets/screw_cross.png
@@ -108,7 +110,6 @@ juce_add_binary_data(RhinoForgeAssets SOURCES
     ui/assets/themes/merli/merli_ear_right.png
     ui/assets/themes/merli/merli_fur.png
     ui/assets/themes/merli/merli_panel.png
-    ui/assets/themes/merli/merli_plate.png
     ui/assets/themes/merli/merli_screw_large.png
     ui/assets/themes/merli/merli_screw_small.png
     ui/assets/themes/merli/merli_title_plate.png

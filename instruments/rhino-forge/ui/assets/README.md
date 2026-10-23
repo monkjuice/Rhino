@@ -26,7 +26,7 @@ stretching, so a changed aspect changes how wide the wordmark draws.
 ## Merli theme (`themes/merli/`)
 
 The second look, from a designer's kit of textures and a mockup drawn over an
-older Forge layout. Every file here is embedded and fetched through
+older Forge layout. Every file here but `merli_plate.png` is embedded and fetched through
 `juce::ImageCache` at the point of use (`merli::image` in
 `ui/ForgeMerliMaterial.h`); none is held in a static, and none is drawn on the
 frame path, only into the cached chassis and plate layers.
@@ -36,7 +36,7 @@ frame path, only into the cached chassis and plate layers.
 | `merli_fur.png` | The fur band, side margins, foot and shelf gaps, tiled 1:1 by `merli::drawFur`. |
 | `merli_ear_left.png`, `merli_ear_right.png` | The two ears, drawn at 76 px wide. Named for the cat's own ears, so `merli_ear_right.png` is the one on the viewer's left. |
 | `merli_panel.png` | The well the modules stand in, under a 60% floor colour. |
-| `merli_plate.png` | A faint grain on the title plate behind the wordmark. |
+| `merli_plate.png` | Not compiled in. It grained the title plate behind the wordmark until the plate was removed and the wordmark set straight on the fur (`merli::drawWordmarkOnFur`); kept for a plate that wants grain again. |
 | `merli_title_plate.png` | Source of the cat silhouette on the plate right of the tabs: read out as a mask by brightness at each rebuild, never blitted whole. |
 | `merli_screw_small.png`, `merli_screw_large.png` | The plates' corner screws and the preset housing's screw. |
 

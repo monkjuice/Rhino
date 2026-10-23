@@ -354,11 +354,7 @@ bool DeviceEditorPanel::handleAutoTuneClick(const juce::MouseEvent& event)
     // only reads that when it is built. Without this the delay compensation
     // stays on the old figure until the next time playback starts, which puts
     // the corrected voice out of time with everything else.
-    const auto rebuildGraph = [this]
-    {
-        if (session.edit != nullptr && session.edit->getTransport().isPlaying())
-            session.edit->restartPlayback();
-    };
+    const auto rebuildGraph = [this] { session.restartPlaybackIfRolling(); };
 
     if (layout.live.contains(position))
     {

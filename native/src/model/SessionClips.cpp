@@ -12,7 +12,7 @@ namespace rhino
 // reads the timeline only.
 te::Clip* Session::findClip(te::EditItemID id) const
 {
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     for (auto* track : tracks)
         if (auto* clip = track->findClipForID(id))
             return clip;
@@ -71,7 +71,7 @@ juce::Result Session::editClipInEdit(te::EditItemID id, ClipGeometry next, ClipG
         || next.start < 0.0 || next.end <= next.start || next.offset < -1.0e-8
         || next.end > te::Edit::getMaximumEditEnd().inSeconds())
         return juce::Result::fail("Invalid clip position.");
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     auto* oldTrack = clip->getClipTrack();
     const auto oldTrackIndex = tracks.indexOf(dynamic_cast<te::AudioTrack*>(oldTrack));
     const auto movingMidi = dynamic_cast<te::MidiClip*>(clip) != nullptr;
@@ -110,7 +110,7 @@ juce::Result Session::editClipInEdit(te::EditItemID id, ClipGeometry next, ClipG
         ensureSceneSlots();
         reconcileTrackGroups();
     }
-    const auto refreshedTracks = te::getAudioTracks(*edit);
+    const auto refreshedTracks = audioTracks();
     if (targetTrack != oldTrackIndex)
     {
         auto* target = refreshedTracks[targetTrack];
@@ -298,7 +298,7 @@ juce::Result Session::duplicateClip(te::EditItemID id)
 {
     auto* clip = findClip(id);
     if (!clip) return juce::Result::fail("Select a clip to duplicate.");
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     const auto track = tracks.indexOf(dynamic_cast<te::AudioTrack*>(clip->getClipTrack()));
     if (track < 0) return juce::Result::fail("The selected clip is not on a track.");
     const auto time = clip->getPosition().time;
@@ -446,7 +446,7 @@ int Session::clipPluginCount(te::Clip& clip)
 
 void Session::toggleTrackMute(int track)
 {
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(track, tracks.size())) return;
     edit->getUndoManager().beginNewTransaction("Track mute");
     tracks[track]->state.setProperty(te::IDs::mute, !tracks[track]->isMuted(false), &edit->getUndoManager());
@@ -459,7 +459,7 @@ void Session::toggleTrackMute(int track)
 
 void Session::toggleTrackSolo(int track)
 {
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(track, tracks.size())) return;
     edit->getUndoManager().beginNewTransaction("Track solo");
     tracks[track]->state.setProperty(te::IDs::solo, !tracks[track]->isSolo(false), &edit->getUndoManager());

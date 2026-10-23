@@ -153,7 +153,7 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
     }
     if (event.y >= rulerTop && event.y < lanesTop && event.x >= headerWidth)
     {
-        const auto loopRange = session.edit->getTransport().getLoopRange();
+        const auto loopRange = session.loopRange();
         loopOriginalStart = loopRange.getStart().inSeconds();
         loopOriginalEnd = loopRange.getEnd().inSeconds();
         loopPreviewStart = loopOriginalStart;
@@ -495,8 +495,7 @@ void Arrangement::mouseUp(const juce::MouseEvent& event)
             // disagree about where the click was.
             const auto seconds = snappedDown(std::max(0.0, timeAt(event.position.x)), event.mods.isAltDown());
             setInsertPoint(seconds, timeSelection.active ? timeSelection.firstTrack : selectedTrack);
-            session.setPlaybackStart(seconds);
-            session.edit->getTransport().setPosition(tracktion::core::TimePosition::fromSeconds(seconds));
+            session.locate(seconds);
             updatePlayhead();
         }
         repaint();

@@ -53,7 +53,7 @@ int Session::patternTrackIndex() const
 {
     if (patternClip == nullptr) return -1;
     auto* track = trackHoldingClip(*edit, *patternClip);
-    return track != nullptr ? te::getAudioTracks(*edit).indexOf(track) : -1;
+    return track != nullptr ? audioTracks().indexOf(track) : -1;
 }
 
 juce::Result Session::addNote(double startSteps, int pitch, double lengthSteps,

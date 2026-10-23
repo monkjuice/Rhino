@@ -114,7 +114,7 @@ void Session::bindDjTrack(int slot, int track)
     auto& b = *dj;
     auto& deck = b.decks[static_cast<size_t>(slot)];
     auto& port = b.engine.port(slot);
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     auto* next = juce::isPositiveAndBelow(track, tracks.size()) ? tracks[track] : nullptr;
     const auto changing = next == nullptr || deck.boundTrack != next->itemID;
     // The track it played before, when that is another, plays the song again:
@@ -177,7 +177,7 @@ void Session::djUnbindAll()
     // Every hidden end of every track, whatever port it points at: nothing
     // may be left reading the booth once it goes.
     if (edit == nullptr) return;
-    for (auto* t : te::getAudioTracks(*edit))
+    for (auto* t : audioTracks())
     {
         const auto devices = portDevicesOf(*t);
         if (devices.input != nullptr) devices.input->setPort(nullptr);
@@ -265,7 +265,7 @@ juce::Result Session::loadDjDeckTrack(int index, int track)
     const auto slot = dj != nullptr ? dj->slotOf(index) : -1;
     if (slot < 0)
         return juce::Result::fail("That deck does not exist.");
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(track, tracks.size()) || isGroupBusTrack(track))
         return juce::Result::fail("Choose a track of the song for the deck.");
     for (int other = 0; other < dj->count; ++other)
@@ -305,7 +305,7 @@ juce::Result Session::loadDjDeckSlot(int index, int track, int scene)
     const auto deckSlot = dj != nullptr ? dj->slotOf(index) : -1;
     if (deckSlot < 0)
         return juce::Result::fail("That deck does not exist.");
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(track, tracks.size()) || isGroupBusTrack(track))
         return juce::Result::fail("Choose a track of the song for the deck.");
     const auto clip = slotClip(track, scene);
@@ -724,7 +724,7 @@ void Session::djDocumentChanged(int track, ModelChange changes)
     constexpr auto clipBits = static_cast<unsigned>(ModelChange::notes) | static_cast<unsigned>(ModelChange::audioClips);
     const auto tempoChanged = (bits & static_cast<unsigned>(ModelChange::tempo)) != 0;
     if ((bits & clipBits) == 0 && !tempoChanged) return;
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     const auto changedId = juce::isPositiveAndBelow(track, tracks.size()) ? tracks[track]->itemID : te::EditItemID();
     for (int i = 0; i < dj->count; ++i)
     {
@@ -742,7 +742,12 @@ void Session::djDocumentChanged(int track, ModelChange changes)
 bool Session::gestureHeld() const
 {
     return parameterGestureDepth > 0 || mixerGestureDepth > 0 || tempoGestureDepth > 0 || audioClipGestureDepth > 0
-        || noteVelocityGestureDepth > 0 || juce::Component::isMouseButtonDownAnywhere();
+        || noteVelocityGestureDepth > 0 || pointerHeld;
+}
+
+void Session::setPointerHeld(bool held)
+{
+    pointerHeld = held;
 }
 
 void Session::djPoll()

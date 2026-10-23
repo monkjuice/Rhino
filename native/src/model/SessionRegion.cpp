@@ -69,7 +69,7 @@ Session::ClipRegion Session::copyClipRegion(double startSeconds, double endSecon
     ClipRegion region;
     if (!std::isfinite(startSeconds) || !std::isfinite(endSeconds) || endSeconds <= startSeconds + regionTolerance)
         return region;
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     firstTrack = std::max(0, firstTrack);
     lastTrack = std::min(lastTrack, tracks.size() - 1);
     if (firstTrack > lastTrack)
@@ -161,7 +161,7 @@ Session::ClipRegion Session::copyClipRegion(double startSeconds, double endSecon
 bool Session::clearClipRegionInEdit(double startSeconds, double endSeconds, int firstTrack, int lastTrack,
                                     const std::vector<te::EditItemID>& keep)
 {
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     firstTrack = std::max(0, firstTrack);
     lastTrack = std::min(lastTrack, tracks.size() - 1);
     const auto kept = [&keep](const te::Clip& clip)
@@ -230,7 +230,7 @@ bool Session::clearClipRegionInEdit(double startSeconds, double endSeconds, int 
 // fills it, rather than replacing the whole thing.
 void Session::makeRoomForClip(te::Clip& winner, const std::vector<te::EditItemID>& alsoKeep)
 {
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     const auto track = tracks.indexOf(dynamic_cast<te::AudioTrack*>(winner.getClipTrack()));
     if (track < 0)
         return;
@@ -245,7 +245,7 @@ juce::Result Session::clearClipRegion(double startSeconds, double endSeconds, in
 {
     if (!std::isfinite(startSeconds) || !std::isfinite(endSeconds) || endSeconds <= startSeconds + regionTolerance)
         return juce::Result::fail("Select a span of the timeline first.");
-    if (firstTrack > lastTrack || firstTrack >= te::getAudioTracks(*edit).size())
+    if (firstTrack > lastTrack || firstTrack >= audioTracks().size())
         return juce::Result::fail("Select a track first.");
     edit->getUndoManager().beginNewTransaction("Delete time selection");
     if (!clearClipRegionInEdit(startSeconds, endSeconds, firstTrack, lastTrack))
@@ -285,7 +285,7 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
         if (juce::isPositiveAndBelow(snapshot.track, static_cast<int>(rowType.size())))
             rowType[static_cast<size_t>(snapshot.track)] = snapshot.midi ? TrackType::midi : TrackType::audio;
 
-    const auto trackCountBefore = te::getAudioTracks(*edit).size();
+    const auto trackCountBefore = audioTracks().size();
     for (size_t row = 0; row < rowType.size(); ++row)
     {
         // A row the paste will make is made as the kind that row wants, so
@@ -313,9 +313,9 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
         return failure;
     };
     auto addedLanes = false;
-    while (te::getAudioTracks(*edit).size() < destinationTrack + region.trackSpan + 1)
+    while (audioTracks().size() < destinationTrack + region.trackSpan + 1)
     {
-        const auto row = te::getAudioTracks(*edit).size() - destinationTrack;
+        const auto row = audioTracks().size() - destinationTrack;
         const auto type = juce::isPositiveAndBelow(row, static_cast<int>(rowType.size()))
                               ? rowType[static_cast<size_t>(row)].value_or(TrackType::audio)
                               : TrackType::audio;
@@ -340,7 +340,7 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
     clearClipRegionInEdit(destinationStart, destinationStart + region.spanSeconds,
                           destinationTrack, destinationTrack + region.trackSpan);
 
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     // Every row the paste cleared or filled, and the rows whose devices a MIDI
     // clip changed by bringing its instrument or its kit.
     std::vector<int> rows, gainedDevices;

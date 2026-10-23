@@ -177,6 +177,8 @@ target_sources(RhinoNative PRIVATE
     src/tests/DjTest.cpp
     src/tests/PresetTest.cpp
     src/tests/UiProfile.cpp
+    src/tests/StressProfile.cpp
+    src/tests/LayerLintTest.cpp
     src/tests/TestRunners.cpp
     src/tests/Pattern/DeviceRackTest.cpp
     src/tests/Pattern/DrumRackWindowTest.cpp

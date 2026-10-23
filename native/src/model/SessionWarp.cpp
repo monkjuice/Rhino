@@ -226,7 +226,7 @@ void Session::applyWarpState(te::WaveAudioClip& clip, bool on, WarpMode mode)
 // setTempo, after the engine has finished moving everything it moves itself.
 void Session::updateRepitchedClips()
 {
-    for (auto* track : te::getAudioTracks(*edit))
+    for (auto* track : audioTracks())
         for (auto* clip : track->getClips())
             if (auto* audio = dynamic_cast<te::WaveAudioClip*>(clip))
                 if (storedWarpOn(*audio) && storedMode(*audio) == WarpMode::repitch)

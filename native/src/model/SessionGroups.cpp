@@ -54,17 +54,17 @@ void setMemberGroup(te::AudioTrack& track, int groupId, juce::UndoManager* undoM
 
 bool Session::isGroupBusTrack(int track) const
 {
-    return busGroupOf(te::getAudioTracks(*edit), track) != noGroup;
+    return busGroupOf(cachedTracks(), track) != noGroup;
 }
 
 int Session::trackGroupBusId(int track) const
 {
-    return busGroupOf(te::getAudioTracks(*edit), track);
+    return busGroupOf(cachedTracks(), track);
 }
 
 int Session::trackGroupId(int track) const
 {
-    return memberGroupOf(te::getAudioTracks(*edit), track);
+    return memberGroupOf(cachedTracks(), track);
 }
 
 // Read out of the track order rather than from a stored span. A bus opens a
@@ -73,7 +73,7 @@ int Session::trackGroupId(int track) const
 std::vector<Session::TrackGroup> Session::trackGroups() const
 {
     std::vector<TrackGroup> groups;
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     for (int track = 0; track < tracks.size(); ++track)
     {
         const auto id = busGroupOf(tracks, track);
@@ -108,7 +108,7 @@ void Session::arrangeTrackOrder(const std::vector<te::EditItemID>& desired)
 {
     const auto indexOf = [this](te::EditItemID id)
     {
-        const auto current = te::getAudioTracks(*edit);
+        const auto current = audioTracks();
         for (int track = 0; track < current.size(); ++track)
             if (current[track]->itemID == id)
                 return track;
@@ -124,7 +124,7 @@ void Session::arrangeTrackOrder(const std::vector<te::EditItemID>& desired)
 // it can. The caller has already opened the undo transaction.
 juce::Result Session::assignTracksToGroup(std::vector<int> tracks, int groupId)
 {
-    const auto existing = te::getAudioTracks(*edit);
+    const auto existing = audioTracks();
     auto bus = -1;
     for (int track = 0; track < existing.size(); ++track)
         if (busGroupOf(existing, track) == groupId)
@@ -164,7 +164,7 @@ juce::Result Session::assignTracksToGroup(std::vector<int> tracks, int groupId)
 
     auto& undoManager = edit->getUndoManager();
     arrangeTrackOrder(desired);
-    const auto moved = te::getAudioTracks(*edit);
+    const auto moved = audioTracks();
     for (const auto id : members)
         for (int track = 0; track < moved.size(); ++track)
             if (moved[track]->itemID == id)
@@ -182,7 +182,7 @@ juce::Result Session::groupTracks(std::vector<int> tracks, const juce::String& n
 {
     if (tracks.empty())
         return juce::Result::fail("Select one or more tracks to group.");
-    const auto existing = te::getAudioTracks(*edit);
+    const auto existing = audioTracks();
     for (const auto track : tracks)
         if (busGroupOf(existing, track) != noGroup)
             return juce::Result::fail("A group cannot go inside another group.");
@@ -256,7 +256,7 @@ juce::Result Session::removeTrackFromGroup(int track)
         moveTrackInEdit(track, group->lastTrack());
         track = group->lastTrack();
     }
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(track, tracks.size()))
         return juce::Result::fail("Select a track to remove from its group.");
     setMemberGroup(*tracks[track], noGroup, &undoManager);
@@ -271,7 +271,7 @@ juce::Result Session::removeTrackFromGroup(int track)
 // it is let go, and that renumbers everything below it.
 juce::Result Session::removeTracksFromGroup(std::vector<int> tracks)
 {
-    const auto existing = te::getAudioTracks(*edit);
+    const auto existing = audioTracks();
     std::vector<te::EditItemID> leaving;
     for (const auto track : tracks)
         if (juce::isPositiveAndBelow(track, existing.size()) && memberGroupOf(existing, track) != noGroup)
@@ -280,7 +280,7 @@ juce::Result Session::removeTracksFromGroup(std::vector<int> tracks)
         return juce::Result::fail("Those tracks are not in a group.");
     for (const auto id : leaving)
     {
-        const auto current = te::getAudioTracks(*edit);
+        const auto current = audioTracks();
         for (int track = 0; track < current.size(); ++track)
             if (current[track]->itemID == id)
             {
@@ -303,7 +303,7 @@ void Session::dissolveGroupInEdit(int groupId)
     const auto group = trackGroup(groupId);
     if (!group)
         return;
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     for (int track = group->firstTrack; track <= group->lastTrack(); ++track)
         if (juce::isPositiveAndBelow(track, tracks.size()))
             setMemberGroup(*tracks[track], noGroup, &edit->getUndoManager());
@@ -322,7 +322,7 @@ juce::Result Session::ungroupTracks(int groupId)
     auto& undoManager = edit->getUndoManager();
     undoManager.beginNewTransaction("Ungroup tracks");
     dissolveGroupInEdit(groupId);
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (juce::isPositiveAndBelow(busTrack, tracks.size()))
         edit->deleteTrack(tracks[busTrack]);
     reconcileTrackGroups();
@@ -340,7 +340,7 @@ juce::Result Session::setTrackGroupCollapsed(int groupId, bool collapsed)
     const auto group = trackGroup(groupId);
     if (!group)
         return juce::Result::fail("That group is no longer there.");
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(group->busTrack, tracks.size()))
         return juce::Result::fail("That group is no longer there.");
     tracks[group->busTrack]->state.setProperty(trackGroupCollapsedID, collapsed, nullptr);
@@ -360,7 +360,7 @@ juce::Result Session::setTrackGroupCollapsed(int groupId, bool collapsed)
 void Session::reconcileTrackGroups()
 {
     auto* undoManager = &edit->getUndoManager();
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     // A track carried into the middle of a group joins it, the way a clip
     // dropped on a lane belongs to that lane. Directly under the bus is the
     // middle too: the bus is what opens the group, so the track above a
@@ -439,7 +439,7 @@ void Session::migrateLegacyTrackGroups()
     for (const auto& node : legacy)
     {
         const auto id = static_cast<int>(node.getProperty(legacyTrackGroupIdID, noGroup));
-        const auto tracks = te::getAudioTracks(*edit);
+        const auto tracks = audioTracks();
         std::vector<int> members;
         for (int track = 0; track < tracks.size(); ++track)
             if (memberGroupOf(tracks, track) == id && busGroupOf(tracks, track) == noGroup)

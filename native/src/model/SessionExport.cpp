@@ -67,7 +67,7 @@ void Session::ExportRunDeleter::operator()(ExportRun* run) const
 // switching node's own launchers, which it never waits for.
 juce::Result Session::checkTimelineFiles()
 {
-    for (auto* track : te::getAudioTracks(*edit))
+    for (auto* track : audioTracks())
         for (auto* clip : track->getClips())
             if (const auto readable = checkClipFile(*clip); readable.failed())
                 return readable;

@@ -27,7 +27,7 @@ Add a unit-style test when behavior can be exercised without a complete `Session
 
 CTest entry points:
 
-- `native_arrangement_geometry`: clip edit bounds and playhead damage calculations
+- `native_arrangement_geometry`: clip edit bounds and playhead damage calculations, and the layer lint (`LayerLintTest.cpp`): no source under `ui/` or `app/` reaches past `Session` into the engine
 - `native_device_correctness`: device DSP and state restoration, including Rhino Tune's and Rhino EQ's measured checks in `AutoTuneTest.cpp` and `EqTest.cpp`, and the DJ booth's engine and analysis measured offline in `DjTest.cpp`
 - `native_device_conformance`: every device Rhino makes, rendered offline against the device standard, plus the SDK's own checks through two probe devices (`DeviceConformance.cpp`)
 - `native_device_correctness`: device DSP and state restoration, including Rhino Tune's and Rhino EQ's measured checks in `AutoTuneTest.cpp` and `EqTest.cpp`
@@ -37,3 +37,5 @@ CTest entry points:
 - `native_startup_lifecycle`: application startup
 
 Run all checks with `ctest --test-dir native/build -C Release --output-on-failure`.
+
+Two timing tools, not cases: `RhinoDAW.exe --profile-ui` (`UiProfile.cpp`) and `RhinoDAW.exe --profile-stress` (`StressProfile.cpp`, a 120-track seven-minute song; `RHINO_STRESS_TRACKS`, `RHINO_STRESS_MINUTES`, `RHINO_STRESS_CLIPS`, `RHINO_STRESS_DEVICES` and `RHINO_STRESS_RENDER_SECONDS` shrink or bisect it). Both print medians and check nothing.

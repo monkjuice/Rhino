@@ -74,7 +74,7 @@ void renewDeviceKeys(juce::ValueTree track)
 Session::TrackClipboard Session::copyTracks(const std::vector<int>& chosen) const
 {
     TrackClipboard copied;
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     for (const auto track : wholeGroupsOf(*this, chosen))
     {
         // A hosted plugin keeps its settings to itself until asked, so the
@@ -134,7 +134,7 @@ juce::Result Session::insertTrackCopies(const TrackClipboard& clipboard, int bel
     std::map<int, int> copiedGroups;
     std::vector<te::EditItemID> made;
     te::Track* preceding = nullptr;
-    if (const auto tracks = te::getAudioTracks(*edit); juce::isPositiveAndBelow(after, tracks.size()))
+    if (const auto tracks = audioTracks(); juce::isPositiveAndBelow(after, tracks.size()))
         preceding = tracks[after];
     for (const auto& source : clipboard.tracks)
     {
@@ -183,7 +183,7 @@ juce::Result Session::insertTrackCopies(const TrackClipboard& clipboard, int bel
     if (inserted != nullptr)
     {
         inserted->clear();
-        const auto tracks = te::getAudioTracks(*edit);
+        const auto tracks = audioTracks();
         for (int track = 0; track < tracks.size(); ++track)
             if (std::find(made.begin(), made.end(), tracks[track]->itemID) != made.end())
                 inserted->push_back(track);
@@ -207,7 +207,7 @@ juce::Result Session::removeTracks(const std::vector<int>& chosen)
     // By id: each deletion renumbers everything below it.
     std::vector<te::EditItemID> ids;
     {
-        const auto tracks = te::getAudioTracks(*edit);
+        const auto tracks = audioTracks();
         for (const auto track : doomed)
             ids.push_back(tracks[track]->itemID);
     }
@@ -220,7 +220,7 @@ juce::Result Session::removeTracks(const std::vector<int>& chosen)
         if (const auto groupId = trackGroupBusId(track); groupId != noGroup)
             dissolveGroupInEdit(groupId);
     for (const auto id : ids)
-        for (auto* track : te::getAudioTracks(*edit))
+        for (auto* track : audioTracks())
             if (track->itemID == id)
             {
                 edit->deleteTrack(track);

@@ -368,10 +368,13 @@ MainComponent::MainComponent(Session& s)
         resized();
         repaint();
     };
-    session.edit->getTransport().addChangeListener(this);
+    // The transport's state and the undo history reach the shell through the
+    // model's relays, whichever edit is open, so a new document needs no
+    // re-subscription here.
+    session.transportState.addChangeListener(this);
+    session.undoHistory.addChangeListener(this);
     session.addChangeListener(this);
     session.listeners.add(this);
-    session.edit->getUndoManager().addChangeListener(this);
     patternLabel.setText("PATTERN 1  /  NOTE EDITOR", juce::dontSendNotification);
     patternLabel.setColour(juce::Label::textColourId, palette::textDim);
     setSize(1280, 900);
@@ -392,22 +395,16 @@ MainComponent::~MainComponent()
 {
     stopTimer();
     delete preferences.getComponent();
-    session.edit->getTransport().removeChangeListener(this);
+    session.transportState.removeChangeListener(this);
+    session.undoHistory.removeChangeListener(this);
     session.removeChangeListener(this);
     session.listeners.remove(this);
-    session.edit->getUndoManager().removeChangeListener(this);
 }
 
-void MainComponent::editWillChange()
-{
-    session.edit->getTransport().removeChangeListener(this);
-    session.edit->getUndoManager().removeChangeListener(this);
-}
+void MainComponent::editWillChange() {}
 
 void MainComponent::editDidChange()
 {
-    session.edit->getTransport().addChangeListener(this);
-    session.edit->getUndoManager().addChangeListener(this);
     changeListenerCallback(nullptr);
 }
 
@@ -420,7 +417,7 @@ void MainComponent::logStatus(const juce::String& message)
 
 void MainComponent::changeListenerCallback(juce::ChangeBroadcaster*)
 {
-    const auto playing = session.edit->getTransport().isPlaying();
+    const auto playing = session.isPlaying();
     // The glyph holds still and the brightness moves: a triangle that turns
     // into two bars asks the eye to re-read the button every time the
     // transport starts, and at fourteen pixels the two shapes are too alike
@@ -432,8 +429,8 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster*)
     const auto signature = session.timeSignature();
     signatureField.setSignature(signature.numerator, signature.denominator);
     metronome.setToggleState(session.clickTrackEnabled(), juce::dontSendNotification);
-    undo.setEnabled(session.edit->getUndoManager().canUndo());
-    redo.setEnabled(session.edit->getUndoManager().canRedo());
+    undo.setEnabled(session.canUndo());
+    redo.setEnabled(session.canRedo());
     updateEditorLabel();
     scaleHighlight.setVisible(lowerPane == LowerPane::notes && !session.isPatternDrums());
     // Dropping an instrument turns a bare track into a MIDI one without

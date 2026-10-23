@@ -323,9 +323,9 @@ public:
     // Whether the device shown is still in the edit. The window holds the
     // device alive, so one whose device was deleted or whose document was
     // closed has to go: a plugin must not outlive the edit it belongs to.
-    bool showsDeviceIn(const te::Edit& edit) const
+    bool showsDeviceIn(const Session& session) const
     {
-        return plugin == nullptr || plugin->state.isAChildOf(edit.state);
+        return plugin == nullptr || session.ownsDevice(*plugin);
     }
 
     std::function<void()> onClose;
@@ -398,7 +398,7 @@ void DeviceRack::timerCallback()
 {
     if (isHiddenInShell(*this))
         return;
-    const auto playing = session.edit->getTransport().isPlaying();
+    const auto playing = session.isPlaying();
     // Once more as the transport stops, so the knobs settle where the curve
     // left them rather than a frame short of it.
     if (playing || wasPlaying)
@@ -920,7 +920,7 @@ void DeviceRack::changeListenerCallback(juce::ChangeBroadcaster* source)
 {
     // Before anything else, hidden or not: a window left open on a deleted
     // device would keep it alive.
-    if (floatingWindow != nullptr && !floatingWindow->showsDeviceIn(*session.edit))
+    if (floatingWindow != nullptr && !floatingWindow->showsDeviceIn(session))
         floatingWindow.reset();
     // The Drum Rack's window follows its rack wherever it has gone, whether
     // or not the rack itself is showing, and goes when the rack does.

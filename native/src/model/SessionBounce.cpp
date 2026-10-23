@@ -184,7 +184,7 @@ juce::Result Session::startBounceClips(const std::vector<te::EditItemID>& ids)
     // One job per track the clips are on, so a selection swept across three
     // lanes bounces to three new tracks, each under the lane it came from.
     std::vector<BounceJob> jobs;
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     for (const auto id : ids)
     {
         auto* clip = findClip(id);
@@ -244,7 +244,7 @@ juce::Result Session::startBounceRegion(double start, double end, int firstTrack
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     if (!std::isfinite(start) || !std::isfinite(end) || end - start < minimumSplitSeconds)
         return juce::Result::fail("Select a span of the timeline to bounce.");
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     std::vector<BounceJob> jobs;
     for (auto index = std::max(0, firstTrack); index <= std::min(lastTrack, tracks.size() - 1); ++index)
     {
@@ -313,7 +313,7 @@ juce::Result Session::startBounceTracks(const std::vector<int>& requested)
     });
 
     std::vector<BounceJob> jobs;
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     for (const auto track : chosen)
     {
         BounceJob job;
@@ -367,7 +367,7 @@ juce::Result Session::startBounce(std::vector<BounceJob>& jobs)
         return juce::Result::fail("A bounce is already running.");
     if (isExporting())
         return juce::Result::fail("Wait for the WAV export to finish.");
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     // Every refusal before anything is written.
     for (const auto& job : jobs)
     {
@@ -432,7 +432,7 @@ bool Session::continueBounce(double milliseconds)
                 abandonBounce("Rhino could not name a file for the bounced audio.");
                 return false;
             }
-            const auto tracks = te::getAudioTracks(*edit);
+            const auto tracks = audioTracks();
             te::Track::Array rendered;
             rendered.add(tracks[job.track]);
             for (const auto member : job.members)
@@ -519,7 +519,7 @@ void Session::finishBounce()
     te::Renderer::turnOffAllPlugins(*edit);
     run->renderStatus.reset();
     auto& jobs = run->jobs;
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     lastBounceResult = {};
 
     auto& undo = edit->getUndoManager();
@@ -607,7 +607,7 @@ void Session::finishBounce()
     undo.beginNewTransaction();
 
     BounceResult result;
-    const auto now = te::getAudioTracks(*edit);
+    const auto now = audioTracks();
     std::sort(placing.begin(), placing.end(), [&now](const BounceJob* a, const BounceJob* b)
     {
         return now.indexOf(a->made) < now.indexOf(b->made);

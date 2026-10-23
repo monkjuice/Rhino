@@ -143,6 +143,10 @@ ctest --test-dir native/build -C Release --output-on-failure
 
 Anything that renders must be included before `GesturesAndPersistence.inc`, which closes the audio device; a render attempted after it never returns and the runner times out.
 
+Two timing tools share the binary and are not CTest cases: `--profile-ui` (`tests/UiProfile.cpp`, a medium document) and `--profile-stress` (`tests/StressProfile.cpp`, 120 tracks and seven minutes of clips, devices, groups and automation: what every change, paint, save, load, graph rebuild and live block costs, with `RHINO_STRESS_TRACKS`, `RHINO_STRESS_MINUTES`, `RHINO_STRESS_CLIPS`, `RHINO_STRESS_DEVICES` and `RHINO_STRESS_RENDER_SECONDS` to bisect). Run them from a shell, never through `Start-Process`, and compare two builds alternately. The figures and what was done about them are in [the 120-track stress audit](wiki/pages/stress-audit-2026-10.md).
+
+`native_arrangement_geometry` also holds the dependency direction: `tests/LayerLintTest.cpp` reads every source under `ui/` and `app/` and fails on a line that reaches past `Session` into the engine (`session.edit`, `->getTransport()`, `tempoSequence.`, `getUndoManager()`, a Tracktion include). Meet a new need by adding the question to `Session`, as `isPlaying`, `playheadSeconds`, `locate`, `secondsToBeats` and `canUndo` were added; the shell's audio-device start-up in `Main.cpp` is the one allowance.
+
 Workflow scenarios live in `native/src/tests/*/scenarios/*.inc`. They are bare statement blocks included inside a runner function, not translation units — they share one `Session`, run in order, and may depend on state from an earlier scenario. The first failure aborts the whole runner, so you get one message rather than a list. Add a scenario by including it in the runner; `.inc` files are deliberately absent from CMake.
 
 Prefer a unit test over a scenario whenever the code under test needs no `Session`, render, or pointer sequence.

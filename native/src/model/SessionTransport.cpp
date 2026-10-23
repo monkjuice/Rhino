@@ -50,7 +50,7 @@ juce::Result Session::importAudio(const juce::File& file)
     // top of it. Free means empty: a lane with a clip on it is never landed
     // on, and if none is free the import still brings a track of its own -
     // in the same undo step, so one Ctrl+Z takes both the clip and its lane.
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     for (int track = 0; track < tracks.size(); ++track)
         if (trackType(track) == TrackType::audio && !isGroupBusTrack(track)
             && tracks[track]->getClips().isEmpty())
@@ -123,7 +123,7 @@ juce::Result Session::importAudioInEdit(const juce::File& file, int trackIndex, 
         return juce::Result::fail(trackHasInstrument(trackIndex)
             ? "That track runs an instrument. Drop audio on an audio track instead."
             : "That is a MIDI track. Drop audio on an audio track instead.");
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
         return juce::Result::fail("Drop audio on an audio track.");
 
@@ -171,6 +171,79 @@ void Session::setPlaybackStart(double seconds)
     playbackStartSeconds = std::isfinite(seconds) ? std::max(0.0, seconds) : 0.0;
 }
 
+bool Session::isPlaying() const
+{
+    return edit->getTransport().isPlaying();
+}
+
+// TransportControl::getPosition is copied from the audio playhead by a 50 Hz
+// message-thread timer. Playing, the audio graph's latency-adjusted position
+// is read instead, on every display refresh; no UI clock can drift from it.
+double Session::playheadSeconds() const
+{
+    const auto& transport = edit->getTransport();
+    if (transport.isPlaying() && !transport.isUserDragging())
+        if (auto* context = transport.getCurrentPlaybackContext(); context && context->isPlaybackGraphAllocated())
+        {
+            // Show an immediate seek while the audio thread adopts it. A
+            // scheduled future jump must not move the display ahead of audio.
+            if (const auto pending = context->getPendingPositionChange(); pending && *pending == transport.getPosition())
+                return pending->inSeconds();
+            if (context->isPlaying())
+                return context->getAudibleTimelineTime().inSeconds();
+        }
+    return transport.getPosition().inSeconds();
+}
+
+void Session::locate(double seconds)
+{
+    seconds = std::isfinite(seconds) ? std::max(0.0, seconds) : 0.0;
+    setPlaybackStart(seconds);
+    auto& transport = edit->getTransport();
+    if (std::abs(transport.getPosition().inSeconds() - seconds) < 1.0e-9)
+        return;
+    transport.setPosition(tracktion::core::TimePosition::fromSeconds(seconds));
+}
+
+double Session::songLengthSeconds() const
+{
+    return edit->getLength().inSeconds();
+}
+
+double Session::secondsToBeats(double seconds) const
+{
+    return edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(seconds)).inBeats();
+}
+
+double Session::beatsToSeconds(double beats) const
+{
+    return edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beats)).inSeconds();
+}
+
+void Session::restartPlaybackIfRolling()
+{
+    if (edit->getTransport().isPlaying())
+        edit->restartPlayback();
+}
+
+juce::AudioDeviceManager& Session::audioDeviceManager()
+{
+    return engine.getDeviceManager().deviceManager;
+}
+
+Session::AudioDeviceSummary Session::audioDeviceSummary()
+{
+    AudioDeviceSummary summary;
+    if (auto* device = engine.getDeviceManager().deviceManager.getCurrentAudioDevice())
+    {
+        summary.open = true;
+        summary.name = device->getName();
+        summary.sampleRate = device->getCurrentSampleRate();
+        summary.blockSize = device->getCurrentBufferSizeSamples();
+    }
+    return summary;
+}
+
 void Session::stop()
 {
     auto& transport = edit->getTransport();
@@ -198,7 +271,7 @@ void Session::returnToStart()
 
 void Session::releasePlayingNotes()
 {
-    for (auto* track : te::getAudioTracks(*edit))
+    for (auto* track : audioTracks())
     {
         releasePluginList(&track->pluginList);
         for (auto* clip : track->getClips())
@@ -340,7 +413,7 @@ void Session::setTempo(double bpm)
     // to follow by hand, or it drifts out from under the clips it was drawn
     // against. A tempo with one entry scales the whole timeline by one factor.
     const auto scale = previousBpm / bpm;
-    for (auto* track : te::getAudioTracks(*edit))
+    for (auto* track : audioTracks())
         rescaleAutomationPoints(track->state, scale, &edit->getUndoManager());
     rescaleAutomationPoints(edit->state, scale, &edit->getUndoManager());
     if (manualLoop)
@@ -366,7 +439,7 @@ tracktion::core::TimeRange Session::loopRange() const
         return manualLoopRange;
 
     auto end = tracktion::core::TimePosition::fromSeconds(0.0);
-    for (auto* track : te::getAudioTracks(*edit))
+    for (auto* track : audioTracks())
         for (auto* clip : track->getClips())
             end = std::max(end, clip->getPosition().time.getEnd());
     if (end <= tracktion::core::TimePosition::fromSeconds(0.0))

@@ -60,7 +60,7 @@ juce::ValueTree Session::automationOwnerState(int track) const
 {
     if (isMasterTrack(track))
         return edit->state;
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(track, tracks.size()))
         return {};
     return tracks[track]->state;
@@ -416,7 +416,7 @@ void Session::mirrorAutomationToEngine()
         juce::ValueTree lanes;
     };
     std::vector<Owner> owners;
-    for (auto* track : te::getAudioTracks(*edit))
+    for (auto* track : audioTracks())
         owners.push_back({track->pluginList, track->state});
     owners.push_back({edit->getMasterPluginList(), edit->state});
 

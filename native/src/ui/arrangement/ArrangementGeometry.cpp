@@ -103,9 +103,9 @@ double Arrangement::snapped(double seconds, bool bypass) const
     const auto enabled = gridSettings.mode != GridMode::off;
     if (enabled == bypass)
         return seconds;
-    const auto beat = session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(seconds)).inBeats();
+    const auto beat = session.secondsToBeats(seconds);
     const auto snappedBeat = std::round(beat / resolvedGridBeats()) * resolvedGridBeats();
-    return session.edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(snappedBeat)).inSeconds();
+    return session.beatsToSeconds(snappedBeat);
 }
 
 // Rounding to the nearest line is what a clip edge wants; the selection line
@@ -115,23 +115,23 @@ double Arrangement::snappedDown(double seconds, bool bypass) const
 {
     if ((gridSettings.mode != GridMode::off) == bypass)
         return seconds;
-    const auto beat = session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(seconds)).inBeats();
+    const auto beat = session.secondsToBeats(seconds);
     const auto grid = resolvedGridBeats();
     // Nudged by a thousandth of a cell so a pointer sitting exactly on a line
     // takes that line rather than the one before it, which floating point
     // would otherwise decide either way.
     const auto cell = std::floor(beat / grid + 1.0e-3);
-    return session.edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(cell * grid)).inSeconds();
+    return session.beatsToSeconds(cell * grid);
 }
 
 double Arrangement::snappedUp(double seconds, bool bypass) const
 {
     if ((gridSettings.mode != GridMode::off) == bypass)
         return seconds;
-    const auto beat = session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(seconds)).inBeats();
+    const auto beat = session.secondsToBeats(seconds);
     const auto grid = resolvedGridBeats();
     const auto cell = std::ceil(beat / grid - 1.0e-3);
-    return session.edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(cell * grid)).inSeconds();
+    return session.beatsToSeconds(cell * grid);
 }
 
 // Half of a short clip rather than a fixed strip: a row dragged right down
@@ -205,7 +205,7 @@ Arrangement::LoopGesture Arrangement::loopGestureAt(juce::Point<float> point) co
     if (!session.hasManualLoopRange() || point.y < rulerTop || point.y >= lanesTop || point.x < headerWidth)
         return LoopGesture::none;
 
-    const auto loopRange = session.edit->getTransport().getLoopRange();
+    const auto loopRange = session.loopRange();
     const auto x1 = xFor(loopRange.getStart().inSeconds());
     const auto x2 = xFor(loopRange.getEnd().inSeconds());
     const auto left = std::min(x1, x2);
@@ -223,8 +223,8 @@ Arrangement::LoopGesture Arrangement::loopGestureAt(juce::Point<float> point) co
 
 double Arrangement::snapUnitSeconds() const
 {
-    const auto start = session.edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(0.0)).inSeconds();
-    const auto end = session.edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(resolvedGridBeats())).inSeconds();
+    const auto start = session.beatsToSeconds(0.0);
+    const auto end = session.beatsToSeconds(resolvedGridBeats());
     return std::max(0.0001, end - start);
 }
 

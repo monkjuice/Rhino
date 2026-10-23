@@ -29,8 +29,7 @@ int Arrangement::paintBarBands(juce::Graphics& g, double firstBeat, double lastB
     const auto barLength = std::max(0.25, session.beatsPerBar());
     const auto timeOfBar = [this, barLength](double bar)
     {
-        return session.edit->tempoSequence
-            .toTime(tracktion::core::BeatPosition::fromBeats(bar * barLength)).inSeconds();
+        return session.beatsToSeconds(bar * barLength);
     };
     // Counted from bar zero rather than from the left edge of the view, so
     // which group is washed is a property of the music and does not flip as
@@ -70,7 +69,7 @@ void Arrangement::paintBarNumbers(juce::Graphics& g, double firstBeat, double la
     const auto countLength = barLength / countsPerBar;
     const auto timeOfBeat = [this](double beat)
     {
-        return session.edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beat)).inSeconds();
+        return session.beatsToSeconds(beat);
     };
     const auto firstBar = std::max(1.0, std::floor(firstBeat / barLength) + 1.0);
     const auto lastBar = std::floor(lastBeat / barLength) + 1.0;
@@ -96,8 +95,7 @@ void Arrangement::paintBarNumbers(juce::Graphics& g, double firstBeat, double la
     // is that far left of them. The index stays counted from the labelled bar,
     // so which marks carry a label does not change with where a repaint starts.
     const auto dirty = repaintArea(g);
-    const auto firstWorthBeat = session.edit->tempoSequence.toBeats(
-        tracktion::core::TimePosition::fromSeconds(std::max(0.0, timeAt(dirty.getX() - 72.0f)))).inBeats();
+    const auto firstWorthBeat = session.secondsToBeats(std::max(0.0, timeAt(dirty.getX() - 72.0f)));
     const auto firstMark = std::max(0, static_cast<int>(std::floor(
         (firstWorthBeat - (start - 1.0) * barLength) / (tickSpan * countLength))) - 1);
     const auto lastX = std::min(right, dirty.getRight() + 1.0f);
@@ -182,8 +180,7 @@ void Arrangement::paintTimeRuler(juce::Graphics& g, double firstBeat, double las
     const auto countLength = barLength / countsPerBar;
     const auto timeOfCount = [this, countLength](double counts)
     {
-        return session.edit->tempoSequence
-            .toTime(tracktion::core::BeatPosition::fromBeats(counts * countLength)).inSeconds();
+        return session.beatsToSeconds(counts * countLength);
     };
     const auto openingCount = std::floor(std::max(0.0, firstBeat) / countLength);
     const auto pixelsPerCount = pixelsPerSecond * (timeOfCount(openingCount + 1.0) - timeOfCount(openingCount));
@@ -218,8 +215,7 @@ void Arrangement::paintTimeRuler(juce::Graphics& g, double firstBeat, double las
     const auto dirty = repaintArea(g);
     const auto firstWorth = std::max(0.0, timeAt(dirty.getX() - labelWidth - 84.0f));
     auto mark = static_cast<long long>(std::floor(readsGrid
-        ? session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(firstWorth)).inBeats()
-              / countLength / gridTick
+        ? session.secondsToBeats(firstWorth) / countLength / gridTick
         : firstWorth * 1.0e6 / static_cast<double>(roundTick)));
     const auto lastX = std::min(right, dirty.getRight() + 1.0f);
     for (int painted = 0; painted < 4096; ++painted, ++mark)
@@ -440,8 +436,8 @@ void Arrangement::paint(juce::Graphics& g)
         drawSnappedText(g, "MAIN", {cardControlLeft, static_cast<int>(master.getY()) + 5, 44, 16});
     }
 
-    const auto firstBeat = session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(viewStart)).inBeats();
-    const auto lastBeat = session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(viewStart + viewSpan)).inBeats();
+    const auto firstBeat = session.secondsToBeats(viewStart);
+    const auto lastBeat = session.secondsToBeats(viewStart + viewSpan);
     const auto bandBars = paintBarBands(g, firstBeat, lastBeat);
     const auto barLength = std::max(0.25, session.beatsPerBar());
     const auto gridBeat = drawnGridBeats(resolvedGridBeats(),
@@ -451,8 +447,7 @@ void Arrangement::paint(juce::Graphics& g)
     // makes one or two rather than the hundreds across the view.
     const auto beatAtX = [this](float x)
     {
-        return session.edit->tempoSequence.toBeats(
-            tracktion::core::TimePosition::fromSeconds(std::max(0.0, timeAt(x)))).inBeats();
+        return session.secondsToBeats(std::max(0.0, timeAt(x)));
     };
     const auto dirtyFirstBeat = std::max(firstBeat, beatAtX(dirty.getX() - 2.0f));
     const auto dirtyLastBeat = std::min(lastBeat, beatAtX(dirty.getRight() + 2.0f));
@@ -460,7 +455,7 @@ void Arrangement::paint(juce::Graphics& g)
     int paintedTicks = 0;
     for (auto beat = firstGrid; beat <= dirtyLastBeat + gridBeat && paintedTicks++ < 2000; beat += gridBeat)
     {
-        const auto time = session.edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beat)).inSeconds();
+        const auto time = session.beatsToSeconds(beat);
         const auto x = xFor(time);
         const auto bar = isGridLine(beat, session.beatsPerBar());
         const auto wholeBeat = isGridLine(beat, 1.0);
@@ -486,7 +481,7 @@ void Arrangement::paint(juce::Graphics& g)
     paintBarNumbers(g, firstBeat, lastBeat);
     paintTimeRuler(g, firstBeat, lastBeat);
     {
-        const auto loopRange = session.edit->getTransport().getLoopRange();
+        const auto loopRange = session.loopRange();
         auto start = loopGesture != LoopGesture::none ? loopPreviewStart : loopRange.getStart().inSeconds();
         auto end = loopGesture != LoopGesture::none ? loopPreviewEnd : loopRange.getEnd().inSeconds();
         if (end < start) std::swap(start, end);
@@ -609,9 +604,11 @@ void Arrangement::paint(juce::Graphics& g)
             // The clip is filled translucent, so the arrangement's own lines
             // carry through it and a MIDI clip reads in the same columns as the
             // audio beside it.
+            static const std::vector<MidiNoteView> noNotes;
+            const auto& notes = clip.midiNotes != nullptr ? *clip.midiNotes : noNotes;
             auto lowPitch = Session::lowestNote;
             auto highPitch = Session::lowestNote + Session::pitches - 1;
-            for (const auto& note : clip.midiNotes)
+            for (const auto& note : notes)
             {
                 lowPitch = std::min(lowPitch, note.pitch);
                 highPitch = std::max(highPitch, note.pitch);
@@ -625,12 +622,11 @@ void Arrangement::paint(juce::Graphics& g)
             // slid them right through a left trim and pushed the last of them
             // off the clip's own end, so the preview appeared to crop from the
             // right until mouse-up drew it again.
-            const auto noteShift = (position.start - position.offset)
-                                 - (clip.position.start - clip.position.offset);
-            for (const auto& note : clip.midiNotes)
+            const auto origin = position.start - position.offset;
+            for (const auto& note : notes)
             {
-                const auto x1 = xFor(note.start + noteShift);
-                const auto x2 = xFor(note.end + noteShift);
+                const auto x1 = xFor(note.start + origin);
+                const auto x2 = xFor(note.end + origin);
                 const auto w = std::max(3.0f, x2 - x1);
                 const auto pitchScale = static_cast<float>(note.pitch - lowPitch)
                     / static_cast<float>(std::max(1, highPitch - lowPitch));
@@ -646,7 +642,7 @@ void Arrangement::paint(juce::Graphics& g)
                 g.setColour(ink.brighter(0.3f));
                 g.drawRect(noteBox.reduced(0.5f), 1.0f);
             }
-            if (clip.midiNotes.empty())
+            if (notes.empty())
             {
                 g.setColour(palette::textDim);
                 drawSnappedText(g, "Edit notes below", noteArea.toNearestInt(),

@@ -166,8 +166,8 @@ void MainComponent::sendClipboardShortcut(int keyCode, bool toNoteEditor)
 void MainComponent::showEditMenu(juce::Component& target)
 {
     juce::PopupMenu menu;
-    menu.addItem(1, "Undo", session.edit->getUndoManager().canUndo(), false);
-    menu.addItem(2, "Redo", session.edit->getUndoManager().canRedo(), false);
+    menu.addItem(1, "Undo", session.canUndo(), false);
+    menu.addItem(2, "Redo", session.canRedo(), false);
     menu.addSeparator();
     const auto noteEditorHasFocus = grid.isVisible() && grid.hasKeyboardFocus(true);
     menu.addItem(6, "Cut       Ctrl+X");

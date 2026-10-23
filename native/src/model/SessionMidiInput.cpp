@@ -135,7 +135,7 @@ void Session::rearmListeningMidiTracks()
     // an unarmed track monitoring the typing keyboard picks up the device the
     // rescan has just made, rather than staying silent until something arms.
     auto listening = false;
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     for (int track = 0; track < tracks.size(); ++track)
         if (trackRecordInput(track) == RecordInput::midi && trackWantsInput(track))
         {
@@ -164,7 +164,7 @@ std::vector<Session::InputChoice> Session::midiInputChoices() const
     // The Push's input while one is connected - and while a track still names
     // it, so a card whose controller is unplugged still shows what it is set to.
     auto namesPush = controllerConnected;
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     for (int track = 0; track < tracks.size() && !namesPush; ++track)
         namesPush = trackMidiInput(track) == midiInputPushToken();
     if (namesPush)
@@ -188,7 +188,7 @@ std::vector<Session::InputChoice> Session::midiInputChoices() const
 
 juce::String Session::trackMidiInput(int track) const
 {
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(track, tracks.size()))
         return midiInputAllInsToken();
     return tracks[track]->state.getProperty(trackMidiInputID, juce::String()).toString();
@@ -209,7 +209,7 @@ juce::String Session::trackMidiInputName(int track) const
 juce::Result Session::setTrackMidiInput(int track, const juce::String& token)
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(track, tracks.size()))
         return juce::Result::fail("The main output has no MIDI input of its own.");
     if (trackRecordInput(track) != RecordInput::midi)

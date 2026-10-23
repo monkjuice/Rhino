@@ -83,7 +83,7 @@ bool fillBlankDrumRack(te::AudioTrack& track, const DrumKit& kit)
 
 bool Session::trackHasDrumRack(int trackIndex) const
 {
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     return juce::isPositiveAndBelow(trackIndex, tracks.size()) && findDrumRack(*tracks[trackIndex]) != nullptr;
 }
 
@@ -92,7 +92,7 @@ juce::Result Session::addDrumKit(const juce::File& file, int trackIndex)
     DrumKit kit;
     if (const auto read = DrumFiles::read(file, kit); read.failed())
         return read;
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
         return juce::Result::fail("Drop drum kits on a track.");
     if (isGroupBusTrack(trackIndex))
@@ -224,7 +224,7 @@ juce::Result Session::addDrumSound(const juce::File& file, int trackIndex)
         return playable;
     }
 
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
         return juce::Result::fail("Drop drum sounds on a track.");
     if (isGroupBusTrack(trackIndex))

@@ -6,6 +6,8 @@
 namespace rhino
 {
 
+int runStressProfile();
+
 static void prepareCommandLineAudio()
 {
    #if JUCE_WINDOWS
@@ -37,6 +39,13 @@ std::optional<int> runTestFlag(const juce::String& args)
     {
         Session::setCommandLineTestMode(true);
         return runUiProfile();
+    }
+    // The same kind of timing on a 120-track, seven-minute song
+    // (tests/StressProfile.cpp): no audio device, no checks.
+    if (args == "--profile-stress")
+    {
+        Session::setCommandLineTestMode(true);
+        return runStressProfile();
     }
     if (args == "--self-test" || args == "--pattern-test" || args == "--arrangement-test"
         || args == "--arrangement-geometry-test")

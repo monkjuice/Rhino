@@ -69,8 +69,12 @@
                 if (onScreen.id == windowPasted.front()) pastedView = &onScreen;
             require(pastedView != nullptr, "The pasted clip is on screen");
             auto drawnStart = -1000.0, drawnEnd = -1000.0;
-            for (const auto& note : pastedView->midiNotes)
-                if (note.pitch == 60) { drawnStart = note.start; drawnEnd = note.end; }
+            // A note view is kept in the sequence's own seconds and drawn from
+            // the window's origin, the clip's start less its offset.
+            const auto origin = pastedView->position.start - pastedView->position.offset;
+            require(pastedView->midiNotes != nullptr, "The pasted clip's notes were read");
+            for (const auto& note : *pastedView->midiNotes)
+                if (note.pitch == 60) { drawnStart = note.start + origin; drawnEnd = note.end + origin; }
             require(close(drawnStart, 2.0) && close(drawnEnd, 4.0),
                     "The arrangement draws the sustained note across the clip it fills");
 

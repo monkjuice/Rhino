@@ -151,7 +151,7 @@ void PushController::wantButtons(Surface& surface)
     const auto trackCount = session.trackCount();
     const auto hasTrack = juce::isPositiveAndBelow(selectedTrack, trackCount);
 
-    set(cc::play, lit(session.edit->getTransport().isPlaying()));
+    set(cc::play, lit(session.isPlaying()));
     set(cc::record, session.isRecording() ? led::lit : session.isCountingIn() ? led::litBlink : led::dim);
     set(cc::metronome, lit(session.clickTrackEnabled()));
     set(cc::tapTempo, led::dim);

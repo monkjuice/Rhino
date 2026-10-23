@@ -6,7 +6,7 @@ namespace rhino
 
 PreferencesPanel::PreferencesPanel(Session& session, Tab first)
     : audio(std::make_unique<juce::AudioDeviceSelectorComponent>(
-          session.engine.getDeviceManager().deviceManager, 0, 2, 0, 2, true, false, true, false)),
+          session.audioDeviceManager(), 0, 2, 0, 2, true, false, true, false)),
       midi(session)
 {
     // A strip of two keys rather than a juce::TabbedComponent: its tabs draw

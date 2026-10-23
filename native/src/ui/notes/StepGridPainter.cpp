@@ -240,7 +240,7 @@ void StepGrid::paint(juce::Graphics& g)
         }
         else if (session.hasManualLoopRange())
         {
-            const auto range = session.edit->getTransport().getLoopRange();
+            const auto range = session.loopRange();
             loopStartX = loopXForTimelineTime(range.getStart().inSeconds());
             loopEndX = loopXForTimelineTime(range.getEnd().inSeconds());
         }

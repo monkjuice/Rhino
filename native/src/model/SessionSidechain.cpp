@@ -45,7 +45,7 @@ std::vector<Session::SidechainSource> Session::deviceSidechainSources(int track,
     auto* plugin = devicePlugin(track, slot);
     if (plugin == nullptr || !plugin->canSidechain())
         return sources;
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     for (int candidate = 0; candidate < tracks.size(); ++candidate)
     {
         // A track cannot be its own carrier: the graph would have to produce
@@ -65,7 +65,7 @@ int Session::deviceSidechainSource(int track, int slot) const
     const auto sourceID = plugin->getSidechainSourceID();
     if (!sourceID.isValid())
         return -1;
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     for (int candidate = 0; candidate < tracks.size(); ++candidate)
         if (tracks[candidate]->itemID == sourceID)
             return candidate;
@@ -86,7 +86,7 @@ juce::Result Session::setDeviceSidechainSource(int track, int slot, int sourceTr
     if (sourceTrack == track)
         return juce::Result::fail("A track cannot play itself. Choose another track.");
 
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     edit->getUndoManager().beginNewTransaction("Set audio source");
     if (!juce::isPositiveAndBelow(sourceTrack, tracks.size()))
     {

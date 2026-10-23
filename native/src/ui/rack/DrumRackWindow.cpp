@@ -66,7 +66,7 @@ void DrumRackView::followAutomation()
 
 void DrumRackView::timerCallback()
 {
-    const auto playing = session.edit->getTransport().isPlaying();
+    const auto playing = session.isPlaying();
     // Once more as the transport stops, so the knobs settle where the curve
     // left them rather than a frame short of it.
     if (playing || wasPlaying)

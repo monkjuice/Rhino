@@ -119,8 +119,7 @@ bool Session::hasMidiInput() const
 
 Session::RecordInput Session::trackRecordInput(int trackIndex) const
 {
-    const auto tracks = te::getAudioTracks(*edit);
-    if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
+    if (audioTrack(trackIndex) == nullptr)
         return RecordInput::none;
     if (isGroupBusTrack(trackIndex))
         return RecordInput::none;
@@ -129,15 +128,13 @@ Session::RecordInput Session::trackRecordInput(int trackIndex) const
 
 bool Session::isTrackArmed(int trackIndex) const
 {
-    const auto tracks = te::getAudioTracks(*edit);
-    if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
-        return false;
-    return static_cast<bool>(tracks[trackIndex]->state.getProperty(trackArmedID, false));
+    auto* audio = audioTrack(trackIndex);
+    return audio != nullptr && static_cast<bool>(audio->state.getProperty(trackArmedID, false));
 }
 
 bool Session::anyTrackArmed() const
 {
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     for (int track = 0; track < tracks.size(); ++track)
         if (isTrackArmed(track))
             return true;
@@ -151,7 +148,7 @@ bool Session::anyTrackArmed() const
 juce::Result Session::setTrackArmed(int trackIndex, bool armed)
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
         return juce::Result::fail("The main output records nothing. Arm a track instead.");
     if (trackRecordInput(trackIndex) == RecordInput::none)
@@ -208,7 +205,7 @@ bool Session::trackWantsInput(int track) const
 juce::Result Session::applyRecordArming()
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     const auto wantsInput = [this](int track) { return trackWantsInput(track); };
     bool wantsMidi = false, wantsAudio = false;
     for (int track = 0; track < tracks.size(); ++track)
@@ -410,10 +407,10 @@ juce::String Session::inputMonitoringName(InputMonitoring mode)
 // audio, because a microphone and speakers in one room feed back.
 Session::InputMonitoring Session::trackMonitoring(int trackIndex) const
 {
-    const auto tracks = te::getAudioTracks(*edit);
-    if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
+    auto* audio = audioTrack(trackIndex);
+    if (audio == nullptr)
         return InputMonitoring::off;
-    const auto stored = tracks[trackIndex]->state.getProperty(trackMonitorID, juce::String()).toString();
+    const auto stored = audio->state.getProperty(trackMonitorID, juce::String()).toString();
     if (stored == monitoringToken(InputMonitoring::on)) return InputMonitoring::on;
     if (stored == monitoringToken(InputMonitoring::automatic)) return InputMonitoring::automatic;
     if (stored == monitoringToken(InputMonitoring::off)) return InputMonitoring::off;
@@ -426,7 +423,7 @@ Session::InputMonitoring Session::trackMonitoring(int trackIndex) const
 juce::Result Session::setTrackMonitoring(int trackIndex, InputMonitoring mode)
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
         return juce::Result::fail("The main output takes no input, so there is nothing to monitor.");
     const auto wanted = trackRecordInput(trackIndex);
@@ -592,7 +589,7 @@ void Session::pollRecordingNotes()
     auto* context = edit->getCurrentPlaybackContext();
     if (context == nullptr)
         return;
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     liveNotes.resize(static_cast<size_t>(tracks.size()));
     for (int track = 0; track < tracks.size(); ++track)
     {
@@ -648,7 +645,7 @@ void Session::beginTransportRecording()
     // is lifted for the duration and refreshLoop puts it back on the way out.
     transport.looping = false;
     clipsBeforeRecording.clear();
-    for (auto* track : te::getAudioTracks(*edit))
+    for (auto* track : audioTracks())
         for (auto* clip : track->getClips())
             clipsBeforeRecording.push_back(clip->itemID);
     recordingStart = std::max(0.0, transport.getPosition().inSeconds());
@@ -725,7 +722,7 @@ std::vector<int> Session::tidyRecordedClips()
     const std::set<te::EditItemID> before(clipsBeforeRecording.begin(), clipsBeforeRecording.end());
     std::vector<te::EditItemID> added;
     std::vector<int> recorded;
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     for (int track = 0; track < tracks.size(); ++track)
         for (auto* clip : tracks[track]->getClips())
             if (!before.contains(clip->itemID))

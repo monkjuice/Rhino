@@ -58,7 +58,7 @@ te::PluginList* Session::pluginListForTrack(int trackIndex) const
 {
     if (isMasterTrack(trackIndex))
         return &edit->getMasterPluginList();
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
         return nullptr;
     return &tracks[trackIndex]->pluginList;
@@ -107,7 +107,7 @@ juce::Result Session::addDevice(const juce::String& deviceId, int trackIndex, co
     }
     else
     {
-        auto* track = te::getAudioTracks(*edit)[trackIndex];
+        auto* track = audioTracks()[trackIndex];
         list->insertPlugin(plugin, channelStripInsertIndex(*track), nullptr);
     }
     if (preset != nullptr)
@@ -172,7 +172,7 @@ juce::Result Session::addInstrumentDevice(const DeviceDescriptor& device, int tr
     if (device.external && !forgeDescription)
         initialiseExternalPlugins(true);
 
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
         return juce::Result::fail("Drop instruments on a track.");
     // An instrument is played by notes, and only a MIDI track holds any. A
@@ -237,7 +237,7 @@ juce::Result Session::addMidiEffect(MidiEffect effect, int trackIndex)
 
 juce::Result Session::addMidiEffectDevice(const DeviceDescriptor& device, int trackIndex, const DevicePreset* preset)
 {
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
         return juce::Result::fail("Drop MIDI FX on an instrument track.");
     // A MIDI effect rewrites notes on their way to an instrument. An audio

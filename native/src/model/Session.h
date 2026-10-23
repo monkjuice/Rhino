@@ -11,6 +11,7 @@
 #include <optional>
 #include <utility>
 #include <vector>
+#include <unordered_map>
 
 namespace rhino
 {
@@ -278,6 +279,46 @@ public:
     // sets it; nothing here knows how it was chosen.
     void setPlaybackStart(double seconds);
     double playbackStart() const { return playbackStartSeconds; }
+    // The transport and the song's shape, read here so that no view opens the
+    // engine (wiki: dependency-direction).
+    bool isPlaying() const;
+    // Where the song is being heard, in seconds. Playing, the audio graph's
+    // latency-adjusted position, read on every display refresh, which no UI
+    // clock can drift from; standing still, the transport's position.
+    double playheadSeconds() const;
+    // Puts the transport at `seconds`, rolling or not, and makes it the
+    // playback start, so stop returns there. A transport already there is
+    // left alone.
+    void locate(double seconds);
+    double songLengthSeconds() const;
+    // The tempo map, for the views that rule the timeline.
+    double secondsToBeats(double seconds) const;
+    double beatsToSeconds(double beats) const;
+    bool canUndo() const;
+    bool canRedo() const;
+    // Announced, as the engine announces them, when the transport starts or
+    // stops and when the undo history changes: what the shell's transport and
+    // undo keys follow, apart from the document's own changes. Neither wakes
+    // the panels listening to the session itself.
+    juce::ChangeBroadcaster transportState, undoHistory;
+    // After a device's latency changed outside a parameter gesture - Rhino
+    // Tune's mode or range - a rolling graph is rebuilt, since it reads
+    // latency only when it is built.
+    void restartPlaybackIfRolling();
+    // The machine's audio device: the control bar's readout and the
+    // Preferences window's chooser. The model owns the engine that owns it.
+    juce::AudioDeviceManager& audioDeviceManager();
+    struct AudioDeviceSummary
+    {
+        juce::String name;
+        double sampleRate = 0.0;
+        int blockSize = 0;
+        bool open = false;
+    };
+    AudioDeviceSummary audioDeviceSummary();
+    // Whether a device still belongs to the open document. A window holding
+    // one closes when it no longer does.
+    bool ownsDevice(const te::Plugin&) const;
     void releasePlayingNotes();
     void panicReset(bool restartAudioDevice = true);
     void releaseAudioDevice();
@@ -418,6 +459,21 @@ public:
     juce::Result addMidiEffect(MidiEffect, int track);
     int trackCount() const;
     juce::String trackName(int track) const;
+    // How many times a change naming this track, or every track, has been
+    // marked (markModified). A view keeping something per track compares it
+    // with what it kept: equal means the model knows of nothing on the track
+    // that changed since. Undo and redo bump every track, since they cannot
+    // say what they took back; a tempo change bumps every track too, since
+    // it moves every clip. A track not in the stack answers 0.
+    juce::uint64 trackRevision(int track) const;
+    // The edit's audio tracks in stack order, and one of them by index, read
+    // from an array the model keeps rather than by walking the edit's track
+    // tree, which allocated an array and visited every track per call: a
+    // sync of the arrangement asks some fifteen questions of each of its
+    // tracks. audioTracks hands back a copy, since a caller may add or
+    // remove tracks while holding it; audioTrack answers nullptr off the end.
+    juce::Array<te::AudioTrack*> audioTracks() const;
+    te::AudioTrack* audioTrack(int index) const;
     // What a track is for. A track used to become one or the other only when
     // something landed on it, which left a new track unable to hold a clip
     // until an instrument had been dropped on it. A track now says which it is
@@ -1528,6 +1584,11 @@ public:
     // over what waited for room, and makes a deck's clip again once it has
     // changed and nothing is held.
     void djPoll();
+    // Whether any mouse button is down, told by the shell before each poll:
+    // the gestures a view does not bracket - a jog wheel, a note drag, the
+    // booth's own faders - hold one, and nothing is made again for a deck
+    // while it is held. The model keeps no view of the pointer itself.
+    void setPointerHeld(bool held);
     bool djBusy() const;
     // Drives the booth without an audio device, for the tests, through the
     // booth's own callback: what a device would hand it is what the test
@@ -1819,6 +1880,40 @@ private:
     // Engine initialization also changes its edit flag asynchronously. Track
     // user commands separately so startup cannot dirty an untouched document.
     juce::int64 changeRevision = 0, savedRevision = 0;
+    // The cache behind audioTracks and audioTrack. The watcher marks it
+    // stale whenever the edit's tree gains, loses or reorders a child
+    // anywhere in it, and the next call rebuilds it.
+    const juce::Array<te::AudioTrack*>& cachedTracks() const;
+    void watchEditTree();
+    struct TrackCacheWatcher final : juce::ValueTree::Listener
+    {
+        explicit TrackCacheWatcher(Session& owner) : session(owner) {}
+        void valueTreePropertyChanged(juce::ValueTree&, const juce::Identifier&) override {}
+        void valueTreeChildAdded(juce::ValueTree&, juce::ValueTree&) override { session.audioTracksStale = true; }
+        void valueTreeChildRemoved(juce::ValueTree&, juce::ValueTree&, int) override { session.audioTracksStale = true; }
+        void valueTreeChildOrderChanged(juce::ValueTree&, int, int) override { session.audioTracksStale = true; }
+        void valueTreeParentChanged(juce::ValueTree&) override { session.audioTracksStale = true; }
+        void valueTreeRedirected(juce::ValueTree&) override { session.audioTracksStale = true; }
+        Session& session;
+    };
+    TrackCacheWatcher trackCacheWatcher {*this};
+    // Relays the engine's own announcements - the transport starting and
+    // stopping, the undo history changing - onto transportState and
+    // undoHistory, so the shell listens to the model whichever edit is open.
+    struct EngineStateRelay final : juce::ChangeListener
+    {
+        explicit EngineStateRelay(Session& owner) : session(owner) {}
+        void changeListenerCallback(juce::ChangeBroadcaster*) override;
+        Session& session;
+    };
+    EngineStateRelay engineStateRelay {*this};
+    void unwatchEdit();
+    mutable juce::Array<te::AudioTrack*> cachedAudioTracks;
+    mutable bool audioTracksStale = true;
+    // What trackRevision answers: one count per track by its id, plus one for
+    // every track, so bumping all is one increment rather than a walk.
+    std::unordered_map<juce::uint64, juce::uint64> trackRevisions;
+    juce::uint64 allTracksRevision = 0;
     int audioClipGestureDepth = 0, tempoGestureDepth = 0;
     // An open note-velocity gesture, and whether anything inside it changed.
     int noteVelocityGestureDepth = 0;
@@ -1943,6 +2038,7 @@ private:
     // is not made again then, so a note being dragged is not cut on every
     // step of the drag.
     bool gestureHeld() const;
+    bool pointerHeld = false;
     // SessionNotes.cpp: the track the note editor's clip sits on, or -1.
     int patternTrackIndex() const;
     void djReset();

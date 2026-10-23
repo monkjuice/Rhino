@@ -73,7 +73,7 @@ juce::Result Session::mergeClips(const std::vector<te::EditItemID>& ids, MergeRe
         tracktion::core::TimePosition start, end;
     };
     std::vector<Group> groups;
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     for (const auto id : ids)
     {
         auto* clip = findAudioClip(id);
@@ -266,7 +266,7 @@ juce::Result Session::mergeClips(const std::vector<te::EditItemID>& ids, MergeRe
         for (const auto id : rendered.sources)
             if (auto* clip = findClip(id))
                 clip->removeFromParent();
-        auto* track = te::getAudioTracks(*edit)[rendered.track];
+        auto* track = audioTracks()[rendered.track];
         const auto start = tracktion::core::TimePosition::fromSeconds(rendered.startSeconds);
         const auto end = tracktion::core::TimePosition::fromSeconds(rendered.endSeconds);
         auto clip = track->insertWaveClip(rendered.name, rendered.file, {{start, end}, {}}, false);

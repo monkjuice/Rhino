@@ -48,9 +48,15 @@ void Arrangement::sync()
     clips.clear();
     armedTracks.clear();
     trackFacts.clear();
-    clipNameWidths.clear();
+    // The measured names are kept across syncs: a name's width does not
+    // change with the model, and shaping every visible name again after each
+    // click was a visible share of the next paint. Cleared only once it has
+    // outgrown any song, and with the document.
+    if (clipNameWidths.size() > 8192)
+        clipNameWidths.clear();
     std::set<juce::String> usedFiles;
-    const auto tracks = te::getAudioTracks(*session.edit);
+    const auto tracks = session.audioTracks();
+    ++syncPass;
     syncTrackControls();
     selectedTrack = juce::jlimit(0, session.masterTrackIndex(), selectedTrack);
     // A gathered selection can name tracks the edit no longer has.
@@ -113,54 +119,28 @@ void Arrangement::sync()
             volume[index]->setValue(mixer.volumeDb, juce::dontSendNotification);
         if (!pan[index]->isMouseButtonDown())
             pan[index]->setValue(mixer.pan, juce::dontSendNotification);
-        for (auto* clip : tracks[track]->getClips())
+        // The track's clips, read again only if the model has marked the
+        // track since they were last read, or has never been asked.
+        auto& cache = trackClipCaches[tracks[track]->itemID.getRawID()];
+        const auto revision = session.trackRevision(track);
+        if (cache.pass == 0 || cache.revision != revision)
+            rebuildTrackClips(cache, *tracks[track], track);
+        cache.revision = revision;
+        cache.pass = syncPass;
+        for (const auto& file : cache.files)
+            usedFiles.insert(file);
+        for (const auto& cached : cache.clips)
         {
-            if (!session.shouldShowClipInArrangement(*clip))
-                continue;
-            const auto p = clip->getPosition();
-            ClipView view {clip->itemID, clip->getName(), {p.time.getStart().inSeconds(), p.time.getEnd().inSeconds(), p.offset.inSeconds()}, nullptr, {}, clip->getSpeedRatio(),
-                           p.offset.inSeconds() + p.time.getLength().inSeconds(), track, Session::clipColour(*clip),
-                           Session::clipPluginCount(*clip)};
-            view.muted = clip->isMuted();
-            if (auto* audio = dynamic_cast<te::WaveAudioClip*>(clip))
-            {
-                const auto file = clip->getSourceFileReference().getFile();
-                const auto key = file.getFullPathName();
-                usedFiles.insert(key);
-                auto& waveform = waveforms[key];
-                if (!waveform) waveform = std::make_unique<Waveform>(*this, file);
-                view.waveform = waveform.get();
-                // Not getSpeedRatio: a warped clip leaves that at one and takes
-                // its speed from its own tempo against the song's, so reading
-                // the ratio would draw the first half of a stretched file
-                // across the whole clip and silence after it.
-                view.speed = session.clipPlaybackSpeed(*audio);
-                view.sourceDuration = audio->getSourceLength().inSeconds() / std::max(0.0001, view.speed);
-            }
-            else if (auto* midi = dynamic_cast<te::MidiClip*>(clip))
-            {
-                view.sourceDuration = te::Edit::getMaximumEditEnd().inSeconds();
-                // The sequence is the whole recording; the clip shows a window
-                // into it that opens at the offset. Drawing from the sequence
-                // start instead puts a left-trimmed clip - one made by a split,
-                // or by pasting a region that began part-way through a clip -
-                // full of notes it never plays, with the ones it does play
-                // pushed off the right-hand end.
-                const auto& notes = midi->getSequence().getNotes();
-                view.midiNotes.reserve(static_cast<size_t>(notes.size()));
-                for (auto* note : notes)
-                {
-                    const auto noteStart = session.edit->tempoSequence.toTime(note->getStartBeat()).inSeconds()
-                                         - p.offset.inSeconds();
-                    const auto noteEnd = session.edit->tempoSequence.toTime(note->getStartBeat() + note->getLengthBeats()).inSeconds()
-                                       - p.offset.inSeconds();
-                    view.midiNotes.push_back({view.position.start + noteStart, view.position.start + noteEnd, note->getNoteNumber()});
-                }
-            }
+            auto view = cached;
+            // The index the track has now: a track above it may have come or
+            // gone since its views were made.
+            view.track = track;
             songEnd = std::max(songEnd, view.position.end);
             clips.push_back(std::move(view));
         }
     }
+    // The views of tracks that have gone.
+    std::erase_if(trackClipCaches, [this](const auto& entry) { return entry.second.pass != syncPass; });
     if (!masterVolume.isMouseButtonDown())
         masterVolume.setValue(session.masterVolumeDb(), juce::dontSendNotification);
     if (!masterPan.isMouseButtonDown())
@@ -195,6 +175,57 @@ void Arrangement::sync()
     resized();
     updateScroll();
     repaint();
+}
+
+void Arrangement::rebuildTrackClips(TrackClipCache& cache, te::AudioTrack& audioTrack, int track)
+{
+    cache.clips.clear();
+    cache.files.clear();
+    for (auto* clip : audioTrack.getClips())
+    {
+        if (!session.shouldShowClipInArrangement(*clip))
+            continue;
+        const auto p = clip->getPosition();
+        ClipView view {clip->itemID, clip->getName(), {p.time.getStart().inSeconds(), p.time.getEnd().inSeconds(), p.offset.inSeconds()}, nullptr, {}, clip->getSpeedRatio(),
+                       p.offset.inSeconds() + p.time.getLength().inSeconds(), track, Session::clipColour(*clip),
+                       Session::clipPluginCount(*clip)};
+        view.muted = clip->isMuted();
+        if (auto* audio = dynamic_cast<te::WaveAudioClip*>(clip))
+        {
+            const auto file = clip->getSourceFileReference().getFile();
+            const auto key = file.getFullPathName();
+            cache.files.push_back(key);
+            auto& waveform = waveforms[key];
+            if (!waveform) waveform = std::make_unique<Waveform>(*this, file);
+            view.waveform = waveform.get();
+            // Not getSpeedRatio: a warped clip leaves that at one and takes
+            // its speed from its own tempo against the song's, so reading
+            // the ratio would draw the first half of a stretched file
+            // across the whole clip and silence after it.
+            view.speed = session.clipPlaybackSpeed(*audio);
+            view.sourceDuration = audio->getSourceLength().inSeconds() / std::max(0.0001, view.speed);
+        }
+        else if (auto* midi = dynamic_cast<te::MidiClip*>(clip))
+        {
+            view.sourceDuration = te::Edit::getMaximumEditEnd().inSeconds();
+            // The sequence is the whole recording; the clip shows a window
+            // into it that opens at the offset. The notes are kept in the
+            // sequence's own seconds and drawn from the window's origin, so
+            // a left-trimmed clip - one made by a split, or by pasting a
+            // region that began part-way through a clip - shows the notes it
+            // plays where it plays them, and a moved clip keeps its notes
+            // without converting them again.
+            const auto& notes = midi->getSequence().getNotes();
+            auto converted = std::make_shared<std::vector<MidiNoteView>>();
+            converted->reserve(static_cast<size_t>(notes.size()));
+            for (auto* note : notes)
+                converted->push_back({session.beatsToSeconds(note->getStartBeat().inBeats()),
+                                      session.beatsToSeconds((note->getStartBeat() + note->getLengthBeats()).inBeats()),
+                                      note->getNoteNumber()});
+            view.midiNotes = std::move(converted);
+        }
+        cache.clips.push_back(std::move(view));
+    }
 }
 
 void Arrangement::syncTrackControls()

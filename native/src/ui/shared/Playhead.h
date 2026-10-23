@@ -1,12 +1,9 @@
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
 
-namespace tracktion { inline namespace engine { class TransportControl; } }
-
 namespace rhino
 {
 inline const juce::Colour playheadColour {0xff57a7ff};
-double playheadTime(const tracktion::engine::TransportControl&);
 
 // Each footprint includes physical-pixel rounding at fractional desktop scales.
 inline juce::Rectangle<int> playheadDamage(float previous, float next, juce::Rectangle<int> area)

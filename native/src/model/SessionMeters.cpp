@@ -60,7 +60,7 @@ void Session::releaseMeterTaps()
 std::vector<Session::OutputLevel> Session::takeOutputLevels()
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     std::vector<OutputLevel> levels(static_cast<size_t>(tracks.size()) + 1);
     // A render drives the same meters behind the loading screen, and what it
     // measures is not what the song is playing. It is read all the same, so

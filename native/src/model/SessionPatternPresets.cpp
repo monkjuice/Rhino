@@ -23,7 +23,7 @@ void Session::clearPattern()
 void Session::applyPatternPreset(PatternPreset preset)
 {
     if (patternClip == nullptr) return;
-    const auto trackIndex = te::getAudioTracks(*edit).indexOf(trackHoldingClip(*edit, *patternClip));
+    const auto trackIndex = audioTracks().indexOf(trackHoldingClip(*edit, *patternClip));
     if (trackIndex < 0) return;
     const auto data = presetPattern(preset);
     edit->getUndoManager().beginNewTransaction("Load " + data.name);
@@ -47,7 +47,7 @@ juce::Result Session::insertPatternPreset(PatternPreset preset, int trackIndex, 
 {
     if (!std::isfinite(startSeconds) || startSeconds < 0.0)
         return juce::Result::fail("Invalid pattern drop position.");
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
         return juce::Result::fail("Drop clips on a track lane.");
     const auto data = presetPattern(preset);
@@ -75,7 +75,7 @@ juce::Result Session::insertPatternPreset(PatternPreset preset, int trackIndex, 
 
 bool Session::trackHasInstrument(int trackIndex) const
 {
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size())) return false;
     return trackInstrument(*tracks[trackIndex]) != nullptr;
 }
@@ -91,7 +91,7 @@ juce::Result Session::createClip(int trackIndex, double startSeconds, te::EditIt
 {
     if (!std::isfinite(startSeconds) || startSeconds < 0.0)
         return juce::Result::fail("Invalid clip position.");
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
         return juce::Result::fail("Select a track first.");
     if (isGroupBusTrack(trackIndex))
@@ -163,7 +163,7 @@ te::Plugin* Session::patternInstrument() const
 
 te::Plugin* Session::patternInstrumentForTrack(int trackIndex) const
 {
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size())) return nullptr;
     return trackInstrument(*tracks[trackIndex]);
 }
@@ -206,7 +206,7 @@ std::optional<juce::String> Session::patternNoteName(int pitch) const
 juce::Result Session::preparePresetTrack(int trackIndex, const PresetPattern& data, bool& devicesChanged)
 {
     devicesChanged = false;
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
         return juce::Result::fail("Drop clips on a track lane.");
     // A pattern is notes and the instrument that plays them, so it lands where

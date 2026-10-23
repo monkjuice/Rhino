@@ -271,7 +271,7 @@ bool Arrangement::keyPressed(const juce::KeyPress& key)
         // Adds a clip to the focused track at the playhead, the keyboard
         // equivalent of double-clicking the lane: it fills the grid cell the
         // playhead is in.
-        const auto start = snappedDown(std::max(0.0, playheadTime(session.edit->getTransport())), false);
+        const auto start = snappedDown(std::max(0.0, session.playheadSeconds()), false);
         te::EditItemID created;
         const auto result = session.createClip(selectedTrack, start, &created, newClipBeats());
         if (status) status(result.failed() ? result.getErrorMessage()
@@ -594,9 +594,9 @@ void Arrangement::nudgeSelected(int direction, bool byBar)
     if (!clip) return;
     const auto old = clip->getPosition();
     const auto beats = byBar ? session.beatsPerBar() : resolvedGridBeats();
-    const auto startBeat = session.edit->tempoSequence.toBeats(old.time.getStart()).inBeats();
-    const auto target = session.edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(startBeat + beats * (direction < 0 ? -1.0 : 1.0)));
-    const auto delta = target.inSeconds() - old.time.getStart().inSeconds();
+    const auto startBeat = session.secondsToBeats(old.time.getStart().inSeconds());
+    const auto target = session.beatsToSeconds(startBeat + beats * (direction < 0 ? -1.0 : 1.0));
+    const auto delta = target - old.time.getStart().inSeconds();
     auto moving = selectedClips;
     if (std::find(moving.begin(), moving.end(), selected) == moving.end())
         moving.push_back(selected);
@@ -658,6 +658,8 @@ void Arrangement::editWillChange()
     cancelDrag();
     endRename(false);
     clips.clear();
+    trackClipCaches.clear();
+    clipNameWidths.clear();
     waveforms.clear();
     rows.clear();
     groups.clear();
@@ -706,11 +708,11 @@ void Arrangement::updatePlayhead()
     float next = -1.0f;
     // Keep the logical position current even while the component is not yet
     // attached to a peer.  Zoom and fit can be invoked before the next vblank.
-    const auto x = xFor(playheadTime(session.edit->getTransport()));
+    const auto x = xFor(session.playheadSeconds());
     if (x >= headerWidth && x < getWidth()) next = x;
     // Rolling, the line sweeps the lanes. Parked - which is every click that
     // moves the insert line - it shows only in the bar ruler.
-    const auto sweeps = session.edit->getTransport().isPlaying();
+    const auto sweeps = session.isPlaying();
     if (!isShowing())
     {
         playhead = next;
@@ -746,7 +748,7 @@ void Arrangement::updatePlayhead()
 
 void Arrangement::repaintRecordingBand()
 {
-    const auto right = xFor(playheadTime(session.edit->getTransport()));
+    const auto right = xFor(session.playheadSeconds());
     const auto revision = session.recordingNotesRevision();
     // A note arrives stamped with the time the audio thread saw it, which can
     // be slightly behind the line being drawn, and a note still held grows

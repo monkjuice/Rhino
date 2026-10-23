@@ -76,7 +76,7 @@ std::vector<Session::InputChoice> Session::audioInputChoices() const
 
 juce::String Session::trackAudioInput(int track) const
 {
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(track, tracks.size()))
         return audioInputDefaultToken();
     return tracks[track]->state.getProperty(trackAudioInputID, juce::String()).toString();
@@ -95,7 +95,7 @@ juce::String Session::trackAudioInputName(int track) const
 juce::Result Session::setTrackAudioInput(int track, const juce::String& token)
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(track, tracks.size()))
         return juce::Result::fail("The main output has no audio input of its own.");
     if (trackRecordInput(track) != RecordInput::audio)

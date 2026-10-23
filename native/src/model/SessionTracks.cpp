@@ -9,15 +9,14 @@ namespace rhino
 
 int Session::trackCount() const
 {
-    return te::getAudioTracks(*edit).size();
+    return cachedTracks().size();
 }
 
 juce::String Session::trackName(int track) const
 {
     if (isMasterTrack(track)) return "Main";
-    const auto tracks = te::getAudioTracks(*edit);
-    if (!juce::isPositiveAndBelow(track, tracks.size())) return {};
-    return tracks[track]->getName();
+    auto* audio = audioTrack(track);
+    return audio != nullptr ? audio->getName() : juce::String();
 }
 
 juce::String Session::trackTypeName(TrackType type)
@@ -32,11 +31,11 @@ juce::String Session::trackTypeName(TrackType type)
 // who created it.
 Session::TrackType Session::trackType(int track) const
 {
-    const auto tracks = te::getAudioTracks(*edit);
-    if (!juce::isPositiveAndBelow(track, tracks.size()))
+    auto* audio = audioTrack(track);
+    if (audio == nullptr)
         return TrackType::audio;
-    return tracks[track]->state.getProperty(trackTypeID).toString() == "midi" ? TrackType::midi
-                                                                              : TrackType::audio;
+    return audio->state.getProperty(trackTypeID).toString() == "midi" ? TrackType::midi
+                                                                     : TrackType::audio;
 }
 
 // MIDI until the person picks otherwise, because a track they will play is the
@@ -61,7 +60,7 @@ void Session::setLastAddedTrackType(TrackType type)
 
 te::AudioTrack* Session::appendTrack(TrackType type, int after)
 {
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     const auto at = juce::isPositiveAndBelow(after, tracks.size()) ? te::TrackInsertPoint(nullptr, tracks[after])
                                                                   : te::TrackInsertPoint::getEndOfTracks(*edit);
     auto newTrack = edit->insertNewAudioTrack(at, nullptr, false);
@@ -122,7 +121,7 @@ juce::Result Session::addTrack(TrackType type, int below, int* added)
 
 juce::Result Session::removeAudioTrack(int track)
 {
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (isMasterTrack(track))
         return juce::Result::fail("The main row cannot be removed.");
     if (!juce::isPositiveAndBelow(track, tracks.size()))
@@ -162,15 +161,15 @@ const juce::Identifier trackFoldedID {"rhinoTrackFolded"};
 // an untouched project keep fitting its rows to the panel.
 float Session::trackLaneHeight(int track) const
 {
-    const auto tracks = te::getAudioTracks(*edit);
-    if (!juce::isPositiveAndBelow(track, tracks.size()))
+    auto* audio = audioTrack(track);
+    if (audio == nullptr)
         return 0.0f;
-    return static_cast<float>(static_cast<double>(tracks[track]->state.getProperty(laneHeightID, 0.0)));
+    return static_cast<float>(static_cast<double>(audio->state.getProperty(laneHeightID, 0.0)));
 }
 
 juce::Result Session::setTrackLaneHeight(int track, float height)
 {
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(track, tracks.size()))
         return juce::Result::fail("Select a track to resize.");
     // Row heights are a view setting, so they are written straight to the track
@@ -185,13 +184,13 @@ juce::Result Session::setTrackLaneHeight(int track, float height)
 
 bool Session::isTrackFolded(int track) const
 {
-    const auto tracks = te::getAudioTracks(*edit);
-    return juce::isPositiveAndBelow(track, tracks.size()) && static_cast<bool>(tracks[track]->state.getProperty(trackFoldedID, false));
+    auto* audio = audioTrack(track);
+    return audio != nullptr && static_cast<bool>(audio->state.getProperty(trackFoldedID, false));
 }
 
 juce::Result Session::setTrackFolded(int track, bool folded)
 {
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(track, tracks.size()))
         return juce::Result::fail("Select a track to fold.");
     // Written without undo, as the height is; an open row carries nothing.
@@ -206,7 +205,7 @@ juce::Result Session::setTrackFolded(int track, bool folded)
 
 juce::Result Session::setTrackName(int track, const juce::String& name)
 {
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (isMasterTrack(track))
         return juce::Result::fail("The main row keeps its name.");
     if (!juce::isPositiveAndBelow(track, tracks.size()))
@@ -224,15 +223,13 @@ juce::Result Session::setTrackName(int track, const juce::String& name)
 
 juce::Colour Session::trackColour(int track) const
 {
-    const auto tracks = te::getAudioTracks(*edit);
-    if (!juce::isPositiveAndBelow(track, tracks.size()))
-        return {};
-    return tracks[track]->getColour();
+    auto* audio = audioTrack(track);
+    return audio != nullptr ? audio->getColour() : juce::Colour();
 }
 
 juce::Result Session::setTrackColour(int track, juce::Colour colour)
 {
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (isMasterTrack(track))
         return juce::Result::fail("The main row takes no colour.");
     if (!juce::isPositiveAndBelow(track, tracks.size()))
@@ -267,7 +264,7 @@ juce::Colour Session::pickTrackColour() const
 {
     const auto& palette = trackColourPalette();
     std::vector<juce::Colour> unused = palette;
-    for (auto* track : te::getAudioTracks(*edit))
+    for (auto* track : audioTracks())
     {
         const auto worn = track->getColour();
         unused.erase(std::remove(unused.begin(), unused.end(), worn), unused.end());
@@ -289,7 +286,7 @@ juce::Colour Session::pickTrackColour() const
 // transaction of their own, so opening one here would split theirs in half.
 void Session::moveTrackInEdit(int track, int destination)
 {
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(track, tracks.size()))
         return;
     destination = juce::jlimit(0, tracks.size() - 1, destination);
@@ -307,7 +304,7 @@ void Session::moveTrackInEdit(int track, int destination)
 
 juce::Result Session::moveTrack(int track, int destination)
 {
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (isMasterTrack(track) || isMasterTrack(destination))
         return juce::Result::fail("The main row keeps its place.");
     if (!juce::isPositiveAndBelow(track, tracks.size()))

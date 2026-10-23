@@ -24,7 +24,7 @@ constexpr int presetSlotBars = 1;
 // its own.
 te::ClipSlot* Session::clipSlotAt(int track, int scene) const
 {
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(track, tracks.size())) return nullptr;
     if (isGroupBusTrack(track)) return nullptr;
     const auto slots = tracks[track]->getClipSlotList().getClipSlots();
@@ -39,7 +39,7 @@ void Session::ensureSceneSlots(int minimumScenes)
     scenes.ensureNumberOfScenes(wanted);
     // A track restored from an older document, or added before the scene list
     // existed, can still be short of slots.
-    for (auto* track : te::getAudioTracks(*edit))
+    for (auto* track : audioTracks())
         track->getClipSlotList().ensureNumberOfSlots(wanted);
 }
 
@@ -256,7 +256,7 @@ juce::Result Session::copySlotClipToArrangement(int track, int scene, double sta
     auto* source = slot->getClip();
     if (source == nullptr)
         return juce::Result::fail("That slot is empty.");
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     const auto lane = targetTrack < 0 ? track : targetTrack;
     if (!juce::isPositiveAndBelow(lane, tracks.size()))
         return juce::Result::fail("That track does not exist.");
@@ -293,7 +293,7 @@ juce::Result Session::copyClipToSlot(te::EditItemID id, int scene)
         return juce::Result::fail("Select a clip to copy.");
     // The copy stays on the clip's own track.
     auto* clipTrack = source->getClipTrack();
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     int track = -1;
     for (int index = 0; index < tracks.size(); ++index)
         if (clipTrack != nullptr && tracks[index] == clipTrack)
@@ -311,7 +311,7 @@ juce::Result Session::copyClipToTrackSlot(te::EditItemID id, int track, int scen
     auto* source = findClip(id);
     if (source == nullptr)
         return juce::Result::fail("Select a clip to copy.");
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(track, tracks.size()))
         return juce::Result::fail("That track does not exist.");
     if (const auto refused = clipLaneRefusal(track, dynamic_cast<te::MidiClip*>(source) != nullptr); refused.failed())
@@ -357,7 +357,7 @@ juce::Result Session::copyClipToTrackSlot(te::EditItemID id, int track, int scen
 // lane rule.
 juce::Result Session::createSlotClip(int track, int scene)
 {
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(track, tracks.size()) || scene < 0)
         return juce::Result::fail("That clip slot does not exist.");
     if (const auto refused = clipLaneRefusal(track, true); refused.failed())

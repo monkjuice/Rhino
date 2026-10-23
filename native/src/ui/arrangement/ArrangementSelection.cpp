@@ -50,12 +50,9 @@ void Arrangement::moveTransportToSelectionStart()
         return;
     const auto seconds = std::max(0.0, timeSelection.start);
     session.setPlaybackStart(seconds);
-    auto& transport = session.edit->getTransport();
-    if (transport.isPlaying() || session.isCountingIn())
+    if (session.isPlaying() || session.isCountingIn())
         return;
-    if (std::abs(transport.getPosition().inSeconds() - seconds) < 1.0e-9)
-        return;
-    transport.setPosition(tracktion::core::TimePosition::fromSeconds(seconds));
+    session.locate(seconds);
     updatePlayhead();
 }
 
@@ -208,7 +205,7 @@ void Arrangement::endRegionGesture()
 double Arrangement::insertPointTime() const
 {
     return std::max(0.0, timeSelection.active ? timeSelection.start
-                                              : playheadTime(session.edit->getTransport()));
+                                              : session.playheadSeconds());
 }
 
 // A selection wins wherever the line genuinely crosses it, so cutting one clip
@@ -290,8 +287,7 @@ void Arrangement::paintTimeSelection(juce::Graphics& g)
 // where a paste went rather than only that it went somewhere.
 juce::String Arrangement::barPositionText(double seconds) const
 {
-    const auto beats = session.edit->tempoSequence
-        .toBeats(tracktion::core::TimePosition::fromSeconds(std::max(0.0, seconds))).inBeats();
+    const auto beats = session.secondsToBeats(std::max(0.0, seconds));
     const auto signature = session.timeSignature();
     const auto place = musicalPosition(beats, signature.numerator, signature.denominator);
     return juce::String(place.bar) + "." + juce::String(place.count);

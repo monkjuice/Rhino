@@ -17,7 +17,7 @@ namespace rhino
 
 te::VolumeAndPanPlugin* Session::trackVolumePlugin(int track) const
 {
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(track, tracks.size())) return nullptr;
     return tracks[track]->getVolumePlugin();
 }
@@ -29,7 +29,7 @@ te::VolumeAndPanPlugin* Session::trackVolumePlugin(int track) const
 // track already has the engine's own meter there.
 void Session::ensureTrackMixers()
 {
-    for (auto* track : te::getAudioTracks(*edit))
+    for (auto* track : audioTracks())
     {
         // Every track carries the DJ booth's two hidden ends from the start,
         // made with it here as the mixer is.
@@ -54,12 +54,12 @@ void Session::ensureTrackMixers()
 Session::TrackMixer Session::trackMixer(int track) const
 {
     TrackMixer mixer;
-    const auto tracks = te::getAudioTracks(*edit);
-    if (!juce::isPositiveAndBelow(track, tracks.size()))
+    auto* audio = audioTrack(track);
+    if (audio == nullptr)
         return mixer;
-    mixer.muted = tracks[track]->isMuted(false);
-    mixer.soloed = tracks[track]->isSolo(false);
-    if (auto* volume = tracks[track]->getVolumePlugin())
+    mixer.muted = audio->isMuted(false);
+    mixer.soloed = audio->isSolo(false);
+    if (auto* volume = audio->getVolumePlugin())
     {
         mixer.volumeDb = volume->getVolumeDb();
         mixer.pan = volume->getPan();
@@ -148,7 +148,7 @@ void Session::endTrackPanGesture(int track)
 
 void Session::setTrackMuted(int track, bool muted)
 {
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(track, tracks.size())) return;
     if (tracks[track]->isMuted(false) == muted) return;
     toggleTrackMute(track);
@@ -156,7 +156,7 @@ void Session::setTrackMuted(int track, bool muted)
 
 void Session::setTrackSoloed(int track, bool soloed)
 {
-    const auto tracks = te::getAudioTracks(*edit);
+    const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(track, tracks.size())) return;
     if (tracks[track]->isSolo(false) == soloed) return;
     toggleTrackSolo(track);

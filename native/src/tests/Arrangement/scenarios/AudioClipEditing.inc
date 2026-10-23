@@ -193,7 +193,7 @@
         require(!session.hasManualLoopRange(), "Right-clicking the ruler loop clears the manual loop range");
         view.mouseDown(event({view.xFor(0.25), rulerY}, {view.xFor(0.25), rulerY}, false));
         view.mouseUp(event({view.xFor(0.25), rulerY}, {view.xFor(0.25), rulerY}, false));
-        require(close(playheadTime(session.edit->getTransport()), 0.25), "Clicking the ruler still seeks the playhead");
+        require(close(session.playheadSeconds(), 0.25), "Clicking the ruler still seeks the playhead");
         view.mouseDown(event({40, 82}, {40, 82}, false));
         require(view.selectedTrack == 0, "Clicking the pattern lane selects the pattern track");
         view.mouseDown(event({40, audioLaneY}, {40, audioLaneY}, false));

@@ -247,7 +247,7 @@ Session::DjDeckInfo Session::djSlotInfo(int slot) const
     info.track = -1;
     if (info.kind == DjSourceKind::track)
     {
-        const auto tracks = te::getAudioTracks(*edit);
+        const auto tracks = audioTracks();
         for (int i = 0; i < tracks.size(); ++i)
             if (tracks[i]->itemID == info.trackId)
                 info.track = i;

@@ -8,6 +8,7 @@
 #include "tests/PushProtocolTest.h"
 #include "tests/VelocityCurveTest.h"
 #include "tests/VelocityLaneTest.h"
+#include "tests/LayerLintTest.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -315,6 +316,9 @@ int runArrangementGeometryTest()
         checkPushProtocol();
         checkVelocityCurves();
         checkVelocityLane();
+        // The dependency direction, read off the sources (LayerLintTest.cpp).
+        runLayerLintTest();
+
         return 0;
     }
     catch (const std::exception& error)

@@ -531,7 +531,7 @@ void StepGrid::changeListenerCallback(juce::ChangeBroadcaster*)
         return;
     }
     const auto& clipRange = session.pattern().getPosition().time;
-    const auto& loopRange = session.edit->getTransport().getLoopRange();
+    const auto loopRange = session.loopRange();
     const auto loopsEditedClip = session.hasManualLoopRange()
         && std::abs(loopRange.getStart().inSeconds() - clipRange.getStart().inSeconds()) < 0.0001
         && std::abs(loopRange.getEnd().inSeconds() - clipRange.getEnd().inSeconds()) < 0.0001;
@@ -627,8 +627,7 @@ void StepGrid::updatePlayhead()
     if (isHiddenInShell(*this))
         return;
     float next = -1.0f;
-    auto& transport = session.edit->getTransport();
-    next = playheadXForTime(playheadTime(transport));
+    next = playheadXForTime(session.playheadSeconds());
     movePlayhead(*this, playhead, next,
                  getLocalBounds().withTrimmedTop(static_cast<int>(headerHeight))
                                  .withTrimmedBottom(static_cast<int>(footerHeight)
@@ -645,8 +644,8 @@ float StepGrid::playheadXForTime(double seconds) const
     if (seconds < clipStart || seconds >= clipEnd)
         return -1.0f;
 
-    const auto editBeat = session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(seconds)).inBeats();
-    const auto clipStartBeat = session.edit->tempoSequence.toBeats(position.time.getStart()).inBeats();
+    const auto editBeat = session.secondsToBeats(seconds);
+    const auto clipStartBeat = session.secondsToBeats(position.time.getStart().inSeconds());
     const auto offsetBeat = position.offset.inSeconds() * session.tempo() / 60.0;
     auto localBeat = std::fmod(editBeat - clipStartBeat + offsetBeat, session.patternLengthBeats());
     if (localBeat < 0.0)

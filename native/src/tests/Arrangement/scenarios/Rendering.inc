@@ -182,7 +182,7 @@
         view.mouseWheelMove(shiftWheelEvent, shiftWheel);
         require(view.viewSpan < spanBeforeHorizontalWheelZoom,
                 "Shift-wheel zoom handles platforms that report the gesture as horizontal scrolling");
-        require(close(playheadTime(session.edit->getTransport()), 0.5), "Stopped playhead follows the seek position");
+        require(close(session.playheadSeconds(), 0.5), "Stopped playhead follows the seek position");
         view.fit();
         require(view.playhead == view.xFor(0.5), "Fit must update the playhead immediately");
         session.stop();

@@ -15,7 +15,7 @@ void MainComponent::setDjViewOpen(bool open)
     // The decks have transports of their own, and the song's is out of
     // reach while they show: it stops, its keys dim, and Space is the
     // focused deck's play key.
-    if (open && session.edit->getTransport().isPlaying())
+    if (open && session.isPlaying())
         session.stop();
     for (auto* control : std::initializer_list<juce::Component*>{&play, &stop, &rewind, &record})
         control->setEnabled(!open);

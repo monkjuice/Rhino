@@ -5,6 +5,7 @@
 #include "ui/shared/LevelMeter.h"
 #include <map>
 #include <memory>
+#include <unordered_map>
 
 namespace rhino
 {
@@ -98,7 +99,12 @@ public:
 private:
     friend int runArrangementTest();
     friend int runUiProfile();
+    friend int runStressProfile();
     struct Waveform;
+    // A note in seconds from the start of its clip's sequence, which the clip
+    // is a window onto: where it is drawn is this plus the window's origin,
+    // the clip's start less its offset, so a clip moved or trimmed keeps its
+    // notes without their being converted again.
     struct MidiNoteView
     {
         double start = 0.0, end = 0.0;
@@ -110,13 +116,28 @@ private:
         juce::String name;
         ClipGeometry position;
         Waveform* waveform = nullptr;
-        std::vector<MidiNoteView> midiNotes;
+        // Shared with the track's cache below, so a sync that keeps a track
+        // copies a pointer rather than its notes.
+        std::shared_ptr<const std::vector<MidiNoteView>> midiNotes;
         double speed = 1.0;
         double sourceDuration = 0.0;
         int track = 0;
         juce::Colour colour;
         int clipPlugins = 0;
         bool muted = false;
+    };
+    // What a sync keeps of each track between rebuilds, by the track's id:
+    // its clip views and the files their waveforms are of, good while the
+    // session's revision for the track holds (Session::trackRevision). A
+    // sync reads the views of a track the model has not marked since from
+    // here, which is what keeps a click on one card from converting every
+    // note of the song through the tempo map again.
+    struct TrackClipCache
+    {
+        juce::uint64 revision = 0;
+        std::vector<ClipView> clips;
+        std::vector<juce::String> files;
+        juce::uint32 pass = 0;
     };
     enum class LoopGesture { none, create, move, trimStart, trimEnd };
     // A clip is two rows. The strip along its top is the clip itself: clicking
@@ -179,6 +200,7 @@ private:
         bool valid() const { return row >= 0; }
     };
     void sync();
+    void rebuildTrackClips(TrackClipCache&, te::AudioTrack&, int track);
     // Brings a timeline the shell has hidden up to date before a command reads
     // its list of the clips. Hidden, the timeline lets the list go stale rather
     // than rebuilding it for every change, and the shell still sends it Ctrl+E
@@ -451,6 +473,8 @@ private:
     juce::AudioThumbnailCache thumbnailCache {32};
     std::map<juce::String, std::unique_ptr<Waveform>> waveforms;
     std::vector<ClipView> clips;
+    std::unordered_map<juce::uint64, TrackClipCache> trackClipCaches;
+    juce::uint32 syncPass = 0;
     std::vector<std::vector<Session::TrackAutomation>> trackLanes;
     std::vector<LaneRow> rows;
     std::vector<Session::TrackGroup> groups;

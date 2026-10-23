@@ -69,7 +69,7 @@
                 require(view.timeSelection.active && !view.timeSelection.isRange()
                         && close(view.timeSelection.start, 4.375),
                         "and leaves the line on the start of the cell it landed in");
-                require(close(playheadTime(session.edit->getTransport()), 4.375),
+                require(close(session.playheadSeconds(), 4.375),
                         "The playhead moves to the line the click put down");
                 require(clipAt(1, 4.0) != nullptr, "and the clip under the pointer has not moved");
 
@@ -95,7 +95,7 @@
                 // of the song, so playing again repeats the passage being
                 // worked on rather than the whole arrangement.
                 session.stop();
-                require(close(playheadTime(session.edit->getTransport()), 4.375),
+                require(close(session.playheadSeconds(), 4.375),
                         "Stop returns the playhead to the line the selection is on");
 
                 // The line only reaches the lanes while the transport is
@@ -115,19 +115,19 @@
                 // song, and takes the playback start with it so a later stop
                 // agrees with where the transport already is.
                 session.returnToStart();
-                require(close(playheadTime(session.edit->getTransport()), 0.0) && close(session.playbackStart(), 0.0),
+                require(close(session.playheadSeconds(), 0.0) && close(session.playbackStart(), 0.0),
                         "Returning to start puts the playhead at the top of the song whatever the selection is on");
                 require(close(view.timeSelection.start, 4.375),
                         "and leaves the selection it ignored where it was");
                 session.stop();
-                require(close(playheadTime(session.edit->getTransport()), 0.0),
+                require(close(session.playheadSeconds(), 0.0),
                         "so a stop after it holds at the top rather than jumping back to the line");
 
                 // The upper row is the clip: it selects, and the line goes to
                 // the clip's own start so play begins with it.
                 drag({view.xFor(4.45), clipRowY(1)}, {view.xFor(4.45), clipRowY(1)});
                 require(view.selectedClipID() == fixtureID, "A press on a clip's upper row selects the clip");
-                require(close(view.timeSelection.start, 4.0) && close(playheadTime(session.edit->getTransport()), 4.0),
+                require(close(view.timeSelection.start, 4.0) && close(session.playheadSeconds(), 4.0),
                         "and puts the line, and the playhead, on that clip's start");
                 require(close(clipAt(1, 4.0)->getPosition().time.getStart().inSeconds(), 4.0),
                         "without moving it");

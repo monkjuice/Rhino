@@ -215,12 +215,14 @@ void StepGrid::mouseDown(const juce::MouseEvent& event)
                                           0.0, static_cast<double>(session.editorStepCount()));
         const auto localBeat = localStep * 4.0 / static_cast<double>(session.editorStepResolution());
         const auto& position = session.pattern().getPosition();
-        const auto clipStartBeat = session.edit->tempoSequence.toBeats(position.time.getStart()).inBeats();
+        const auto clipStartBeat = session.secondsToBeats(position.time.getStart().inSeconds());
         const auto offsetBeat = position.offset.inSeconds() * session.tempo() / 60.0;
-        const auto requestedTime = session.edit->tempoSequence.toTime(
-            tracktion::core::BeatPosition::fromBeats(clipStartBeat - offsetBeat + localBeat)).inSeconds();
+        const auto requestedTime = session.beatsToSeconds(clipStartBeat - offsetBeat + localBeat);
         const auto clippedTime = std::clamp(requestedTime, position.time.getStart().inSeconds(), position.time.getEnd().inSeconds());
-        session.edit->getTransport().setPosition(tracktion::core::TimePosition::fromSeconds(clippedTime));
+        // Through the model, which also makes it the playback start: a seek
+        // in the editor is a seek, and stop returns to it as it does to one
+        // made on the ruler.
+        session.locate(clippedTime);
         // The ruler carries the insert point with the playhead, so a paste
         // after a seek lands where the transport was just put.
         setStepInsertPoint(loopStepAt(event.position.x, event.mods.isAltDown()));

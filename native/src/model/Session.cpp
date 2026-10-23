@@ -150,6 +150,8 @@ Session::~Session()
     djUnbindAll();
     releaseDj();
     releasePreview();
+    // Last: anything above may still ask for a track.
+    unwatchEdit();
 }
 
 // The starter document, built here rather than in the constructor so that File >
@@ -157,6 +159,7 @@ Session::~Session()
 void Session::buildStarterEdit()
 {
     edit = te::createEmptyEdit(engine, {});
+    watchEditTree();
     edit->state.setProperty("rhinoFormatVersion", 1, nullptr);
     edit->clickTrackEnabled = false;
     edit->clickTrackEmphasiseBars = true;
@@ -171,7 +174,7 @@ void Session::buildStarterEdit()
                                                TrackType::midi, TrackType::audio};
     static constexpr int starterTrackCount = 4;
     edit->ensureNumberOfAudioTracks(starterTrackCount);
-    const auto starterTracks = te::getAudioTracks(*edit);
+    const auto starterTracks = audioTracks();
     for (int i = 0; i < starterTrackCount; ++i)
     {
         auto* starter = starterTracks[i];
@@ -248,7 +251,7 @@ void Session::panicReset(bool restartAudioDevice)
     transport.stop(false, true);
     transport.setPosition({});
 
-    for (auto* track : te::getAudioTracks(*edit))
+    for (auto* track : audioTracks())
     {
         resetPluginList(&track->pluginList);
         for (auto* clip : track->getClips())
@@ -315,6 +318,14 @@ void Session::markModified(int changedTrack, ModelChange changes)
 {
     ++changeRevision;
     edit->markAsChanged();
+    // A change naming a track counts against that track whatever its kind: a
+    // clip's colour is `none` and is still something a view of the track
+    // shows. One naming no track counts against every track unless it is
+    // nothing any view of a track shows.
+    if (auto* track = audioTrack(changedTrack))
+        ++trackRevisions[track->itemID.getRawID()];
+    else if (changes != ModelChange::none)
+        ++allTracksRevision;
     // A name, a colour or a view setting moves no lane and changes nothing a
     // deck plays.
     if (changes == ModelChange::none)
@@ -328,6 +339,80 @@ void Session::markModified(int changedTrack, ModelChange changes)
     // A deck playing a clip of the track makes it again when what the clip
     // plays changed; a change known to be one track's leaves the others alone.
     djDocumentChanged(changedTrack, changes);
+}
+
+juce::uint64 Session::trackRevision(int track) const
+{
+    auto* audio = audioTrack(track);
+    if (audio == nullptr)
+        return 0;
+    const auto own = trackRevisions.find(audio->itemID.getRawID());
+    return allTracksRevision + (own != trackRevisions.end() ? own->second : 0);
+}
+
+// After the edit is made or replaced. The watcher is on the edit's own tree,
+// so a track the engine adds on its own - none today - is seen too.
+void Session::watchEditTree()
+{
+    audioTracksStale = true;
+    cachedAudioTracks.clear();
+    trackRevisions.clear();
+    edit->state.addListener(&trackCacheWatcher);
+    edit->getTransport().addChangeListener(&engineStateRelay);
+    edit->getUndoManager().addChangeListener(&engineStateRelay);
+}
+
+void Session::unwatchEdit()
+{
+    if (edit == nullptr)
+        return;
+    edit->state.removeListener(&trackCacheWatcher);
+    edit->getTransport().removeChangeListener(&engineStateRelay);
+    edit->getUndoManager().removeChangeListener(&engineStateRelay);
+}
+
+void Session::EngineStateRelay::changeListenerCallback(juce::ChangeBroadcaster* source)
+{
+    if (session.edit != nullptr && source == &session.edit->getTransport())
+        session.transportState.sendChangeMessage();
+    else
+        session.undoHistory.sendChangeMessage();
+}
+
+bool Session::canUndo() const
+{
+    return edit->getUndoManager().canUndo();
+}
+
+bool Session::canRedo() const
+{
+    return edit->getUndoManager().canRedo();
+}
+
+bool Session::ownsDevice(const te::Plugin& plugin) const
+{
+    return plugin.state.isAChildOf(edit->state);
+}
+
+const juce::Array<te::AudioTrack*>& Session::cachedTracks() const
+{
+    if (audioTracksStale)
+    {
+        cachedAudioTracks = te::getAudioTracks(*edit);
+        audioTracksStale = false;
+    }
+    return cachedAudioTracks;
+}
+
+juce::Array<te::AudioTrack*> Session::audioTracks() const
+{
+    return cachedTracks();
+}
+
+te::AudioTrack* Session::audioTrack(int index) const
+{
+    const auto& tracks = cachedTracks();
+    return juce::isPositiveAndBelow(index, tracks.size()) ? tracks.getUnchecked(index) : nullptr;
 }
 
 void Session::markClipsModified(std::vector<int> tracks, ModelChange also)
@@ -378,7 +463,9 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
     mirroredCurves.clear();
     detachParameterMapping();
     releaseMeterTaps();
+    unwatchEdit();
     edit = std::move(candidate);
+    watchEditTree();
     // The automation that was being played by hand belonged to the outgoing
     // document's tracks, and is keyed by their indices.
     lastTouchedParameter = {};

@@ -56,9 +56,10 @@ void MainComponent::timerCallback()
     session.recordingStopped();
     // The booth's reads finish on a worker and a changed cell is made
     // again once nothing is held; neither is announced, so both are polled.
+    session.setPointerHeld(juce::ModifierKeys::getCurrentModifiers().isAnyMouseButtonDown());
     session.djPoll();
     updateRecordButton();
-    const auto seconds = session.edit->getTransport().getPosition().inSeconds();
+    const auto seconds = session.playheadSeconds();
     updateReadings(seconds);
     // The loop is where the transport will turn, so it heads the column of
     // readings that describe the session rather than follow it.
@@ -93,7 +94,7 @@ void MainComponent::updateReadings(double seconds)
         audioDescription = audioDeviceText();
     }
     position.setClock(displayTime ? formatClock(seconds, true) + "  /  "
-                                        + formatClock(session.edit->getLength().inSeconds(), true)
+                                        + formatClock(session.songLengthSeconds(), true)
                                   : juce::String());
     juce::StringArray load;
     if (displayCpu) load.add("CPU " + juce::String(juce::roundToInt(cpuLoad * 100.0)) + "%");
@@ -125,8 +126,7 @@ juce::String MainComponent::loopText() const
 // counts change too slowly to tell a stalled readout from a stopped one.
 juce::String MainComponent::placeText(double seconds) const
 {
-    const auto beats = session.edit->tempoSequence
-                           .toBeats(tracktion::core::TimePosition::fromSeconds(seconds)).inBeats();
+    const auto beats = session.secondsToBeats(seconds);
     const auto signature = session.timeSignature();
     const auto place = musicalPosition(beats, signature.numerator, signature.denominator);
     return juce::String(place.bar).paddedLeft('0', 3)
@@ -140,11 +140,11 @@ juce::String MainComponent::placeText(double seconds) const
 // that moves when the buffer size is changed to chase a crackle.
 juce::String MainComponent::audioDeviceText() const
 {
-    auto* device = session.engine.getDeviceManager().deviceManager.getCurrentAudioDevice();
-    if (device == nullptr) return "NO AUDIO DEVICE";
-    const auto rate = device->getCurrentSampleRate();
-    const auto block = device->getCurrentBufferSizeSamples();
-    if (rate <= 0.0 || block <= 0) return device->getName().toUpperCase();
+    const auto device = session.audioDeviceSummary();
+    if (!device.open) return "NO AUDIO DEVICE";
+    const auto rate = device.sampleRate;
+    const auto block = device.blockSize;
+    if (rate <= 0.0 || block <= 0) return device.name.toUpperCase();
     return juce::String(rate / 1000.0, 1) + " kHz   " + juce::String(block)
          + "   " + juce::String(block * 1000.0 / rate, 1) + " ms";
 }

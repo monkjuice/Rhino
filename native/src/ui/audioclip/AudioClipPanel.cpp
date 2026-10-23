@@ -251,7 +251,7 @@ void AudioClipPanel::apply(int control)
 void AudioClipPanel::splitAtLine()
 {
     const auto seconds = splitPosition ? splitPosition()
-                                       : playheadTime(session.edit->getTransport());
+                                       : session.playheadSeconds();
     const auto result = session.splitClip(clip, seconds);
     if (status) status(result.failed() ? result.getErrorMessage()
                                        : "Split " + mix.name.quoted() + " at the line");

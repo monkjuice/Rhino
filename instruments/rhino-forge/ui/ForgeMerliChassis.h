@@ -34,11 +34,15 @@ inline constexpr float furBandTop = 28.0f;
 inline constexpr float headerPlateTop = 36.0f;
 
 // The ears as drawn: their width on the panel, and where the art's box sits so
-// that the tip is two rows from the top and the outer edge on the window's
-// edge. The art is about twice this size, so a scaled display stays sharp.
+// that the tip is two rows from the top and the ear stands at the very end of
+// the head. The art carries 18.5 px of margin outside the ear's outer edge
+// where it meets the fur, so the box hangs that far past the window: at a
+// 6 px overhang the band's square corner stuck out 12.5 px beyond each ear,
+// a head wider than its ears at the top. The art is about twice this size, so
+// a scaled display stays sharp.
 inline constexpr float earWidth = 76.0f;
 inline constexpr float earTop = -5.0f;
-inline constexpr float earOverhang = 6.0f;
+inline constexpr float earOverhang = 18.5f;
 
 // One ear, from the art: a finished ear with its pink and its lit hair, filled
 // solid and faded out toward its base so it grows out of the band. The cat's

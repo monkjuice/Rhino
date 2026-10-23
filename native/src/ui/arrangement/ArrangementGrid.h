@@ -89,9 +89,10 @@ inline constexpr GridDivision widerGridDivision(GridDivision division)
 // The finest division whose lines are at least the target over root two apart,
 // which between divisions an octave apart is the one nearest the target. Asking
 // for the finest that cleared the whole target left the lines between one and
-// two targets apart and read half an octave coarser than Live: two minutes
-// across the panel came out in two-bar cells where Live shows one bar, and
-// Live's deepest zoom shows 1/8192 lines 28 px apart where this showed 1/4096.
+// two targets apart, so two minutes across a 2,000 px lane came out in two-bar
+// cells where Live shows one bar. Live draws denser still - one-bar cells 20 px
+// apart, 1/8192 lines 14 px apart - but at that density the same two minutes
+// would read in half bars.
 inline GridDivision adaptiveGridDivision(double pixelsPerBeat, double beatsPerBar, AdaptiveGridWidth width)
 {
     const auto target = adaptiveGridTargetPixels(width) / std::sqrt(2.0);
@@ -193,18 +194,14 @@ inline bool isWashedBar(double bar, int bandBars)
     return std::fmod(std::fmod(band, 2.0) + 2.0, 2.0) >= 1.0;
 }
 
-// How far apart two labelled bars have to be. The ruler prints a bar number at
-// the top of the timeline and the time ruler under it prints that same bar's
-// wall-clock time, which is a far wider string - so the two ask for different
-// spacing and would otherwise thin out onto different bars.
+// How far apart two labels have to be: a bar number at the top of the
+// timeline, and a wall-clock reading in the row at its foot, which is a far
+// wider string.
 inline constexpr double barNumberMinimumPixels = 44.0;
 inline constexpr double timeLabelMinimumPixels = barNumberMinimumPixels * 2.0;
 
-// The step, in bars, between one label and the next: the smallest power of two
-// that leaves at least minimumPixels between them. Both rows step this way and
-// both minimums are powers of two apart, so whichever row is labelling less
-// often is labelling a subset of the other's bars - which is what keeps a time
-// under every bar number it sits below.
+// The step, in bars, between one bar number and the next: the smallest power
+// of two that leaves at least minimumPixels between them.
 inline double barLabelStep(double pixelsPerBar, double minimumPixels)
 {
     double step = 1.0;
@@ -212,21 +209,48 @@ inline double barLabelStep(double pixelsPerBar, double minimumPixels)
     return step;
 }
 
-// The marks between one labelled time and the next. At most this many to a
-// label, and never closer together than this many pixels - so the row fills in
-// as the view is zoomed in and thins back out as it is zoomed out, while every
-// mark stays a binary subdivision of the gap between two labels and therefore
-// lands on a musical division rather than wherever the arithmetic falls.
+// The marks between one reading of the time row and the next. At most this
+// many to a reading, and never closer together than this many pixels, so the
+// row fills in as the view is zoomed in and thins back out as it is zoomed out.
 inline constexpr int timeTickDivisions = 8;
 inline constexpr double timeTickMinimumPixels = 20.0;
 
-// How many of those a label step is actually divided into at this zoom.
-inline int timeTicksPerLabel(double pixelsPerBar, double labelStep)
+// The time row reads round times, as Live's does: 1, 2 and 5 of each power of
+// ten, and 15 and 30 of the seconds and minutes. Its readings stepped by bars
+// until 2026-10-23, so a time always stood under a bar number, but that read
+// 00:08:000, 00:16:000 at 120 where Live reads 0:10, 0:20, jumped two seconds
+// at a time across a view zoomed in to 1/32, and printed nothing at all once a
+// bar was wider than the view. In microseconds, so a reading is a whole number
+// and prints exactly; the three below a millisecond only ever mark one.
+inline constexpr std::array<long long, 25> roundTimeSteps {
+    100, 200, 500,
+    1'000, 2'000, 5'000, 10'000, 20'000, 50'000, 100'000, 200'000, 500'000,
+    1'000'000, 2'000'000, 5'000'000, 10'000'000, 15'000'000, 30'000'000,
+    60'000'000, 120'000'000, 300'000'000, 600'000'000, 900'000'000, 1'800'000'000, 3'600'000'000
+};
+inline constexpr long long roundTimeFinestReading = 1'000;
+
+// The finest round step, a millisecond or more, that keeps two readings
+// timeLabelMinimumPixels apart.
+inline long long roundTimeLabelStep(double pixelsPerSecond)
 {
-    auto divisions = timeTickDivisions;
-    while (divisions > 1 && labelStep * pixelsPerBar / divisions < timeTickMinimumPixels)
-        divisions /= 2;
-    return divisions;
+    for (const auto step : roundTimeSteps)
+        if (step >= roundTimeFinestReading && static_cast<double>(step) * 1.0e-6 * pixelsPerSecond >= timeLabelMinimumPixels)
+            return step;
+    return roundTimeSteps.back();
+}
+
+// The marks between two round readings: the finest round step that divides the
+// gap into at most timeTickDivisions and keeps timeTickMinimumPixels between
+// marks, so ten seconds are marked in twos, fifteen in fives and a millisecond
+// in fifths. The gap itself, unmarked, when nothing finer fits.
+inline long long roundTimeTickStep(double pixelsPerSecond, long long labelStep)
+{
+    for (const auto step : roundTimeSteps)
+        if (step < labelStep && labelStep % step == 0 && labelStep / step <= timeTickDivisions
+            && static_cast<double>(step) * 1.0e-6 * pixelsPerSecond >= timeTickMinimumPixels)
+            return step;
+    return labelStep;
 }
 
 // The first labelled bar at or before a given one, so the run of labels is a
@@ -279,6 +303,41 @@ inline double rulerTickSpan(double pixelsPerCount, double labelSpan)
 {
     auto span = labelSpan;
     while (span > rulerFinestSpan && finerRulerSpan(span) * pixelsPerCount >= rulerTickMinimumPixels)
+        span = finerRulerSpan(span);
+    return span;
+}
+
+// Zoomed in far enough, round times run out: Live's time row prints whole
+// milliseconds and nothing finer, so at its deepest it shows one reading across
+// the whole view. The time row then reads the bar ruler's own chain instead, on
+// past the counts where the bar ruler stops, so each reading falls on a line
+// the grid cuts the bar into. That takes over once it reads at least twice as
+// often as whole milliseconds would; any sooner it would trade round readings
+// for ones barely any closer together.
+inline bool timeRowReadsGrid(double gridReadingSeconds)
+{
+    return gridReadingSeconds * 2.0 <= static_cast<double>(roundTimeFinestReading) * 1.0e-6;
+}
+
+// Counts from one of those readings to the next: the finest span on the chain
+// that keeps timeLabelMinimumPixels between two of them. The whole bar when
+// nothing finer fits. Bounded, because this runs inside paint and a lane that
+// has not been laid out yet reports any width at all.
+inline double timeLabelSpan(double pixelsPerCount, int countsPerBar)
+{
+    auto span = static_cast<double>(std::max(1, countsPerBar));
+    while (span > 1.0e-6 && finerRulerSpan(span) * pixelsPerCount >= timeLabelMinimumPixels)
+        span = finerRulerSpan(span);
+    return span;
+}
+
+// The marks between them, down the same chain: at most timeTickDivisions to a
+// reading and never closer than timeTickMinimumPixels.
+inline double timeTickSpan(double pixelsPerCount, double labelSpan)
+{
+    auto span = labelSpan;
+    while (labelSpan / finerRulerSpan(span) <= timeTickDivisions + 1.0e-9
+           && finerRulerSpan(span) * pixelsPerCount >= timeTickMinimumPixels)
         span = finerRulerSpan(span);
     return span;
 }

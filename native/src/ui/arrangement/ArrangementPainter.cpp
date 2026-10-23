@@ -133,8 +133,9 @@ void Arrangement::paintBarNumbers(juce::Graphics& g, double firstBeat, double la
     }
 }
 
-// The same bars the ruler numbers, read as wall-clock times, in the strip above
-// the horizontal scrollbar.
+// The timeline read as wall-clock times, in the strip above the horizontal
+// scrollbar: round times while they can fill the row, and past that the grid's
+// own divisions of the bar (ArrangementGrid.h has the rule).
 //
 // It goes here rather than in a band of its own between the panel and the clip
 // editor. The main row takes no clips, so everything right of its header is
@@ -170,53 +171,64 @@ void Arrangement::paintTimeRuler(juce::Graphics& g, double firstBeat, double las
 
     const juce::Rectangle<float> strip {headerWidth, band.getY() + trackDividerThickness,
                                         std::max(1.0f, right - headerWidth), timeRulerHeight};
+    if (lastBeat <= firstBeat) return;
+    const auto pixelsPerSecond = static_cast<double>(lane(0).getWidth()) / std::max(1.0e-9, viewSpan);
+
+    // The grid's divisions are measured at the count the view opens in, since
+    // a tempo ramp makes counts unequal; the row reads them only once round
+    // times have run out.
     const auto barLength = std::max(0.25, session.beatsPerBar());
-    const auto timeOfBar = [this, barLength](double bar)
+    const auto countsPerBar = std::max(1, session.timeSignature().numerator);
+    const auto countLength = barLength / countsPerBar;
+    const auto timeOfCount = [this, countLength](double counts)
     {
         return session.edit->tempoSequence
-            .toTime(tracktion::core::BeatPosition::fromBeats((bar - 1.0) * barLength)).inSeconds();
+            .toTime(tracktion::core::BeatPosition::fromBeats(counts * countLength)).inSeconds();
     };
-    const auto firstBar = std::max(1.0, std::floor(firstBeat / barLength) + 1.0);
-    const auto lastBar = std::floor(lastBeat / barLength) + 1.0;
-    if (lastBar < firstBar) return;
-
-    // A time is a far wider string than a bar number, so the two rows ask for
-    // different spacing - and both step by the same rule from minimums a power
-    // of two apart, which is what keeps every time under a bar number rather
-    // than merely near one.
-    const auto pixelsPerBar = std::max(0.01f, xFor(timeOfBar(firstBar + 1.0)) - xFor(timeOfBar(firstBar)));
-    const auto step = barLabelStep(pixelsPerBar, timeLabelMinimumPixels);
-    // Marks between the labels, as many as the zoom has room for. Counted from
-    // a labelled bar rather than from the edge of the view, so which marks are
-    // long and which are short is a property of the music and does not shuffle
-    // as the arrangement is scrolled.
-    const auto divisions = timeTicksPerLabel(pixelsPerBar, step);
-    const auto tick = step / static_cast<double>(divisions);
-    const auto start = firstLabelledBar(firstBar, step);
+    const auto openingCount = std::floor(std::max(0.0, firstBeat) / countLength);
+    const auto pixelsPerCount = pixelsPerSecond * (timeOfCount(openingCount + 1.0) - timeOfCount(openingCount));
+    const auto gridSpan = timeLabelSpan(pixelsPerCount, countsPerBar);
+    const auto gridReading = timeOfCount(openingCount + gridSpan) - timeOfCount(openingCount);
+    const auto readsGrid = timeRowReadsGrid(gridReading);
+    const auto roundLabel = roundTimeLabelStep(pixelsPerSecond);
+    const auto roundTick = roundTimeTickStep(pixelsPerSecond, roundLabel);
+    const auto gridTick = timeTickSpan(pixelsPerCount, gridSpan);
+    const auto marksPerReading = readsGrid ? std::max(1LL, std::llround(gridSpan / gridTick)) : roundLabel / roundTick;
+    // Whole seconds and minutes read without their milliseconds, as Live's do,
+    // and a reading closer than a tenth of a second to the next carries the
+    // decimals of a millisecond it needs.
+    const auto withMilliseconds = readsGrid || roundLabel % 1'000'000 != 0;
+    const auto decimals = readsGrid ? clockDecimalsForStep(gridReading) : 0;
+    // Marks are counted from the start of the song rather than from the edge of
+    // the view, so which of them carry a reading is a property of the music
+    // and does not shuffle as the arrangement is scrolled.
+    const auto timeOfMark = [&](long long mark)
+    {
+        return readsGrid ? timeOfCount(static_cast<double>(mark) * gridTick)
+                         : static_cast<double>(mark * roundTick) * 1.0e-6;
+    };
 
     g.setFont(uiFont(10.0f));
     // The whole reading or none of it. A bar number clipped by the right edge
     // is still the start of a number; "00:0" is not a time, and at nine
     // characters a stub is wide enough to read as one.
     const auto labelWidth = static_cast<float>(
-        juce::GlyphArrangement::getStringWidthInt(g.getCurrentFont(), "00:00:000"));
-    // Only the marks whose line or reading can reach the repainted columns;
-    // the index stays counted from the labelled bar, as above.
+        juce::GlyphArrangement::getStringWidthInt(g.getCurrentFont(), formatClock(0.0, withMilliseconds, decimals)));
+    // Only the marks whose line or reading can reach the repainted columns.
     const auto dirty = repaintArea(g);
-    const auto firstWorthBar = session.edit->tempoSequence.toBeats(
-        tracktion::core::TimePosition::fromSeconds(std::max(0.0, timeAt(dirty.getX() - labelWidth - 84.0f))))
-        .inBeats() / barLength + 1.0;
-    const auto firstMark = std::max(0, static_cast<int>(std::floor((firstWorthBar - start) / tick)) - 1);
+    const auto firstWorth = std::max(0.0, timeAt(dirty.getX() - labelWidth - 84.0f));
+    auto mark = static_cast<long long>(std::floor(readsGrid
+        ? session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(firstWorth)).inBeats()
+              / countLength / gridTick
+        : firstWorth * 1.0e6 / static_cast<double>(roundTick)));
     const auto lastX = std::min(right, dirty.getRight() + 1.0f);
-    for (int mark = firstMark; mark < 4096; ++mark)
+    for (int painted = 0; painted < 4096; ++painted, ++mark)
     {
-        const auto bar = start + tick * mark;
-        if (bar > lastBar + step) break;
-        const auto time = timeOfBar(bar);
+        const auto time = timeOfMark(mark);
         const auto x = xFor(time);
         if (x < headerWidth - 1.0f) continue;
         if (x > lastX) break;
-        const auto labelled = mark % divisions == 0;
+        const auto labelled = mark % marksPerReading == 0;
         g.setColour(labelled ? palette::border.brighter(0.55f) : palette::border.brighter(0.12f));
         g.drawVerticalLine(static_cast<int>(x), strip.getY(),
                            strip.getY() + (labelled ? timeMajorTick : timeMinorTick));
@@ -224,11 +236,9 @@ void Arrangement::paintTimeRuler(juce::Graphics& g, double firstBeat, double las
         // close enough to it to be worth a reading.
         if (!labelled || x + 4.0f + labelWidth > right) continue;
         g.setColour(palette::textDim);
-        // Four pixels right of the mark, which is the offset the bar number
-        // above takes: the two readings share a left edge down the whole
-        // column.
-        drawSnappedText(g, formatClock(time, true),
-                        strip.withTrimmedTop(timeMajorTick).withX(x + 4.0f).withWidth(76.0f)
+        // Four pixels right of the mark, the offset the bar numbers above take.
+        drawSnappedText(g, formatClock(time, withMilliseconds, decimals),
+                        strip.withTrimmedTop(timeMajorTick).withX(x + 4.0f).withWidth(std::max(76.0f, labelWidth + 4.0f))
                              .getSmallestIntegerContainer());
     }
 }

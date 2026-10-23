@@ -21,6 +21,48 @@
             const auto deepestSpan = view.viewSpan;
             view.zoom(0.5, view.viewStart);
             require(view.viewSpan == deepestSpan, "Nothing zooms in past 1/16384");
+            // And the time row still reads in there, between two bars: it
+            // printed a time only where a bar began, so a view zoomed in to a
+            // 1/512 grid, or any deeper, printed none.
+            {
+                view.sync();
+                const auto foot = juce::Rectangle<int>(0, view.getHeight() - static_cast<int>(view.bottomInset + view.footHeight),
+                                                       view.getWidth(), static_cast<int>(view.footHeight));
+                const auto rowAt = [&](double start, double span)
+                {
+                    view.viewStart = start;
+                    view.viewSpan = span;
+                    return view.createComponentSnapshot(foot);
+                };
+                const auto inkOf = [&](const juce::Image& row)
+                {
+                    // Below the marks and clear of the scrollbar the row sits on.
+                    const auto textTop = static_cast<int>(view.trackDividerThickness + view.timeMajorTick);
+                    int ink = 0;
+                    for (int y = textTop; y < textTop + 11; ++y)
+                        for (int x = static_cast<int>(view.headerWidth) + 2; x < row.getWidth() - 16; ++x)
+                            if (row.getPixelAt(x, y).getBrightness() > palette::appBackground.getBrightness() + 0.2f)
+                                ++ink;
+                    return ink;
+                };
+                const std::array<juce::Image, 4> rows {rowAt(0.0, 120.0), rowAt(1.0, 4.0), rowAt(1.3, 0.25), rowAt(1.3, deepestSpan)};
+                require(inkOf(rows[2]) > 40, "The time row reads between bars at a 1/512 grid");
+                require(inkOf(rows[3]) > 40, "And at the deepest zoom");
+                if (const auto shot = juce::SystemStats::getEnvironmentVariable("RHINO_TIME_ROW_SNAPSHOT", {}); shot.isNotEmpty())
+                {
+                    juce::Image stacked(juce::Image::RGB, foot.getWidth(), foot.getHeight() * 4, true, juce::SoftwareImageType());
+                    {
+                        juce::Graphics g(stacked);
+                        for (int i = 0; i < 4; ++i)
+                            g.drawImageAt(rows[static_cast<size_t>(i)], 0, foot.getHeight() * i);
+                    }
+                    juce::File(shot).deleteFile();
+                    if (auto stream = juce::File(shot).createOutputStream())
+                        juce::PNGImageFormat().writeImageToStream(stacked, *stream);
+                }
+                view.viewStart = 0.0;
+                view.viewSpan = deepestSpan;
+            }
             view.setSize(1000, 246);
         }
         view.fit();

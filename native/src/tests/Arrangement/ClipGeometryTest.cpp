@@ -4,6 +4,7 @@
 #include "app/InfoHints.h"
 #include "ui/shared/Playhead.h"
 #include "ui/shared/LevelMeter.h"
+#include "ui/shared/WallClock.h"
 #include "tests/PushProtocolTest.h"
 #include "tests/VelocityCurveTest.h"
 #include "tests/VelocityLaneTest.h"
@@ -86,44 +87,95 @@ int runArrangementGeometryTest()
         if (isWashedBar(1.0, 0))
             throw std::runtime_error("A band of no bars washes nothing");
 
-        // The ruler numbers bars; the row at the foot of the panel reads the
-        // same bars as wall-clock times. A time is a far wider string, so the
-        // two rows thin out at different zooms - and the one labelling less
-        // often has to be labelling a subset of the other's bars, or a time
-        // would stand under a bar with no number over it. Swept across four
-        // decades of zoom at an irrational-ish ratio, so the step boundaries
-        // are crossed rather than landed on.
+        // The ruler numbers bars in powers of two, as far apart as it has to and
+        // no further. Swept across four decades of zoom at an irrational-ish
+        // ratio, so the step boundaries are crossed rather than landed on.
         for (double pixelsPerBar = 0.5; pixelsPerBar < 4096.0; pixelsPerBar *= 1.37)
         {
             const auto numbers = barLabelStep(pixelsPerBar, barNumberMinimumPixels);
-            const auto times = barLabelStep(pixelsPerBar, timeLabelMinimumPixels);
-            if (times < numbers || !close(std::fmod(times, numbers), 0.0))
-                throw std::runtime_error("Every labelled time sits on a numbered bar");
             if (numbers < 4096.0 && numbers * pixelsPerBar < barNumberMinimumPixels)
                 throw std::runtime_error("Bar numbers are at least their minimum apart");
-            if (times < 4096.0 && times * pixelsPerBar < timeLabelMinimumPixels)
-                throw std::runtime_error("Times are at least their minimum apart");
             if (numbers > 1.0 && numbers * 0.5 * pixelsPerBar >= barNumberMinimumPixels)
-                throw std::runtime_error("And neither row thins out further than it has to");
-
-            // Wherever the view starts, a run of times starts on a bar the
-            // number row labels too.
-            const auto first = firstLabelledBar(37.0, times);
+                throw std::runtime_error("And thin out no further than they have to");
+            const auto first = firstLabelledBar(37.0, numbers);
             if (first > 37.0 || first < 1.0 || !close(std::fmod(first - 1.0, numbers), 0.0))
-                throw std::runtime_error("A run of times starts on a numbered bar at or before the view");
-
-            // The marks between two times fill in as the view is zoomed in and
-            // thin back out as it is zoomed out, and are always a binary
-            // subdivision of the gap - so every label keeps a long mark and
-            // every short one lands on a musical division.
-            const auto marks = timeTicksPerLabel(pixelsPerBar, times);
-            if (marks < 1 || marks > timeTickDivisions)
-                throw std::runtime_error("A label is divided between once and timeTickDivisions times");
-            if (marks > 1 && times * pixelsPerBar / marks < timeTickMinimumPixels)
-                throw std::runtime_error("Ruler marks never crowd past their minimum spacing");
-            if (marks < timeTickDivisions && times * pixelsPerBar / (marks * 2) >= timeTickMinimumPixels)
-                throw std::runtime_error("And are as fine as that spacing allows");
+                throw std::runtime_error("A run of bar numbers starts at or before the view");
         }
+
+        // The time row reads round times, a millisecond or more apart, as close
+        // together as they can be read. From a view of hours to well past the
+        // deepest zoom at 240 BPM.
+        for (double pixelsPerSecond = 0.1; pixelsPerSecond < 600000.0; pixelsPerSecond *= 1.37)
+        {
+            const auto label = roundTimeLabelStep(pixelsPerSecond);
+            const auto at = std::find(roundTimeSteps.begin(), roundTimeSteps.end(), label);
+            if (at == roundTimeSteps.end() || label < roundTimeFinestReading)
+                throw std::runtime_error("A time reading is a round step of a millisecond or more");
+            const auto pixels = [pixelsPerSecond](long long microseconds)
+            {
+                return static_cast<double>(microseconds) * 1.0e-6 * pixelsPerSecond;
+            };
+            if (pixels(label) < timeLabelMinimumPixels && label != roundTimeSteps.back())
+                throw std::runtime_error("Time readings are at least their minimum apart");
+            if (label > roundTimeFinestReading && pixels(*(at - 1)) >= timeLabelMinimumPixels)
+                throw std::runtime_error("And as close together as that allows");
+            const auto tick = roundTimeTickStep(pixelsPerSecond, label);
+            if (label % tick != 0 || label / tick > timeTickDivisions)
+                throw std::runtime_error("Time marks divide the gap between readings, at most timeTickDivisions times");
+            if (tick < label && pixels(tick) < timeTickMinimumPixels)
+                throw std::runtime_error("Time marks never crowd past their minimum spacing");
+        }
+
+        // Past round times, the row reads the bar ruler's chain on below the
+        // counts, as finely as the readings stay apart.
+        for (const auto countsPerBar : {3, 4, 6, 7})
+            for (double pixelsPerCount = 1.0; pixelsPerCount < 1.0e6; pixelsPerCount *= 1.37)
+            {
+                const auto span = timeLabelSpan(pixelsPerCount, countsPerBar);
+                if (!close(std::fmod(static_cast<double>(countsPerBar), span), 0.0))
+                    throw std::runtime_error("A grid reading divides the bar");
+                if (span < countsPerBar && span * pixelsPerCount < timeLabelMinimumPixels)
+                    throw std::runtime_error("Grid readings are at least their minimum apart");
+                if (finerRulerSpan(span) * pixelsPerCount >= timeLabelMinimumPixels)
+                    throw std::runtime_error("And as close together as that allows");
+                const auto tick = timeTickSpan(pixelsPerCount, span);
+                if (span / tick > timeTickDivisions + 0.001 || !close(std::fmod(span, tick), 0.0)
+                    || (tick < span && tick * pixelsPerCount < timeTickMinimumPixels))
+                    throw std::runtime_error("Grid marks divide a reading's gap, no closer than their minimum");
+            }
+
+        // The whole row at 120 in 4/4, where a count is half a second: it never
+        // reads closer than its minimum, and never leaves more than two and a
+        // half minimums between readings, from a view of hours down to the
+        // deepest zoom. It went two seconds between readings at a 1/32 grid and
+        // read nothing at all at 1/512.
+        for (double pixelsPerSecond = 0.1; pixelsPerSecond <= deepestZoomPixelsPerBeat * 2.0; pixelsPerSecond *= 1.37)
+        {
+            const auto span = timeLabelSpan(pixelsPerSecond * 0.5, 4);
+            const auto readsGrid = timeRowReadsGrid(span * 0.5);
+            const auto apart = readsGrid ? span * 0.5 * pixelsPerSecond
+                                         : static_cast<double>(roundTimeLabelStep(pixelsPerSecond)) * 1.0e-6 * pixelsPerSecond;
+            if (apart < timeLabelMinimumPixels || apart >= timeLabelMinimumPixels * 2.5)
+                throw std::runtime_error("The time row reads at every zoom, never crowded and never sparse");
+            if (readsGrid && pixelsPerSecond < 176000.0)
+                throw std::runtime_error("The time row keeps whole milliseconds while they fill the row");
+            const auto grid = adaptiveGridDivision(pixelsPerSecond * 0.5, 4.0, AdaptiveGridWidth::medium);
+            if ((grid == GridDivision::thirtySecond && roundTimeLabelStep(pixelsPerSecond) > 500'000)
+                || (grid == GridDivision::note512 && roundTimeLabelStep(pixelsPerSecond) > 20'000))
+                throw std::runtime_error("A view zoomed in to 1/32 reads every half second, and to 1/512 every 20 ms");
+        }
+        if (!timeRowReadsGrid(0.00048828125) || timeRowReadsGrid(0.0009765625))
+            throw std::runtime_error("Grid readings take over only at twice the rate of whole milliseconds");
+
+        // A reading prints whole milliseconds while the readings are a tenth
+        // of a second apart, and the decimals it needs below that.
+        if (clockDecimalsForStep(0.125) != 0 || clockDecimalsForStep(0.0625) != 1
+            || clockDecimalsForStep(0.0078125) != 2 || clockDecimalsForStep(0.00048828125) != 3
+            || clockDecimalsForStep(0.00001) != 3)
+            throw std::runtime_error("Readings carry the decimals their spacing needs");
+        if (formatClock(10.0, false) != "00:10" || formatClock(61.0625, true, 1) != "01:01:062.5"
+            || formatClock(1.00048828125, true, 3) != "00:01:000.488" || formatClock(2.0, true) != "00:02:000")
+            throw std::runtime_error("A reading prints minutes, seconds, milliseconds and their decimals");
 
         // Inside a bar the ruler steps along one chain of spans in counts, each
         // dividing the one before it, so 4/4 is cut at the half bar and 6/8 at

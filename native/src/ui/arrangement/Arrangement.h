@@ -234,7 +234,8 @@ private:
     // Zoomed in far enough, it labels the counts inside a bar as well (1.2,
     // 1.3) and marks the divisions between labels, by the same rule.
     void paintBarNumbers(juce::Graphics&, double firstBeat, double lastBeat);
-    // The same bars read as wall-clock times, in the strip above the horizontal
+    // The timeline read as wall-clock times, round where they can be and on the
+    // grid's divisions past that, in the strip above the horizontal
     // scrollbar. That strip is the main row's own lane: the row takes no clips,
     // so it is the one piece of the panel that is empty at every zoom and every
     // window size, and it already starts where the track cards end.

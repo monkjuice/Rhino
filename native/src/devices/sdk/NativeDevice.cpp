@@ -201,6 +201,9 @@ void NativeDevice::applyToBuffer(const te::PluginRenderContext& context)
         return;
 
     SCOPED_REALTIME_CHECK
+    // For every device on the SDK: a filter or a delay left with silence
+    // decays into denormals, and x86 is far slower on them.
+    juce::ScopedNoDenormals noDenormals;
     if (clearPending.exchange(false))
         clear();
     auto* midi = kind == DeviceKind::Instrument ? context.bufferForMidiMessages : nullptr;

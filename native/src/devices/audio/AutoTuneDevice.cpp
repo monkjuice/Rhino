@@ -122,7 +122,7 @@ double AutoTuneDevice::getLatencySeconds()
 
 void AutoTuneDevice::reset()
 {
-    engine.reset();
+    clearPending.store(true);
 }
 
 AutoTuneEngine::Readout AutoTuneDevice::readout() const
@@ -233,10 +233,13 @@ void AutoTuneDevice::applyToBuffer(const te::PluginRenderContext& context)
         return;
 
     SCOPED_REALTIME_CHECK
+    juce::ScopedNoDenormals noDenormals;
     auto& buffer = *context.destBuffer;
     const auto channels = buffer.getNumChannels();
     if (channels == 0) return;
 
+    if (clearPending.exchange(false))
+        engine.reset();
     engine.setSettings(currentSettings());
 
     float* channelData[2] {};

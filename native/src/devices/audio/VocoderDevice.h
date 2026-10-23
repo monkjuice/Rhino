@@ -1,6 +1,7 @@
 #pragma once
 #include "dsp/VocoderEngine.h"
 #include <tracktion_engine/tracktion_engine.h>
+#include <atomic>
 
 namespace rhino
 {
@@ -56,6 +57,10 @@ public:
     void deinitialise() override {}
     void reset() override;
     void applyToBuffer(const te::PluginRenderContext&) override;
+    // reset() is called from the message thread (Session::panicReset) while
+    // the audio thread may be inside applyToBuffer, so it only leaves a note
+    // and the next block clears, as the SDK's NativeDevice does.
+    std::atomic<bool> clearPending {false};
     void restorePluginStateFromValueTree(const juce::ValueTree&) override;
 
     // ---- what the face reads ----------------------------------------------

@@ -61,6 +61,11 @@ void RhinoBloomDevice::initialise(const te::PluginInitialisationInfo& info)
 
 void RhinoBloomDevice::reset()
 {
+    clearPending.store(true);
+}
+
+void RhinoBloomDevice::clearState()
+{
     std::fill(delayL.begin(), delayL.end(), 0.0f);
     std::fill(delayR.begin(), delayR.end(), 0.0f);
     writeIndex = 0;
@@ -94,6 +99,11 @@ void RhinoBloomDevice::applyToBuffer(const te::PluginRenderContext& context)
         return;
 
     SCOPED_REALTIME_CHECK
+    // The delay network and the reverb recirculate, so a block of silence
+    // decays towards denormals without this.
+    juce::ScopedNoDenormals noDenormals;
+    if (clearPending.exchange(false))
+        clearState();
     // A block may be bigger than the one initialise was told about. The dry
     // copy is sized for that one, so a bigger block is worked through in
     // pieces of that size rather than growing the copy on the audio thread.

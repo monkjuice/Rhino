@@ -127,7 +127,7 @@ void RhinoEqDevice::initialise(const te::PluginInitialisationInfo& info)
 
 void RhinoEqDevice::reset()
 {
-    engine.reset();
+    clearPending.store(true);
 }
 
 bool RhinoEqDevice::bandEnabled(int band) const
@@ -211,6 +211,8 @@ void RhinoEqDevice::applyToBuffer(const te::PluginRenderContext& context)
     const auto channels = buffer.getNumChannels();
     if (channels == 0) return;
 
+    if (clearPending.exchange(false))
+        engine.reset();
     engine.setSettings(currentSettings());
 
     float* channelData[2] {};

@@ -166,10 +166,8 @@ void PushController::closePorts(bool sayGoodbye)
     }
     for (const auto note : held)
         if (playNote) playNote(juce::MidiMessage::noteOff(1, note));
-    {
-        const juce::SpinLock::ScopedLockType lock(queueLock);
-        queued.clear();
-    }
+    // Whatever the port sent and nobody read yet is for a Push that is gone.
+    controlRead.store(controlWritten.load(std::memory_order_acquire), std::memory_order_release);
     if (output != nullptr)
     {
         output->stopBackgroundThread();
@@ -268,9 +266,11 @@ void PushController::receive(const juce::MidiMessage& message)
         if (playNote) playNote(message);
         return;
     }
+    const auto written = controlWritten.load(std::memory_order_relaxed);
+    if (written - controlRead.load(std::memory_order_acquire) < controlQueueSize)
     {
-        const juce::SpinLock::ScopedLockType lock(queueLock);
-        queued.push_back(message);
+        controlQueue[static_cast<size_t>(written % controlQueueSize)] = message;
+        controlWritten.store(written + 1, std::memory_order_release);
     }
     triggerAsyncUpdate();
 }
@@ -318,13 +318,16 @@ void PushController::playPad(const juce::MidiMessage& message)
 
 void PushController::handleAsyncUpdate()
 {
-    std::vector<juce::MidiMessage> messages;
+    auto read = controlRead.load(std::memory_order_relaxed);
+    const auto written = controlWritten.load(std::memory_order_acquire);
+    for (; read != written; ++read)
     {
-        const juce::SpinLock::ScopedLockType lock(queueLock);
-        messages.swap(queued);
-    }
-    for (const auto& message : messages)
+        // Copied out before the slot is released, so the writer cannot
+        // overwrite a message while it is being handled.
+        const auto message = controlQueue[static_cast<size_t>(read % controlQueueSize)];
+        controlRead.store(read + 1, std::memory_order_release);
         handleControl(message);
+    }
     if (connected || sendToPush)
         redraw();
 }

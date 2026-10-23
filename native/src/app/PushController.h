@@ -170,8 +170,14 @@ private:
     std::array<int, 128> padsHolding {};
     std::atomic<bool> accent {false};
     // Everything that is not a pad, waiting for the message thread.
-    juce::SpinLock queueLock;
-    std::vector<juce::MidiMessage> queued;
+    // Buttons, encoders and touches cross from the MIDI thread to the message
+    // thread through a ring the MIDI thread never grows: one writer, one
+    // reader, and a message that finds it full is dropped - a lost button
+    // press costs a second press, where a MIDI thread blocked on the heap
+    // costs every note on the port its timing.
+    static constexpr int controlQueueSize = 256;
+    std::array<juce::MidiMessage, controlQueueSize> controlQueue;
+    std::atomic<int> controlWritten {0}, controlRead {0};
 
     // ---- message thread ----
     int selectedTrack = 0, selectedPlugin = -1;

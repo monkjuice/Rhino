@@ -385,12 +385,22 @@ void VocoderEngine::flushDenormals()
 {
     constexpr double floorLevel = 1.0e-20;
     const auto flush = [](double& value) { if (std::abs(value) < floorLevel) value = 0.0; };
+    // The followers are floats, and a one-pole release never reaches zero:
+    // left alone after a phrase they park on a denormal within seconds.
+    constexpr float followerFloor = 1.0e-15f;
+    const auto flushFollower = [](float& value) { if (std::abs(value) < followerFloor) value = 0.0f; };
     for (auto& b : band)
     {
         for (auto& state : b.modulatorState) { flush(state.z1); flush(state.z2); }
         for (auto& channel : b.carrierState)
             for (auto& state : channel) { flush(state.z1); flush(state.z2); }
+        flushFollower(b.envelope);
+        flushFollower(b.carrierEnvelope);
     }
+    flushFollower(carrierLevel);
+    flushFollower(modulatorLevel);
+    flushFollower(sibilantLevel);
+    flushFollower(fullLevel);
 }
 
 VocoderEngine::Readout VocoderEngine::readout() const

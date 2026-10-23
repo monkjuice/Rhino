@@ -132,7 +132,7 @@ void VocoderDevice::initialise(const te::PluginInitialisationInfo& info)
 
 void VocoderDevice::reset()
 {
-    engine.reset();
+    clearPending.store(true);
 }
 
 int VocoderDevice::bandCount() const
@@ -151,11 +151,15 @@ void VocoderDevice::applyToBuffer(const te::PluginRenderContext& context)
         return;
 
     SCOPED_REALTIME_CHECK
+    // Thirty-two band-pass pairs and their followers recirculate.
+    juce::ScopedNoDenormals noDenormals;
     auto& buffer = *context.destBuffer;
     const auto channels = buffer.getNumChannels();
     if (channels == 0)
         return;
 
+    if (clearPending.exchange(false))
+        engine.reset();
     VocoderEngine::Settings settings;
     settings.bands = juce::roundToInt(bandsParam->getCurrentValue());
     settings.formantSemitones = formantParam->getCurrentValue();

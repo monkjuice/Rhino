@@ -1,6 +1,7 @@
 #pragma once
 #include <tracktion_engine/tracktion_engine.h>
 #include <vector>
+#include <atomic>
 
 namespace rhino
 {
@@ -22,6 +23,11 @@ public:
     void deinitialise() override {}
     void reset() override;
     void applyToBuffer(const te::PluginRenderContext&) override;
+    // reset() is called from the message thread (Session::panicReset) while
+    // the audio thread may be inside applyToBuffer, so it only leaves a note
+    // and the next block clears, as the SDK's NativeDevice does.
+    std::atomic<bool> clearPending {false};
+    void clearState();
     void restorePluginStateFromValueTree(const juce::ValueTree&) override;
     double getTailLength() const override;
 

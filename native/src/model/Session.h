@@ -340,8 +340,10 @@ public:
     // Dropping an instrument changes the track, never its clips. Clips are
     // created deliberately instead, by double-click or Ctrl+A. The clip it made
     // is handed back through created, because the gesture that makes a clip
-    // also opens it and the caller has no other way to name it.
-    juce::Result createClip(int track, double startSeconds, te::EditItemID* created = nullptr);
+    // also opens it and the caller has no other way to name it. A clip is
+    // lengthBeats long but never shorter than a bar, and stops where the next
+    // clip on the lane starts rather than refusing a gap it would overrun.
+    juce::Result createClip(int track, double startSeconds, te::EditItemID* created = nullptr, double lengthBeats = 0.0);
     bool trackHasInstrument(int track) const;
     juce::Result selectPatternClip(te::EditItemID);
     bool isPatternDrums() const;

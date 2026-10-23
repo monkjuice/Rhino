@@ -269,10 +269,11 @@ bool Arrangement::keyPressed(const juce::KeyPress& key)
     if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'A')
     {
         // Adds a clip to the focused track at the playhead, the keyboard
-        // equivalent of double-clicking the lane.
-        const auto start = snapped(std::max(0.0, playheadTime(session.edit->getTransport())), false);
+        // equivalent of double-clicking the lane: it fills the grid cell the
+        // playhead is in.
+        const auto start = snappedDown(std::max(0.0, playheadTime(session.edit->getTransport())), false);
         te::EditItemID created;
-        const auto result = session.createClip(selectedTrack, start, &created);
+        const auto result = session.createClip(selectedTrack, start, &created, newClipBeats());
         if (status) status(result.failed() ? result.getErrorMessage()
                                            : "Added a clip to " + session.trackName(selectedTrack));
         if (result.wasOk()) openCreatedClip(created);
@@ -818,6 +819,11 @@ double Arrangement::resolvedGridBeats() const
 {
     return gridDivisionBeats(resolvedGridDivision(), session.beatsPerBar())
         * (gridSettings.triplet ? 2.0 / 3.0 : 1.0);
+}
+
+double Arrangement::newClipBeats() const
+{
+    return gridSettings.mode == GridMode::off ? 0.0 : resolvedGridBeats();
 }
 
 // The arrangement's half of the route between the two views. The clip stays

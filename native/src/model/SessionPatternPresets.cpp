@@ -80,12 +80,14 @@ bool Session::trackHasInstrument(int trackIndex) const
     return trackInstrument(*tracks[trackIndex]) != nullptr;
 }
 
-// An empty one-bar MIDI clip at the position the user asked for. Only MIDI
-// tracks hold one; an audio track takes recordings and files. A MIDI track
-// that runs no instrument still takes clips - the notes are there waiting for
-// one, which is what every other DAW does and what the forced choice at
-// creation time promises.
-juce::Result Session::createClip(int trackIndex, double startSeconds, te::EditItemID* created)
+// An empty MIDI clip at the position the user asked for, a bar long or as long
+// as the caller asks if that is longer: the arrangement asks for the cell of
+// its grid, so a clip made zoomed out to a two-bar grid fills its cell rather
+// than half of it. Only MIDI tracks hold one; an audio track takes recordings
+// and files. A MIDI track that runs no instrument still takes clips - the
+// notes are there waiting for one, which is what every other DAW does and what
+// the forced choice at creation time promises.
+juce::Result Session::createClip(int trackIndex, double startSeconds, te::EditItemID* created, double lengthBeats)
 {
     if (!std::isfinite(startSeconds) || startSeconds < 0.0)
         return juce::Result::fail("Invalid clip position.");
@@ -99,7 +101,15 @@ juce::Result Session::createClip(int trackIndex, double startSeconds, te::EditIt
     auto* track = tracks[trackIndex];
     const auto start = tracktion::core::TimePosition::fromSeconds(startSeconds);
     const auto startBeat = edit->tempoSequence.toBeats(start).inBeats();
-    const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(startBeat + beatsPerBar()));
+    const auto length = std::isfinite(lengthBeats) ? std::max(beatsPerBar(), lengthBeats) : beatsPerBar();
+    auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(startBeat + length));
+    // A clip on the lane that starts inside that span ends this one there, so
+    // a double-click just before a clip makes the clip that fits.
+    for (auto* existing : track->getClips())
+        if (shouldShowClipInArrangement(*existing))
+            if (const auto clipStart = existing->getPosition().time.getStart();
+                clipStart.inSeconds() > startSeconds + 1.0e-7 && clipStart < end)
+                end = clipStart;
     // A new document's Pattern 1 is a placeholder: empty, hidden from the
     // arrangement, and waiting to be told where it goes. Double-clicking a lane
     // is the user saying where, so it is carried there and revealed rather than

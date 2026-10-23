@@ -473,8 +473,8 @@
                 "Double-clicking an empty lane creates a clip");
         {
             auto* added = te::getAudioTracks(*session.edit)[2]->getClips().getLast();
-            require(std::abs(added->getPosition().time.getStart().inSeconds() - view.snapped(doubleClickTime, false)) < 0.001,
-                    "The new clip starts where the pointer was, snapped to the grid");
+            require(std::abs(added->getPosition().time.getStart().inSeconds() - view.snappedDown(doubleClickTime, false)) < 0.001,
+                    "The new clip starts at the grid cell the pointer was in");
             require(session.pattern().itemID == added->itemID, "The new clip becomes the note editor target");
         }
         session.undo();
@@ -482,6 +482,33 @@
         require(session.createClip(2, doubleClickTime).failed(), "A clip cannot be created on top of another");
         require(!session.trackHasInstrument(1) && session.createClip(1, 0.0).failed(),
                 "A track without an instrument takes no MIDI clips");
+        // A new clip fills the grid cell it is made in, so one made zoomed out
+        // to a two-bar grid is two bars rather than half the cell; it is never
+        // shorter than a bar, and it stops where the next clip on the lane
+        // starts rather than refusing the gap. A document of its own.
+        {
+            Session lengths;
+            const auto bar = lengths.beatsPerBar() * 60.0 / lengths.tempo();
+            const auto spanOf = [&lengths](te::EditItemID id)
+            {
+                const auto time = lengths.findClip(id)->getPosition().time;
+                return std::make_pair(time.getStart().inSeconds(), time.getEnd().inSeconds());
+            };
+            te::EditItemID oneBar, twoBars, atLeastABar, blocker, fitted;
+            require(lengths.createClip(0, 0.0, &oneBar).wasOk() && close(spanOf(oneBar).second, bar),
+                    "A clip asked for no length is a bar long");
+            require(lengths.createClip(0, 2.0 * bar, &twoBars, lengths.beatsPerBar() * 2.0).wasOk()
+                        && close(spanOf(twoBars).second, 4.0 * bar),
+                    "A clip made on a two-bar grid fills the two-bar cell");
+            require(lengths.createClip(0, 5.0 * bar, &atLeastABar, 1.0).wasOk() && close(spanOf(atLeastABar).second, 6.0 * bar),
+                    "A clip made on a finer grid is still a bar long");
+            require(lengths.createClip(0, 10.0 * bar, &blocker).wasOk()
+                        && lengths.createClip(0, 7.0 * bar, &fitted, lengths.beatsPerBar() * 8.0).wasOk()
+                        && close(spanOf(fitted).first, 7.0 * bar) && close(spanOf(fitted).second, 10.0 * bar),
+                    "A clip that would run into the next one stops where that one starts");
+            require(lengths.createClip(0, 10.0 * bar, nullptr, lengths.beatsPerBar() * 2.0).failed(),
+                    "and one made where a clip already starts is still refused");
+        }
         session.undo();
         session.undo();
         const auto tracksBeforeRemoval = session.trackCount();

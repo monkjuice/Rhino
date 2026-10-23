@@ -297,6 +297,9 @@ private:
     void updateGridControl();
     GridDivision resolvedGridDivision() const;
     double resolvedGridBeats() const;
+    // How long a clip made by double-click or Ctrl+A is: the cell of the grid
+    // it is made in. The model keeps it a bar or longer.
+    double newClipBeats() const;
     int trackAt(float y) const;
     double snapUnitSeconds() const;
     float xFor(double seconds) const;

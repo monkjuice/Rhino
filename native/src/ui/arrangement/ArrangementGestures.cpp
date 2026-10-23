@@ -189,9 +189,11 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
         repaint();
         return;
     }
-    // Double-clicking empty lane space creates a clip that starts where the
-    // pointer is, which is the only way to add one now that instrument drops
-    // change the track instead.
+    // Double-clicking empty lane space creates a clip filling the grid cell
+    // the pointer is in, which is the only way to add one now that instrument
+    // drops change the track instead. The cell it is inside, as every pointer
+    // position takes: rounded to the nearest line, a click in the right half
+    // of a cell eight bars wide made the clip in the next one.
     if (event.getNumberOfClicks() == 2 && event.position.x >= headerWidth && event.position.y >= lanesTop
         && hit(event.position) < 0)
     {
@@ -199,9 +201,9 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
         if (track >= 0)
         {
             selectTrack(track);
-            const auto start = snapped(std::max(0.0, timeAt(event.position.x)), event.mods.isAltDown());
+            const auto start = snappedDown(std::max(0.0, timeAt(event.position.x)), event.mods.isAltDown());
             te::EditItemID created;
-            const auto result = session.createClip(track, start, &created);
+            const auto result = session.createClip(track, start, &created, newClipBeats());
             if (status) status(result.failed() ? result.getErrorMessage() : "Added a clip to " + session.trackName(track));
             if (result.wasOk()) openCreatedClip(created);
         }

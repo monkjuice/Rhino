@@ -4,12 +4,12 @@ type: component
 summary: The header-only voice engine that allocates sixteen voices, modulates per voice per sample and scales the output by 0.28.
 tags: [forge, engine, voices, real-time]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-22
 ---
 
 # Forge engine (Core)
 
-`rhino::forge::Core` in `core/ForgeCore.h` is the sound engine. It covers the voices with their envelopes and LFOs, the oscillators, the filter, the busses, the three FX racks, and the readings the panel draws. It has no AudioProcessor, UI, state tree or filesystem access.
+`rhino::forge::Core` in `core/ForgeCore.h` is the sound engine. It covers the voices with their envelopes and LFOs, the oscillators, the two filters, the busses, the three FX racks, and the readings the panel draws. It has no AudioProcessor, UI, state tree or filesystem access.
 
 ## How the Processor drives it
 
@@ -35,6 +35,8 @@ updated: 2026-10-13
 - **Per-voice modulators:** all four envelopes, and every LFO in TRIG or ENV mode, run per voice. LFOs in OFF mode share one free-running cycle. Since 2026-10-13 a voice's `lfoPhase` is a travel of 0..1, or 0..2 for PING-PONG, that `lfoPositionOf` maps to the shape; `lfoStopped` parks a one-shot at the end of it; and each voice carries `lfoSteps`, an S&H flight of up to 33 random steps taken by `startLfoCycle` at every cycle turn and retrigger, with `freeSteps` for the free-running cycle. Every LFO reading goes through `lfoOutputAt`, which returns an X and a Y ([Forge LFOs](forge-lfos.md)).
 - **Order within a voice's sample** (since commit `e8702e4`, 2026-10-13): the LFO values are read first (a pure read; advancing and metering still follow the idle check, so existing renders are unchanged), then the envelopes update, from `envScratch` when a live slot targets an envelope knob, then the matrix modulates everything else on the scratch patch. Reading a slot's source and centring it for BI is `Core::slotAmount`, shared by `applyModulation` and `modulateEnvelopes`; it returns false, not zero, for a source that names nothing, since BI would turn zero into half a depth, and it keeps the old float operations in their order, so existing renders stay bit-identical.
 
+- **Two filters** (since 2026-10-22): `Buses` carries a wet pair per filter, `distribute` takes the patch and a route index, and the filter delay lines are per voice per filter (`filterDelays[16][filterCount][2]`, about 440 KB per filter at 48 kHz, built in `initialise`). Each sample, before the voice loop, `filterFed` decides whether anything reaches FILTER 2. If nothing does, it is not run at all. On the sample it is reached again, `resetFilter` clears it in every voice ([Forge filter](forge-filter.md)).
+
 Modulation is applied per voice and per sample, in each destination's normalised 0..1 space. Offsets are summed per destination and then applied once, so two half-depth slots equal one full one ([Forge modulation: matrix, envelopes, LFOs and macros](forge-modulation.md)).
 
 The panel's readings come from the loudest voice by ENV 1: envelope stage, LFO phase, modulation offsets and spectral scan position. Core keeps them as plain members, and the Processor copies them into atomics once per block. Once per block is plenty for a panel that redraws at 24 Hz. The S&H staircase is the one reading not copied per sample: `meterLfoSource` records which voice (or `freeLfoSource`, -1, the free-running flight shown whenever no voice is sounding) the panel follows, and `Core::lfoSteps(lfo)` looks that voice's flight up when the block ends.
@@ -51,5 +53,6 @@ Tests build `Core` on the stack, so the test binary links an 8 MB stack ([A CTes
 - [Forge's engine splits into headers only](forge-engine-headers-only.md)
 - [Forge oscillators and wavetables](forge-oscillators.md)
 - [Forge LFOs](forge-lfos.md)
+- [Forge filter](forge-filter.md)
 - [Forge mixer and effects racks](forge-mixer-and-fx.md)
 - [Real-time audio rules](real-time-audio-rules.md)

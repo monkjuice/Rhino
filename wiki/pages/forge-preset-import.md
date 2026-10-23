@@ -4,7 +4,7 @@ type: component
 summary: Forge opens Serum 2 and Vital presets by converting each one into a Forge state tree through one PatchWriter and loading that tree like a .forgepreset; anything Forge lacks is left out with one warning each, and all 75 local Vital presets and all 626 Serum 2 factory presets convert.
 tags: [forge, presets, serum, vital, import]
 sources: []
-updated: 2026-10-21
+updated: 2026-10-22
 ---
 
 # Forge preset import (Serum 2 and Vital)
@@ -32,7 +32,7 @@ Conversion runs on the message thread only.
 - It writes `TABLE` nodes, LFO-table nodes and macro names through the same helpers a save uses (`wavetableStateNode`, `lfoTableStateNode`).
 - It writes every unused slot as off, so slot 1's stale default never survives into a converted patch ([Hazards found while seeding the wiki](known-hazards.md)).
 
-**Leave things out, and say so.** At the user's request, anything Forge has no equivalent for is left out with one warning, not approximated. Examples are Vital's random sources and wavetable modifiers, Serum's spectral, sample, multisample and granular oscillators, a second filter, chaos LFOs and its Hyper/Dimension, Bode, Convolve, utility and splitter effects. Both synths' flangers were on that list until 2026-10-21, when Forge gained a FLANGER effect. The warnings travel with the patch, so the title plate, its tooltip and the browser still show them after the preset is saved into the bank ([Forge preset browser and bank](forge-preset-browser.md)).
+**Leave things out, and say so.** At the user's request, anything Forge has no equivalent for is left out with one warning, not approximated. Examples are Vital's random sources and wavetable modifiers, Serum's spectral, sample, multisample and granular oscillators, the second of two filters in use (see the open items), chaos LFOs and its Hyper/Dimension, Bode, Convolve, utility and splitter effects. Both synths' flangers were on that list until 2026-10-21, when Forge gained a FLANGER effect. The warnings travel with the patch, so the title plate, its tooltip and the browser still show them after the preset is saved into the bank ([Forge preset browser and bank](forge-preset-browser.md)).
 
 ## Rules both converters share
 
@@ -63,6 +63,7 @@ As of 2026-10-19:
 - All 75 local Vital presets and all 626 Serum 2 factory presets convert without error.
 - 50 of the Serum presets are silent, every one because its oscillators use engines Forge lacks, and their warnings say so. Two (BA - Kitchen Sink, GTR - Future Punk Powercords) peak at 0 dBFS; why has not been looked into. Counted by auditioning every preset with `--audition` on 2026-10-19.
 - Converted Serum presets play quieter: their median peak is about −27 dBFS, against about −16 dBFS for Vital conversions and for Forge's own presets. Absolute level has not yet been calibrated against Serum. That calibration is an open item, to be done by capture ([Comparing Forge with Serum](comparing-forge-with-serum.md)).
+- **Only one filter crosses.** Forge has had two filters since 2026-10-22 ([Forge filter](forge-filter.md)), but both converters still convert one of the source's two, the one its sources reach most, into FILTER 1, and warn that the other was not (`chooseFilter`). Filling FILTER 2 is open: Serum's per-source filter balance, and Vital's per-oscillator destination and its filter-into-filter input, would map onto Forge's per-filter routes and `filterSerial`.
 
 ## Tests and tools
 

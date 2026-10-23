@@ -1005,3 +1005,17 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/reading-a-hung-process.md (the rhino.log tell; 64-bit ctypes argtypes; driving RhinoDAW through UI Automation, the two "Edit" buttons, WM_CLOSE as the close button's path; summary)
 - updated: pages/driving-the-forge-standalone.md (UI Automation invokes JUCE buttons and menu items without the pointer)
 - updated: index.md (new gotcha page; three summaries)
+
+## [2026-10-22] update | Forge gains a second filter, M15 (63b2e1a)
+- source: the change's brief, checked against instruments/rhino-forge/core/ForgeCore.h, core/ForgePatch.h, ui/ForgeModule.h, ui/ForgeModules.h, src/ForgeEditorPages.cpp, src/ForgeEditor.cpp, src/ForgePresetImportSerum.cpp, src/ForgePresetImportVital.cpp
+- updated: pages/forge-filter.md (two filters: per-filter routes, parallel and `filterSerial` series, filter 1's ids kept and filter 2's appended, an unfed FILTER 2 skipped and reset when reached again, one two-bank module at the user's request, cached TYPE/FREQ ids, tests and the byte-identical proof against `ec69248`; summary)
+- updated: pages/forge-mixer-and-fx.md (ten channels, F1/F2 TO chips, FILTER 1's TO is `filterSerial`; summary)
+- updated: pages/forge-modulation.md (FILTER 2's seven destinations appended after the FX LEVEL bank, not rack destinations; filter 1's relabelled F1)
+- updated: pages/forge-editor.md (`bankEnables` and `attachEnable`; cards numbered unless wider than 32 px; `bankTitleGutterOf` replaces the three-character title limit)
+- updated: pages/forge-engine.md (per-filter buses and delay lines; FILTER 2 skipped when unfed, reset when fed again)
+- updated: pages/forge.md (M15 done on 2026-10-22; FILTER's two banks on the signal row)
+- updated: pages/forge-preset-import.md (both converters still fill FILTER 1 only; filling FILTER 2 is open)
+- updated: pages/serum-2-preset-format.md (filter balance: one filter converted, FILTER 2 not yet filled)
+- updated: pages/append-only-stored-indices.md (FILTER 2's destinations and parameters appended, filter 1's ids kept)
+- updated: pages/forge-presets-and-state.md (FILTER 2 is additive inside format 3; an older patch opens it unfed)
+- updated: index.md (two summaries)

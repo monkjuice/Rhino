@@ -13,7 +13,7 @@ Forge is the polyphonic synth under `instruments/rhino-forge/`. One JUCE `AudioP
 
 ## The panel
 
-- **Signal row:** SUB and NOISE share one housing, then OSC A, OSC B, OSC C and FILTER.
+- **Signal row:** SUB and NOISE share one housing, then OSC A, OSC B, OSC C and FILTER (two filters, one shown at a time).
 - **Lower row:** GLOBAL, ENV (four envelopes, one shown at a time), LFO (six, one shown at a time) and eight MACROS.
 - **Keyboard:** A1 to C7 (`keyboardLowestNote` 33 to `keyboardHighestNote` 96, 38 white keys), starting against the wheels. The ARP plate stands between the keys and the note guide since 2026-10-13 ([Forge ARP plate, slots and waterfall](forge-arp-plate.md)).
 - **Tabs:** OSC, TABLE and MATRIX swap only the oscillator columns. MIX and FX take over the whole signal row. The arp's settings are an overlay (`Page::arp`), not a tab.
@@ -55,16 +55,16 @@ state and hosting guides, are the canonical engineering documentation ([Document
 
 ## Status
 
-As of 2026-10-19:
+As of 2026-10-22:
 
 - **Done:** everything from M1 to M14b except the items below, plus M16a to M16c. M16d is partly done. M13b is partly done: four arp slots arrived on 2026-10-13 as the ARP plate's buttons (commit `8f28dc7`); EDIT ALL has not.
 - **Done on 2026-10-18/19:** the preset browser and bank, the factory set planned in M8, and import of Serum 2 and Vital presets. A converted Serum preset's absolute level is not yet calibrated against Serum ([Forge preset import](forge-preset-import.md)).
+- **Done on 2026-10-22:** M15, a second filter, in parallel or in series with the first ([Forge filter](forge-filter.md)). The importers do not fill it yet.
 - **Not started:**
   - M13c, the pattern editor.
   - M14c, sample noise sources.
 - **Deferred:**
   - M11e, the rest of the effects rack.
-  - M15, a second filter.
   - MPE.
 
 ## The unload freeze, fixed 2026-10-22

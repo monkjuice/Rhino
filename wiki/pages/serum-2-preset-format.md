@@ -4,7 +4,7 @@ type: concept
 summary: A .SerumPreset is a JSON metadata header followed by one zstd frame of CBOR; this page records the layout and the knob laws Forge's importer relies on, measured by the GPLv3 serum2vital project and taken from it as facts, not code.
 tags: [forge, serum, presets, import, file-format]
 sources: []
-updated: 2026-10-21
+updated: 2026-10-22
 ---
 
 # Serum 2's preset format
@@ -44,7 +44,7 @@ These were measured by the serum2vital project, which is GPLv3. Its facts were u
   - `kParamLevelOut`, which the importer does not read.
 
   There is no centre-delay parameter.
-- **Filter balance** is set per source: −100 sends it to filter 1 and +100 to filter 2. A filter that is switched off passes audio. Forge has one filter, and it becomes whichever filter the sources reach most.
+- **Filter balance** is set per source: −100 sends it to filter 1 and +100 to filter 2. A filter that is switched off passes audio. The importer converts only one of the two, whichever the sources reach most, into Forge's FILTER 1. Forge has had a FILTER 2 since 2026-10-22, but filling it from the balance is still open ([Forge preset import](forge-preset-import.md)).
 - **Sends:** a source turned down but sent to an FX bus takes its send as its level, because Serum's sends do not follow the source's level.
 - **The FIXED source** (id 38) is a constant, so the importer folds it into the knob instead of routing it.
 

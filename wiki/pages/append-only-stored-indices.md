@@ -4,7 +4,7 @@ type: convention
 summary: Saved choice lists and parameter arrays are append-only, because inserting an entry silently changes what an old index means.
 tags: [forge, rhino, presets, parameters, compatibility]
 sources: []
-updated: 2026-10-21
+updated: 2026-10-22
 ---
 
 # Stored indices are append-only
@@ -22,7 +22,7 @@ Forge saves a choice as its index into a list: a filter type, a warp mode, a noi
 
 LFO 2-6 and ENV 2-4 were inserted into the source list. `Processor::migrated` (`src/ForgeProcessorState.cpp`) detects states that predate them by the old `lfoShape`/`attack` names, renames those, and shifts every saved source index past the insertion point, oldest change first. LFO 1's old position is written as a literal, because the enum constant has moved since. Renaming clears the mark, so a second run does nothing.
 
-The rule done right, on 2026-10-13: the six LFO Y sources went in as `ModSource::lfo1Y..` after `modWheel`, at the end (22-27), so no saved source moved, and `modSourceCount` is now derived from `lfo1Y + lfoCount` ([Forge LFOs](forge-lfos.md)). So were the 22 destinations of the same day (commit `e8702e4`): ENV 1-4 ATTACK, DECAY, SUSTAIN and RELEASE, then OCT and FINE of A to C, appended after `noiseStereoDestination` with no format bump, and `destinationCount` derived from the last bank, `tuningDestinationBase + tuningDestinationCount` ([Forge modulation](forge-modulation.md)). A rack slot's LEVEL (2026-10-18) belonged beside the slot's knobs and MIX, but making it a slot's eighth destination would have widened `fxDestinationsPerSlot` and moved every later slot's indices, so it went in as a bank of its own after the tuning bank (`fxLevelDestinationBase`), and `isFxDestination` tests both ranges. FLANGER (2026-10-21) went in as `FxType` 9, after PHASER, because a slot saves its type as an index ([Forge mixer and effects racks](forge-mixer-and-fx.md)).
+The rule done right, on 2026-10-13: the six LFO Y sources went in as `ModSource::lfo1Y..` after `modWheel`, at the end (22-27), so no saved source moved, and `modSourceCount` is now derived from `lfo1Y + lfoCount` ([Forge LFOs](forge-lfos.md)). So were the 22 destinations of the same day (commit `e8702e4`): ENV 1-4 ATTACK, DECAY, SUSTAIN and RELEASE, then OCT and FINE of A to C, appended after `noiseStereoDestination` with no format bump, and `destinationCount` derived from the last bank, `tuningDestinationBase + tuningDestinationCount` ([Forge modulation](forge-modulation.md)). A rack slot's LEVEL (2026-10-18) belonged beside the slot's knobs and MIX, but making it a slot's eighth destination would have widened `fxDestinationsPerSlot` and moved every later slot's indices, so it went in as a bank of its own after the tuning bank (`fxLevelDestinationBase`), and `isFxDestination` tests both ranges. FLANGER (2026-10-21) went in as `FxType` 9, after PHASER, because a slot saves its type as an index ([Forge mixer and effects racks](forge-mixer-and-fx.md)). FILTER 2 (2026-10-22) did the same twice. Its seven destinations went after the FX LEVEL bank (`filter2DestinationBase`), and its parameters and `filterSerial` went at the very end of the parameter list, after the arp. Filter 1 kept its ids, and only its destination labels changed, since a label is not stored ([Forge filter](forge-filter.md)).
 
 ## When an entry leaves the end of a list
 

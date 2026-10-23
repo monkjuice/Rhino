@@ -1,7 +1,7 @@
 ---
 title: Forge mixer and effects racks
 type: component
-summary: The MIX tab's nine channels and two busses, and three eight-slot effects racks of nine types that run on the summed voices, each slot printing its readings and fed meters by the engine once a block.
+summary: The MIX tab's ten channels and two busses, and three eight-slot effects racks of nine types that run on the summed voices, each slot printing its readings and fed meters by the engine once a block.
 tags: [forge, mixer, fx, signal-flow]
 sources: []
 updated: 2026-10-22
@@ -13,11 +13,11 @@ MIX and FX each take the whole signal row. Engine: `Core::renderSample` and `res
 
 ## The mixer
 
-Nine channels in signal order: SUB, OSC A, OSC B, OSC C, NOISE, FILTER, BUS 1, BUS 2, MAIN. None keeps its own copy of a setting: a source's TO field is the `route*` switch the filter's chips drive (FILTER or MAIN), its header enable is the source's own (and so its mute), and MAIN's fader is GLOBAL's `output`.
+Ten channels in signal order since 2026-10-22 (`mixerColumnSpan` 24/10): SUB, OSC A, OSC B, OSC C, NOISE, FILTER 1 (module `mixFilter`), FILTER 2 (`mixFilter2`), BUS 1, BUS 2, MAIN. None keeps its own copy of a setting. A source's TO row is two chips, F1 and F2: the same route switches each filter's chips drive (`routeA`, `filter2RouteA` ...), so a source can feed both. It was one FILTER/MAIN stepper while there was one filter. FILTER 1's TO field is `filterSerial` (MAIN or FILTER 2); FILTER 2 has none ([Forge filter](forge-filter.md)). A strip's header enable is the source's own (and so its mute), and MAIN's fader is GLOBAL's `output`.
 
 - The busses are summed once across all voices, so a reverb on a bus is one tail fed by every note.
 - A bus goes to MAIN or to the other bus. If the two busses point at each other, the engine sends the second one to MAIN. The panel does not refuse the setting, because a host could automate into it anyway.
-- Two pan laws, in `core/ForgePatch.h`: a *source* pan is equal-power (−3 dB at centre); a *channel* pan (filter, busses) is the same curve normalised to unity at centre, so centring a balanced sum does not turn it down. Panning cost SUB and NOISE 3 dB, so their defaults rose 3 dB and `Processor::migrated` raises pre-mixer patches' levels by √2, once.
+- Two pan laws, in `core/ForgePatch.h`: a *source* pan is equal-power (−3 dB at centre); a *channel* pan (filters, busses) is the same curve normalised to unity at centre, so centring a balanced sum does not turn it down. Panning cost SUB and NOISE 3 dB, so their defaults rose 3 dB and `Processor::migrated` raises pre-mixer patches' levels by √2, once.
 
 ## The racks
 

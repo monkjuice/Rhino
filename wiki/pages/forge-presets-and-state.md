@@ -4,7 +4,7 @@ type: component
 summary: Presets and host state carry one tree, which also holds the patch's name, author, style, notes and conversion warnings; every arriving patch goes through applySavedState; a preset of another format version is refused, and within a version everything is reconciled.
 tags: [forge, presets, state, compatibility]
 sources: []
-updated: 2026-10-19
+updated: 2026-10-22
 ---
 
 # Forge presets and state
@@ -36,7 +36,7 @@ On a `.forgepreset` load, the file's name is the preset's name, so renaming the 
 
 ## A format version is a hard boundary
 
-`Processor::loadPreset` refuses any `formatVersion` but `presetFormatVersion` (3) with "This preset was saved by a different version of Forge." Format 1 described the synth stripped back; format 3 came with the third oscillator, whose reordered destination list gave format-2 slot indices new meanings ([Stored indices are append-only](append-only-stored-indices.md)). An additive change does not bump it: wavetable nodes arrived inside format 2, at the accepted cost that an older build loads such a preset and ignores the table, and the `arpSlot` parameter and `ARPSLOT` nodes arrived inside format 3.
+`Processor::loadPreset` refuses any `formatVersion` but `presetFormatVersion` (3) with "This preset was saved by a different version of Forge." Format 1 described the synth stripped back; format 3 came with the third oscillator, whose reordered destination list gave format-2 slot indices new meanings ([Stored indices are append-only](append-only-stored-indices.md)). An additive change does not bump it: wavetable nodes arrived inside format 2, at the accepted cost that an older build loads such a preset and ignores the table, and the `arpSlot` parameter and `ARPSLOT` nodes arrived inside format 3. So did FILTER 2 (2026-10-22). An older preset or host state opens it at its defaults, with every route off and `filterSerial` on MAIN, so nothing reaches it and the patch sounds as it did ([Forge filter](forge-filter.md)).
 
 ## Within a version, reconcile
 

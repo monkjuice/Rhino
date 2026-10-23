@@ -4,7 +4,7 @@ type: guide
 summary: Configure Forge against the JUCE and zstd checkouts Rhino's script fetches, build around the toolchain's traps, fix /W4 warnings at their source, run one test area at a time, and audition or convert any preset from the command line.
 tags: [forge, build, testing, windows, warnings]
 sources: []
-updated: 2026-10-22
+updated: 2026-10-23
 ---
 
 # Build and test Forge
@@ -29,7 +29,11 @@ cmake --build instruments/rhino-forge/build --config Release --parallel 2 -- /p:
 ```
 
 - `/p:BuildInParallel=false` serialises project-reference resolution, which otherwise fails silently with a
-  `GetTargetPath` error; compiling still uses two jobs.
+  `GetTargetPath` error.
+- `--parallel 2` caps only how many projects build at once. The `RhinoForge*` projects compile with `/MP` and no count,
+  so inside each one `cl.exe` runs a file per logical core. Where memory is short, as on the second machine, build with
+  `--parallel 1 -- /p:BuildInParallel=false /p:CL_MPCount=2`. Blue screens or `nvlddmkm` timeouts during a build mean
+  stop and cap it ([A build's `--parallel` does not cap the compiler](build-parallel-does-not-cap-compiler.md)).
 - `CMAKE_SUPPRESS_REGENERATION ON` is set here too, so re-run the configure line after editing `CMakeLists.txt`
   ([A new source file needs an explicit CMake configure](cmake-does-not-reconfigure.md)).
 - `VST3_AUTO_MANIFEST FALSE` is deliberate: the pinned JUCE generator's manifest-helper project fails before the VST3

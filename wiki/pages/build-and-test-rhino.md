@@ -4,7 +4,7 @@ type: guide
 summary: Fetch the pinned engine, build with Visual Studio 2022, and run the six CTest cases without being fooled by a stale or locked build.
 tags: [rhino, build, testing, windows]
 sources: []
-updated: 2026-10-15
+updated: 2026-10-23
 ---
 
 # Build and test Rhino
@@ -44,6 +44,10 @@ cmake --build native/build --config Release --parallel 2
 4. Judge the build by its exit code (`$LASTEXITCODE`), not by grepping piped output, which hides a failed link. On a
    failure, search for `error C` first: a lone `LNK1104` on `RhinoDAW.exe` means the app is open, not that the code is
    wrong ([LNK1104 means a running binary holds the file](locked-executable-lnk1104.md)).
+5. `--parallel 2` caps only how many projects build at once. `RhinoNative.vcxproj` compiles with `/MP` and no count,
+   so inside it `cl.exe` runs a file per logical core. Where memory is short, as on the second machine, build with
+   `--parallel 1 -- /p:BuildInParallel=false /p:CL_MPCount=2`. Blue screens or `nvlddmkm` timeouts during a build mean
+   stop and cap it ([A build's `--parallel` does not cap the compiler](build-parallel-does-not-cap-compiler.md)).
 
 The app lands at `native/build/RhinoNative_artefacts/Release/RhinoDAW.exe`
 ([The executable is RhinoDAW, not Rhino](executable-named-rhinodaw.md)). `native/build` is the only build tree. A

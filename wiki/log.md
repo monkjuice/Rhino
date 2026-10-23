@@ -1019,3 +1019,19 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/append-only-stored-indices.md (FILTER 2's destinations and parameters appended, filter 1's ids kept)
 - updated: pages/forge-presets-and-state.md (FILTER 2 is additive inside format 3; an older patch opens it unfed)
 - updated: index.md (two summaries)
+
+## [2026-10-23] update | Merli's FORGE wordmark stands on the fur, with no plate (5adf969)
+- source: the change's brief, checked against instruments/rhino-forge/ui/ForgeMerliChassis.h, ui/ForgeMerliMaterial.h and CMakeLists.txt
+- updated: pages/forge-themes.md (new subsection: the plate and its grain removed, `drawWordmarkOnFur` and its unchanged box, `drawLetterShadows` and the padded software image `DropShadow` needs, `letterFeet`, `drawFurOverLetters` and the fixed seed, design units, the two rejected prototypes; `drawBackdrop` bullet; the whorl checked in the newly exposed fur; seven embedded PNGs, `merli_plate.png` left uncompiled, `merli_title_plate.png` kept for the cat; the stale ear-above-the-title-plate clause dropped; the 2026-10-23 profile, Merli's rebuilds now a few ms dearer)
+
+## [2026-10-23] update | Cap the compiler's jobs when building; the second machine's blue screens
+- source: the brief (no code changed), checked against instruments/rhino-forge/build/RhinoForge*.vcxproj and native/build/RhinoNative.vcxproj
+- created: pages/build-parallel-does-not-cap-compiler.md (gotcha: `/MP` with no count, so `--parallel N` caps projects only; the `CL_MPCount=2` command and its measured run; the 0x116 and 0x119 signature, the starved memory, the driver timeouts that predated the build, the driver update; stop and cap on blue screens or `nvlddmkm` timeouts)
+- updated: pages/build-and-test-forge.md (Build: "compiling still uses two jobs" corrected; the cap)
+- updated: pages/build-and-test-rhino.md (Build: step 5, the cap)
+- updated: pages/development-environment.md (the second machine: cores, memory, GPU, the blue screens, the driver update, the cap)
+- updated: index.md (new gotcha page)
+
+## [2026-10-23] update | Merli's ears stand at the ends of the head
+- source: the change, instruments/rhino-forge/ui/ForgeMerliChassis.h (`earOverhang` 6 to 18.5), measured on --snapshot PNGs
+- updated: pages/forge-themes.md (each ear's outer edge met the fur 12.5 px inside the window, so the band's square corner stood out past both ears; the art's box now hangs its 18.5 px outer margin past the window)

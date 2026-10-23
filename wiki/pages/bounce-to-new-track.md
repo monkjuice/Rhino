@@ -4,7 +4,7 @@ type: component
 summary: Ctrl+B renders the selected clips, a track or a group to an audio file on a new track directly under its source and mutes the source in the same undo step, by Live 12's rules - a track before its fader, a group after its bus - a slice per frame behind a cancellable loading screen.
 tags: [rhino, arrangement, rendering, groups, undo, threads]
 sources: []
-updated: 2026-10-15
+updated: 2026-10-23
 ---
 
 # Bounce to New Track
@@ -20,7 +20,7 @@ Live 12's command (Live 12 manual, chapter 20, pp. 418-421; where the manual is:
   - `bounceOutcome(BounceResult*)` says how it ended (`BounceResult` gives the new tracks and clips to select); `bounceProgress()` gives the fraction by length rendered across jobs, the source's name and step/steps.
   - The run is `Session::BounceRun`, defined only in `SessionBounce.cpp` and held by `std::unique_ptr<BounceRun, BounceRunDeleter>` so `Session.cpp` need not see it. One job's render and everything it holds in place (solo isolator, slot disabler, the [`ScopedProperty` overrides](bus-member-renders-nothing-alone.md), the `RenderTask` last so it dies first) is `RenderInFlight`, in an anonymous namespace.
   - `bounceClipsToNewTracks` / `bounceTracksToNewTracks` survive as run-to-the-end wrappers (start, loop `continueBounce`, outcome) for the tests and for an `Arrangement` with no shell.
-- **UI**, `native/src/ui/arrangement/ArrangementBounce.cpp`: `bounceClips`/`bounceTracks` start the bounce, then `runBounce()` hands it to the shell through `Arrangement::bounceStarted` (the [loading screen](app-shell.md#the-loading-screen)) or, with no shell, loops it to the end; `bounceFinished()` reads the outcome, selects what was made and writes the status line ("The bounce was cancelled." included). `bounceSelected` dispatches on `Focus` as Delete does: `Focus::track` bounces the selected cards, anything else the selected clips, including those a dragged region holds (whole clips, not the region's span). The selection then moves onto what was made. The clip menu offers *Bounce to New Track*; the card menu offers it too, or *Bounce Group to New Track* on a single bus card. Ctrl+B is handled in `Arrangement::keyPressed` and again in the shell (`app/MainComponentCommands.cpp`), like Ctrl+J, so it works with the keyboard in the lower pane; in the DJ view the shell only says to press Tab.
+- **UI**, `native/src/ui/arrangement/ArrangementBounce.cpp`: `bounceClips`/`bounceTracks` start the bounce, then `runBounce()` hands it to the shell through `Arrangement::bounceStarted` (the [loading screen](app-shell.md#the-loading-screen)) or, with no shell, loops it to the end; `bounceFinished()` reads the outcome, selects what was made and writes the status line ("The bounce was cancelled." included). `bounceSelected` dispatches on `Focus` as Delete does: `Focus::track` bounces the selected cards, anything else `Arrangement::clipsToActOn()`: the picked clips, or with none picked the whole clips a dragged region runs across (not the region's span; since 2026-10-23 a region selects no clips, [Region editing](region-editing.md)). The selection then moves onto what was made. The clip menu offers *Bounce to New Track*; the card menu offers it too, or *Bounce Group to New Track* on a single bus card. Ctrl+B is handled in `Arrangement::keyPressed` and again in the shell (`app/MainComponentCommands.cpp`), like Ctrl+J, so it works with the keyboard in the lower pane; in the DJ view the shell only says to press Tab.
 
 ## Rules (Live's)
 

@@ -1040,3 +1040,6 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - source: the change, native/src/ui/arrangement/ArrangementSelection.cpp (`selectRegionContents` replaced by `clipsToActOn`), Arrangement.cpp, ArrangementBounce.cpp, scenario RegionClipboard.inc
 - updated: pages/region-editing.md (only a press on a header selects a clip; the whole-clip commands fall back to the region's clips; the clip menu keeps the region)
 - updated: pages/pointer-and-selection.md (a clip's lower row is empty space, and a sweep across it selects no clip)
+
+## [2026-10-23] update | Bounce reads clipsToActOn (follow-up to 558cede)
+- updated: pages/bounce-to-new-track.md (`bounceSelected` bounces the picked clips, else the whole clips a dragged region runs across, through `Arrangement::clipsToActOn`; the region no longer selects them)

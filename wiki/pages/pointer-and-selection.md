@@ -18,7 +18,7 @@ The arrangement and the note editor answer the pointer the same way, because a c
 - **Ctrl** (`isToggleSelectionModifier`, Ctrl or Command) adds one item or takes it back out. **Shift** extends, which for a note grid or a timeline rectangle degrades to adding, and never removes. Track cards are the exception: they are a list, so Shift selects the range between two cards.
 - **A modifier press is about the selection only** (`isMultiSelectModifier`). It must never also start carrying, or adding one clip to a group would nudge the whole group.
 - **A press inside a multi-selection keeps it** so the drag can carry all of it, and collapses onto the item under the pointer on release if no drag happened (`collapseSelectionOnRelease`). That cannot be decided on the press.
-- **Creating is a double-click** in both editors: an empty lane makes a one-bar clip, an empty cell a note. The single click is then free to mean "select" everywhere.
+- **Creating is a double-click** in both editors: an empty lane makes a clip filling the grid cell the pointer is inside (`snappedDown`, as any pointer position takes), never shorter than a bar ([Arrangement view](arrangement-view.md); always one bar until commit `3a0933c`), an empty cell a note. The single click is then free to mean "select" everywhere.
 - **Drawing is a mode, not a modifier**: B (or the footer button) toggles `StepGrid::setDrawMode`, and the right button erases in either mode.
 - **Alt** during a drag bypasses snapping; **Escape** cancels a drag and clears the time selection; the **middle button** pans the arrangement from anywhere, headers included.
 

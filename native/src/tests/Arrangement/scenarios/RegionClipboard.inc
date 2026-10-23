@@ -78,7 +78,18 @@
                 drag({view.xFor(4.45), lowerRow}, {view.xFor(4.7), lowerRow});
                 require(close(view.timeSelection.start, 4.375) && close(view.timeSelection.end, 4.75),
                         "A drag across a clip's lower row covers the whole cells it touched");
-                require(view.isSelected(fixtureID), "and takes in the clip it ran across");
+                // Part of a clip is a span of the timeline, not the clip: only
+                // a press on the header takes the clip itself. The commands
+                // about whole clips still reach what the region runs across.
+                require(!view.isSelected(fixtureID) && view.selectedClipID() == te::EditItemID(),
+                        "and selects no clip, however much of one it covers");
+                require(view.focus == Arrangement::Focus::region, "The region keeps the focus, so Delete empties it");
+                view.muteSelected();
+                require(session.findClip(fixtureID)->isMuted(), "Mute still reaches a clip the region runs across");
+                view.muteSelected();
+                require(!session.findClip(fixtureID)->isMuted(), "and the same command brings it back");
+                require(close(view.timeSelection.start, 4.375) && close(view.timeSelection.end, 4.75),
+                        "and the region is still the span that was dragged");
 
                 // Stop returns the transport to the line rather than to the top
                 // of the song, so playing again repeats the passage being

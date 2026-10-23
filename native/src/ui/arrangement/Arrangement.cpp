@@ -410,10 +410,8 @@ void Arrangement::setSelection(std::vector<te::EditItemID> ids, te::EditItemID p
     if (selected == te::EditItemID() || !isSelected(selected))
         selected = selectedClips.empty() ? te::EditItemID() : selectedClips.front();
     // Selecting clips is also a time selection - that is what makes Ctrl+D on
-    // a clip and Ctrl+D on its span the same command - unless the region is
-    // what changed the selection in the first place.
-    if (!syncingSelection)
-        setRegionFromSelectedClips();
+    // a clip and Ctrl+D on its span the same command.
+    setRegionFromSelectedClips();
     if (selected != previous && clipSelected)
         clipSelected(selected);
 }
@@ -500,8 +498,7 @@ void Arrangement::reverseSelected()
     // MIDI clips are simply passed over. A selection swept across both kinds
     // is the normal case, and refusing the whole thing because one lane holds
     // notes would make the key useless exactly when it is quickest to reach.
-    auto chosen = selectedClips;
-    if (chosen.empty() && selected != te::EditItemID()) chosen = {selected};
+    const auto chosen = clipsToActOn();
     std::vector<te::EditItemID> audio;
     for (const auto id : chosen)
         if (session.audioClipMix(id).valid)
@@ -534,8 +531,7 @@ void Arrangement::reverseSelected()
 void Arrangement::muteSelected()
 {
     cancelDrag();
-    auto chosen = selectedClips;
-    if (chosen.empty() && selected != te::EditItemID()) chosen = {selected};
+    const auto chosen = clipsToActOn();
     if (chosen.empty())
     {
         if (status) status("Select a clip to mute");
@@ -560,8 +556,7 @@ void Arrangement::muteSelected()
 void Arrangement::mergeSelected()
 {
     cancelDrag();
-    auto chosen = selectedClips;
-    if (chosen.empty() && selected != te::EditItemID()) chosen = {selected};
+    const auto chosen = clipsToActOn();
     Session::MergeResult result;
     const auto outcome = session.mergeClips(chosen, &result);
     if (outcome.failed())
@@ -840,7 +835,7 @@ void Arrangement::showClipMenu(te::EditItemID id)
     menu.addItem(7, "Split at Line       Ctrl+E");
     // Enabled from the selection rather than from the clip the menu was opened
     // on: merging needs two, and one clip can never be merged with itself.
-    menu.addItem(9, "Merge       Ctrl+J", selectedClips.size() > 1);
+    menu.addItem(9, "Merge       Ctrl+J", clipsToActOn().size() > 1);
     menu.addItem(13, "Bounce to New Track       Ctrl+B");
     // Ticked from the clip the menu was opened on, which is the one under the
     // pointer whether or not the rest of the selection agrees with it.
@@ -921,8 +916,10 @@ void Arrangement::showClipMenu(te::EditItemID id)
                 return;
             }
             // The commands act on a selection, so the clip the menu was opened
-            // on becomes one before any of them runs.
-            if (!safe->isSelected(id))
+            // on becomes one before any of them runs - unless a dragged
+            // region runs across it, which is the selection the menu was
+            // opened inside, and selecting the clip would replace it.
+            if (const auto chosen = safe->clipsToActOn(); std::find(chosen.begin(), chosen.end(), id) == chosen.end())
                 safe->setSelection({id}, id);
             if (result == 2) safe->duplicateSelected();
             else if (result == 3) safe->deleteSelection();
@@ -931,7 +928,7 @@ void Arrangement::showClipMenu(te::EditItemID id)
             else if (result == 6) safe->pasteSelection();
             else if (result == 8) safe->reverseSelected();
             else if (result == 9) safe->mergeSelected();
-            else if (result == 13) safe->bounceClips(safe->selectedClips);
+            else if (result == 13) safe->bounceClips(safe->clipsToActOn());
             else if (result == 14) safe->muteSelected();
         });
 }

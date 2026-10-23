@@ -4,7 +4,7 @@ type: concept
 summary: In the lanes, copy, cut, paste, duplicate and delete act on a region, a span of time across a run of tracks, never on a set of clips; on a focused card they move whole tracks.
 tags: [rhino, arrangement, editing, clipboard]
 sources: []
-updated: 2026-10-16
+updated: 2026-10-23
 ---
 
 # Region editing
@@ -14,6 +14,8 @@ In the arrangement's lanes the clipboard commands act on a **region**: a span of
 ## Where the region comes from
 
 `Arrangement::effectiveRegion` resolves it: a span dragged out over the lanes if there is one, otherwise the bounding rectangle of the selected clips. Selecting a clip therefore sets the region to that clip, which is why Ctrl+D on a clip and on its dragged span are the same command; selecting two clips far apart also reaches whatever lies between them on those tracks. A click that never drags leaves a zero-width region, the *insert point*, where a paste lands and playback starts.
+
+A dragged region selects no clips, however much of a clip it covers: sweeping part of a clip is a span of the timeline, and only a press on a clip's header takes the clip (2026-10-23; until then the drag gathered every clip it touched and drew each one as selected). The commands about whole clips - reverse (R), mute, merge (Ctrl+J), bounce (Ctrl+B) - read `Arrangement::clipsToActOn`, which falls back to the clips the region runs across when none is picked, so they still reach what is highlighted. A right-click on a clip inside the region keeps the region rather than selecting the clip. The colour key (C) and the arrow nudge act on a picked clip only.
 
 ## The operations
 

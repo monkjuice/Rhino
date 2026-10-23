@@ -213,7 +213,9 @@ private:
     // The bounding rectangle of the selected clips, taken either from the edit
     // or from what is currently being previewed.
     TimeSelection regionOfSelectedClips(bool previewed) const;
-    void selectRegionContents();
+    // What a command about whole clips acts on: the clips picked by their
+    // headers, or with none picked, the clips a dragged region runs across.
+    std::vector<te::EditItemID> clipsToActOn() const;
     void setRegionFromSelectedClips();
     bool beginRegionGesture(const juce::MouseEvent&);
     void dragRegionGesture(const juce::MouseEvent&);
@@ -544,9 +546,6 @@ private:
     juce::ModifierKeys dragModifiers;
     TimeSelection timeSelection;
     bool regionSelecting = false;
-    // The clip selection and the region are two views of one thing and each
-    // keeps the other in step; this stops the two updates chasing each other.
-    bool syncingSelection = false;
     // A region read off the selected clips belongs to those clips, so it has to
     // travel with them when they are moved, trimmed or nudged. One dragged out
     // over the lanes belongs to the timeline and stays where it was put.

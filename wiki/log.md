@@ -1035,3 +1035,8 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 ## [2026-10-23] update | Merli's ears stand at the ends of the head
 - source: the change, instruments/rhino-forge/ui/ForgeMerliChassis.h (`earOverhang` 6 to 18.5), measured on --snapshot PNGs
 - updated: pages/forge-themes.md (each ear's outer edge met the fur 12.5 px inside the window, so the band's square corner stood out past both ears; the art's box now hangs its 18.5 px outer margin past the window)
+
+## [2026-10-23] update | A region no longer selects the clips it touches
+- source: the change, native/src/ui/arrangement/ArrangementSelection.cpp (`selectRegionContents` replaced by `clipsToActOn`), Arrangement.cpp, ArrangementBounce.cpp, scenario RegionClipboard.inc
+- updated: pages/region-editing.md (only a press on a header selects a clip; the whole-clip commands fall back to the region's clips; the clip menu keeps the region)
+- updated: pages/pointer-and-selection.md (a clip's lower row is empty space, and a sweep across it selects no clip)

@@ -20,8 +20,7 @@ void Arrangement::bounceSelected()
         bounceTracks(selectedTracks);
         return;
     }
-    auto chosen = selectedClips;
-    if (chosen.empty() && selected != te::EditItemID()) chosen = {selected};
+    auto chosen = clipsToActOn();
     if (chosen.empty())
     {
         if (status) status("Select clips, a track or a group to bounce");

@@ -104,26 +104,24 @@ Arrangement::TimeSelection Arrangement::displayedTimeSelection() const
     return previewed.active ? previewed : timeSelection;
 }
 
-// Dragging a region also selects the clips it touches, so Delete, the clip
-// colour key and the clip menu all keep working on what is highlighted.
-void Arrangement::selectRegionContents()
+// A region selects no clips: sweeping across part of a clip is a span of the
+// timeline, and only a press on a clip's header takes the clip. The commands
+// that are about whole clips - reverse, mute, merge, bounce - still reach what
+// a region runs across, through this, when no clip has been picked.
+std::vector<te::EditItemID> Arrangement::clipsToActOn() const
 {
-    if (!timeSelection.isRange())
-        return;
+    if (!selectedClips.empty())
+        return selectedClips;
+    if (selected != te::EditItemID())
+        return {selected};
     std::vector<te::EditItemID> hits;
-    for (const auto& clip : clips)
-        if (timeSelection.covers(clip.track)
-            && clip.position.start < timeSelection.end - 1.0e-7
-            && clip.position.end > timeSelection.start + 1.0e-7)
-            hits.push_back(clip.id);
-    // The region is what changed the selection here, so it must not be
-    // recomputed from the clips the change picked up.
-    syncingSelection = true;
-    setSelection(std::move(hits));
-    syncingSelection = false;
-    // Selecting clips makes the click a clip focus; the region is what Delete
-    // should reach for, so it takes the focus back.
-    focus = Focus::region;
+    if (timeSelection.active && timeSelection.isRange())
+        for (const auto& clip : clips)
+            if (timeSelection.covers(clip.track)
+                && clip.position.start < timeSelection.end - 1.0e-7
+                && clip.position.end > timeSelection.start + 1.0e-7)
+                hits.push_back(clip.id);
+    return hits;
 }
 
 // After a click or a marquee has changed which clips are selected, the region
@@ -166,8 +164,6 @@ bool Arrangement::beginRegionGesture(const juce::MouseEvent& event)
     const auto start = snappedDown(std::min(regionAnchorTime, time), bypass);
     setTimeSelection(start, extending ? snappedUp(std::max(regionAnchorTime, time), bypass) : start,
                      regionAnchorTrack, track);
-    if (extending)
-        selectRegionContents();
     focus = Focus::region;
     moveTransportToSelectionStart();
     return true;
@@ -187,7 +183,6 @@ void Arrangement::dragRegionGesture(const juce::MouseEvent& event)
     const auto last = std::max(regionAnchorTime, time);
     const auto start = snappedDown(first, bypass);
     setTimeSelection(start, dragged ? snappedUp(last, bypass) : start, regionAnchorTrack, track);
-    selectRegionContents();
     moveTransportToSelectionStart();
     repaint();
 }
@@ -195,7 +190,6 @@ void Arrangement::dragRegionGesture(const juce::MouseEvent& event)
 void Arrangement::endRegionGesture()
 {
     regionSelecting = false;
-    selectRegionContents();
     moveTransportToSelectionStart();
     if (status && timeSelection.isRange())
     {
@@ -218,13 +212,12 @@ double Arrangement::insertPointTime() const
 }
 
 // A selection wins wherever the line genuinely crosses it, so cutting one clip
-// out of a gathered group still cuts only that one, and a region swept across
-// four lanes cuts every clip its start runs through because sweeping it
-// selected them. With nothing selected under the line - which is every click in
-// a lane, because starting a region clears the clip selection - the line cuts
-// whatever it is drawn through, on the tracks the region covers. That last rule
-// is the one that matters: the click that aims the cut is the same click that
-// leaves nothing selected to cut.
+// out of a gathered group still cuts only that one. With nothing selected under
+// the line - which is every click or sweep in a lane, because a region selects
+// no clips - the line cuts whatever it is drawn through, on the tracks the
+// region covers, so a region swept across four lanes cuts every clip its start
+// runs through. That rule is the one that matters: the click that aims the cut
+// is the same click that leaves nothing selected to cut.
 std::vector<te::EditItemID> Arrangement::clipsUnderLine(double seconds) const
 {
     std::vector<te::EditItemID> selectedHits, laneHits;

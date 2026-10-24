@@ -1119,3 +1119,8 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/app-shell.md (the lower pane follows a sweep, the pane still never opens from a selection, deliberately; gotcha: the shell polls the selected clip, so a silent clear closed the editor)
 - updated: pages/pointer-and-selection.md (a sweep names the primary clip on release)
 - updated: pages/writing-rhino-tests.md (rule 17: `createClip` points the note editor at the new clip, so read `session.pattern().itemID` before making MIDI fixtures; the precondition `RegionMove.inc` failed)
+
+## [2026-10-24] update | The note editor pans with the middle button (0725daa)
+- source: the change's brief, checked against native/src/ui/notes/StepGridGestures.cpp (`Gesture::pan`, `panView`), StepGrid.h, StepGrid.cpp; commit 0725daa
+- updated: pages/note-editor.md (Gestures: the middle-button pan, steps by the pixel and rows by whole rows, absolute anchors, drums sideways only, answers first in `mouseDown` and why, opens no note gesture and is never autoscrolled, `NotePan.inc`)
+- updated: pages/pointer-and-selection.md (the middle button pans the note editor too)

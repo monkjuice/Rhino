@@ -4,7 +4,7 @@ type: guide
 summary: Choose between a unit check and a workflow scenario, follow the rules that keep scenarios sharing one Session honest, and time the interface with --profile-ui and --profile-stress.
 tags: [rhino, testing, conventions]
 sources: []
-updated: 2026-10-23
+updated: 2026-10-24
 ---
 
 # Writing Rhino tests
@@ -149,6 +149,11 @@ every scenario of `DjLiveChain.inc`).
     `GesturesAndPersistence.inc`'s "clip clipboard" block does what the app does: `setSelection({id})`, Ctrl+C,
     `setInsertPoint(2.0, 1)`, Ctrl+V, and checks the pasted rectangle is the clip's span at 2 s
     ([Region editing](region-editing.md#the-operations)).
+17. **Read the editor's clip before making MIDI fixtures.** `Session::createClip` points the note editor at the clip
+    it makes, so `session.pattern().itemID` read afterwards is the new fixture. `RegionMove.inc`'s swept-span check
+    (2026-10-24, commit `4bd0f45`) first read it after `createClip(0, 32.0, &midiID)`, got `midiID`
+    back and failed its own precondition, "The note editor shows another clip before the sweep"; the read now comes
+    before the fixtures ([Note editor](note-editor.md#showing-a-swept-span)).
 
 ## Timing, not checking
 

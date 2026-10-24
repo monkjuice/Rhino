@@ -4,7 +4,7 @@ type: component
 summary: Edits the notes of the open MIDI clip in steps, with a draw mode, a step region, a velocity lane under the rows and caches that tie it closely to Session.
 tags: [rhino, ui, notes]
 sources: []
-updated: 2026-10-16
+updated: 2026-10-24
 ---
 
 # Note editor (StepGrid)
@@ -34,6 +34,17 @@ Copy, cut and `effectiveStepRegion` read the selected notes through `laneNoteFor
 
 The marquee anchors in steps and pitch, not pixels: a drag past an edge scrolls the view from the gesture timer, and a pixel anchor would travel with it, dropping notes that had scrolled out.
 
+## Showing a swept span
+
+Since commit `4bd0f45` (2026-10-24) a sweep across part of the open MIDI clip in the arrangement is shown here, as Live's Clip View shows the part of a clip selected and zooms to a time selection. The arrangement names the clip primary and reports the span ([Region editing](region-editing.md#one-selection)); the shell calls `StepGrid::showTimeSpan(start, end)` (`StepGridEditing.cpp`) when the clip is the pattern clip, whether the editor is showing or not, so the Clip toggle then opens it on that part.
+
+- **Frame.** Seconds become the clip's steps through the tempo map, held to the clip's own end, which can fall short of the grid's last step. `stepZoom = clamp(steps / span, 1, max(8, steps / 16))`: the upper bound is the deepest view the editor otherwise shows, since a long clip opens at steps/16, deeper than `zoomAt`'s 8. The scroll frames the span exactly when the zoom reaches it and centres it when it is narrower than the deepest view.
+- **Select.** Every note overlapping the span, at any pitch, and the step region set to the exact span (`setStepSelection`, so `regionFromNotes` is false and the insert line draws at its start).
+- **Order.** The selection is set last, because a rebuild (`changeListenerCallback` when the scroll changes the row count) reads the region off the notes again. A hidden editor whose step count is stale is rebuilt first: otherwise the catch-up rebuild when it is shown sees a new step count and resets the zoom to the new length's default.
+- **Pitch is left alone.** The automatic pitch window already fits the clip's notes; scrolling to the part would set `manualPitchScroll`, which turns the automatic fit off for later clips too.
+
+`RegionMove.inc` checks the framed span, a one-step span centred, and a grid framed while hidden inside a parent component that keeps its frame once shown.
+
 ## Drum rows
 
 When the open clip's track plays drums (`Session::isPatternDrums`), the grid shows `Session::pitches` (16) rows at its default zoom and pins its lowest row at the first note of the bank the [Drum Rack](drum-rack.md)'s face shows (`Session::patternDrumLowestNote`, from `DrumRackDevice::firstShownNote`; C2 by default). So the rows are the sixteen pads on the face. `StepGrid::automaticLowestPitch` reads it, and every change clears a manual pitch scroll for drums; `Session::showDrumBank` announces, so the rows follow the face as it pages (since 2026-10-07; before, they were fixed at `Session::lowestNote`, 48). Each row takes its name from `Session::patternNoteName`, which asks the instrument's `hasNameForMidiNoteNumber`, and a row whose pad is empty reads as its note. Pad names change without any note changing, so the grid keeps the names it last drew (`drumRowNames`) and repaints when they differ.
@@ -45,6 +56,7 @@ When the open clip's track plays drums (`Session::isPatternDrums`), the grid sho
 - **A selection change repaints what it changes** (`setSelectedStates`, since 2026-10-16): the notes it recolours, the lane, and the insert line's column when the change shows or hides that line. Before that, clicking an unselected note in a grid that already had focus repainted only the footer.
 - **It is welded to `Session`.** Its four files of the time reached into `Session` 101 times (counted 2026-10-03), and `Session.h` pulls in Tracktion. That is why Forge's planned arp pattern editor cannot simply reuse it: first extract a Session-free note-grid header, as `ClipGeometry.h` was.
 - **The clip can vanish under it.** `Session::repairPatternClip` is the single place that re-points the editor when its clip goes: by id first, else to the first MIDI clip on the first MIDI track, else to a hidden starter clip it makes there, never onto an audio track ([No track is special for being first](pattern-track.md), [Hold ids, not pointers](ids-not-pointers.md)).
+- **The step region does not survive a session change.** Every rebuild (`rebuildVisibleNotes`, run on every session change) calls `setSelectedStates`, which calls `setStepRegionFromSelection`, so a region from a marquee, a click's insert point or `showTimeSpan` gives way to the selected notes' span rounded out to whole steps, or to nothing when no note is selected. Zoom, scroll and the note selection survive. Read from the code on 2026-10-24, not reproduced in the app.
 - **Hidden, it waits.** While another face holds the lower pane the grid marks itself stale instead of rebuilding on every change, and skips its playhead every display refresh ([What a change costs the interface](ui-cost-of-a-change.md)).
 - **Octave names.** Middle C reads C3, matching Live, Forge and the Drum Rack's pads (`padNoteName` in `core/content/DrumKitFile.h`, which `DrumRackDevice::noteName` calls). Both of the painter's keyboards name rows through `pitchName` in `StepGridInternal.h` (until 2026-10-06, `drumLaneName`). Change `pitchName` and `padNoteName` together or the rows and the pads disagree.
 

@@ -9,7 +9,7 @@ updated: 2026-10-23
 
 # Writing Forge factory presets
 
-Paths are under `instruments/rhino-forge/`. The factory set is 29 `.forgepreset` files, all written by `presets/make-presets.py`: the 18 originals of 2026-10-19 at `presets/Factory/` and, since 2026-10-23, eleven in `presets/Factory/Drum n Bass/` from `write_drum_and_bass()`. Edit the script and run it; it rewrites every file, and the 18 came out byte-identical when the folder was added. The bank copies `Factory/` with its subfolders, so the folder shows as `Factory/Drum n Bass` with no engine or browser change ([Forge preset browser and bank](forge-preset-browser.md)).
+Paths are under `instruments/rhino-forge/`. The factory set is 29 `.forgepreset` files, all written by `presets/make-presets.py`: the 18 originals of 2026-10-19 at `presets/Factory/` and, since 2026-10-23, eleven in `presets/Factory/Drum n Bass/` from `write_drum_and_bass()`. Edit the script and run it; it rewrites every file, and the 18 came out byte-identical when the folder was added. The bank copies `Factory/` with its subfolders, so the folder shows as `Factory/Drum n Bass` with no engine or browser change ([Forge preset browser and bank](forge-preset-browser.md)). **A bank made before a preset existed does not receive it by itself**: `presetBank::ensure` copies the factory set only when it creates the bank, so an existing bank shows a new factory preset or folder only after *Restore factory presets*, on the right-click menu of ALL PRESETS (not of Factory), or after the files are copied in by hand. The player's bank on this machine, made on 2026-10-18, showed Factory with no subfolder until the Drum n Bass folder was copied in on 2026-10-23.
 
 ## The script's vocabulary
 

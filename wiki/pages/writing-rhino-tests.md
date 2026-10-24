@@ -122,6 +122,33 @@ every scenario of `DjLiveChain.inc`).
     row's lane pixels, and over 90% of a bare strip of its card, are lighter than in the other picture: translucent
     clip fills let the lit ground through, and opaque marks are equal in both (commit `83135f7`). The same idea as
     comparing a culled repaint under the same clip ([JUCE's rasteriser is not clip-invariant](juce-rasteriser-not-clip-invariant.md)).
+14. **A move preview posed by hand needs a selection covering the clip, not just `selected`.** Since 2026-10-23 a
+    move preview follows the time selection, which a header press always leaves, so a check that sets `original`,
+    `preview`, `gesture = ClipGesture::move` and `dragging` itself must first call `view.setSelection({id}, id)`;
+    naming the clip in `selected` alone previews nothing. The selection's edges and insert line are drawn in the lime
+    the MIDI-pixel checks count and travel with the preview, so "Dragged MIDI clip contents must follow the live
+    preview before mouse-up" in `Rendering.inc` skips the columns under the previewed selection's two edges
+    (`xFor(1.0) + 4` to `xFor(1.0 + length) - 3`) and clears the selection when it is done, because the left-trim
+    check after it counts lime pixels across the whole lane and still names the clip rather than selecting it
+    ([Region editing](region-editing.md#one-selection)).
+15. **Restore `trackScroll` as you restore the zoom, and set the view after the fixtures exist.** The shared `view`
+    of the arrangement workflow is 1000 x 246 px by the time `RegionMove.inc` runs, so its lanes are 62 px, two rows
+    fit and the row stack scrolls. `RegionClipboard.inc`'s autoscroll block holds a drag at `lane(1).getBottom() - 8`,
+    inside the 30 px band above the main row, so every `autoScrollDrag()` frame also pushed `trackScroll`; it restored
+    `viewStart` and `viewSpan` but not `trackScroll`, leaving the stack about 54 px up. The next scenario's press at
+    `lane(0).getBottom() - 8` then landed at y 59, one pixel above `lanesTop` (60), where `beginRegionGesture` refuses
+    it as not a lane press, and the sweep selected nothing. `RegionMove.inc` now saves `trackScroll`, sets it to 0
+    with `updateScroll()` and `resized()` at its start and restores it at its end (2026-10-23). It also sets
+    `viewStart` only after its fixtures at 32-36 s exist, because `updateScroll` clamps the view to the song's end, and
+    a view set before them was clamped back to 0. When a lane press selects nothing, print the selection, `lane(track)`
+    and the press y against `lanesTop` in the require message before suspecting the gesture code; that diagnostic is
+    what found this.
+16. **Copy before moving the insert point.** Copy, cut, duplicate and delete read the selection rectangle only, and
+    `setInsertPoint` leaves a point selection, so a test that selects a clip, moves the insert point and then presses
+    Ctrl+C copies nothing (since 2026-10-23; the old `effectiveRegion()` fell back to the selected clip's span).
+    `GesturesAndPersistence.inc`'s "clip clipboard" block does what the app does: `setSelection({id})`, Ctrl+C,
+    `setInsertPoint(2.0, 1)`, Ctrl+V, and checks the pasted rectangle is the clip's span at 2 s
+    ([Region editing](region-editing.md#the-operations)).
 
 ## Timing, not checking
 

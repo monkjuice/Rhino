@@ -165,6 +165,18 @@ te::AudioTrack* trackHoldingClip(te::Edit& edit, const te::Clip& clip);
 // Its index among the audio tracks, or -1: what an edit of the clip names
 // when it marks the document modified.
 int clipTrackIndex(te::Edit& edit, const te::Clip& clip);
+// Brings playback back after clips were edited: a clip that changed lanes
+// needs the graph built again, one that only moved a restart. SessionClips.cpp.
+void resumePlaybackAfterClipEdit(te::Edit& edit, bool laneChanged, bool wasPlaying, bool hadPlaybackContext);
+// Region editing (SessionRegion.cpp and SessionRegionMove.cpp). Touching an
+// edge is not overlapping it: a region that ends exactly where a clip starts
+// leaves that clip alone.
+inline constexpr double regionTolerance = 1.0e-7;
+// Cuts a clip in two at a time, where the engine will cut and, nearer an end
+// than the millisecond it refuses, by hand the way it cuts: the clip's state
+// under new ids takes the right-hand part, the original keeps the left, and
+// neither keeps a fade at the cut. Returns the right-hand clip, or null.
+te::Clip* splitClipAt(te::ClipTrack& track, te::Clip& clip, double seconds);
 juce::Colour nextClipColour(juce::Colour current);
 void setClipColour(te::Clip& clip, juce::Colour colour, juce::UndoManager* undoManager);
 const DeviceDescriptor* audioEffectDescriptor(Session::AudioEffect effect);

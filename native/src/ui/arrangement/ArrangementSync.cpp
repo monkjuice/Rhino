@@ -45,6 +45,21 @@ const Arrangement::TrackFacts& Arrangement::factsFor(int track) const
 
 void Arrangement::sync()
 {
+    // The selection follows the clip it is exactly: a clip clicked by its
+    // header, or selected by its id, is selected as its own span, and when a
+    // trim, a nudge or an undo moves that clip the highlight goes with it
+    // rather than staying over the ground the clip left. Read off the list
+    // before it is rebuilt, which is the only place the clip's old span still
+    // is. A swept span, a widened one or a pasted rectangle is a span of the
+    // timeline and stays where it was put.
+    auto followsPrimary = false;
+    if (selected != te::EditItemID())
+        for (const auto& clip : clips)
+            if (clip.id == selected)
+            {
+                followsPrimary = timeSelection.isExactly(clip.position, clip.track);
+                break;
+            }
     clips.clear();
     armedTracks.clear();
     trackFacts.clear();
@@ -146,17 +161,27 @@ void Arrangement::sync()
     if (!masterPan.isMouseButtonDown())
         masterPan.setValue(session.masterPan(), juce::dontSendNotification);
     std::erase_if(waveforms, [&usedFiles](const auto& item) { return !usedFiles.contains(item.first); });
-    // Read off the rebuilt clips, so a region that belongs to a selection
-    // travels with it: moving, trimming or nudging a clip carries its
-    // highlight along instead of leaving it behind at the old position. A
-    // region dragged out over the lanes belongs to the timeline, so it only
-    // has its rows clamped to tracks that still exist.
-    if (regionFollowsClips && (!selectedClips.empty() || selected != te::EditItemID()))
-        setRegionFromSelectedClips();
+    // A selection that was exactly its primary clip moves onto where the clip
+    // is now, and goes when the clip has gone; any other has its rows clamped
+    // to the tracks that still exist and stays where it was put, the gestures
+    // that move its material moving it themselves. A primary clip that has
+    // gone, deleted or taken back by an undo, stops being named either way,
+    // so the lower pane is not left on it.
+    const auto primary = std::find_if(clips.begin(), clips.end(),
+                                      [this](const ClipView& clip) { return clip.id == selected; });
+    if (followsPrimary && primary != clips.end())
+        setTimeSelection(primary->position.start, primary->position.end, primary->track, primary->track);
+    else if (followsPrimary)
+        clearTimeSelection();
     else if (timeSelection.active)
     {
         const auto kept = timeSelection;
         setTimeSelection(kept.start, kept.end, kept.firstTrack, kept.lastTrack);
+    }
+    if (selected != te::EditItemID() && primary == clips.end())
+    {
+        selected = {};
+        if (clipSelected) clipSelected(selected);
     }
     buildRows();
     // A name being typed on a track that has just gone is abandoned: committing
@@ -207,6 +232,7 @@ void Arrangement::rebuildTrackClips(TrackClipCache& cache, te::AudioTrack& audio
         }
         else if (auto* midi = dynamic_cast<te::MidiClip*>(clip))
         {
+            view.midi = true;
             view.sourceDuration = te::Edit::getMaximumEditEnd().inSeconds();
             // The sequence is the whole recording; the clip shows a window
             // into it that opens at the offset. The notes are kept in the

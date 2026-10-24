@@ -78,11 +78,12 @@
                 drag({view.xFor(4.45), lowerRow}, {view.xFor(4.7), lowerRow});
                 require(close(view.timeSelection.start, 4.375) && close(view.timeSelection.end, 4.75),
                         "A drag across a clip's lower row covers the whole cells it touched");
-                // Part of a clip is a span of the timeline, not the clip: only
-                // a press on the header takes the clip itself. The commands
-                // about whole clips still reach what the region runs across.
-                require(!view.isSelected(fixtureID) && view.selectedClipID() == te::EditItemID(),
-                        "and selects no clip, however much of one it covers");
+                // A span across part of a clip selects that part of the clip:
+                // a span is the one kind of selection there is, so the clip
+                // counts as selected, no clip is primary, and the commands
+                // about whole clips reach the clip the span runs across.
+                require(view.isSelected(fixtureID) && view.selectedClipID() == te::EditItemID(),
+                        "and selects the clip it runs across, with no primary clip");
                 require(view.focus == Arrangement::Focus::region, "The region keeps the focus, so Delete empties it");
                 view.muteSelected();
                 require(session.findClip(fixtureID)->isMuted(), "Mute still reaches a clip the region runs across");
@@ -134,9 +135,11 @@
             }
 
             // The pointer rule the note editor shares, in clips: a plain press
-            // takes what is under it and drops the rest, Ctrl gathers, and a
-            // press inside a group that never travels collapses onto the one
-            // clip it landed on.
+            // takes the clip under it - its own span, the selection a marquee
+            // over exactly the clip would make - and drops the rest; Shift and
+            // Ctrl widen the selection to take another clip in; and a press
+            // inside a wider selection that never travels collapses onto the
+            // one clip it landed on.
             {
                 require(session.importAudioAt(source.getFile(), 1, 6.0).wasOk(), "Can place a clip to gather with");
                 view.sync();
@@ -153,24 +156,39 @@
                     view.mouseUp(event(at, at, false, ctrlLeft));
                 };
                 drag(firstPoint, firstPoint);
-                require(view.selectedClips == std::vector<te::EditItemID>({fixtureID}),
-                        "A plain click selects the one clip under it");
+                require(view.isSelected(fixtureID) && !view.isSelected(secondID)
+                            && close(view.timeSelection.start, 4.0) && close(view.timeSelection.end, 5.0)
+                            && view.timeSelection.firstTrack == 1 && view.timeSelection.lastTrack == 1,
+                        "A plain click selects the one clip under it, as its own span");
                 ctrlClick(secondPoint);
-                require(view.selectedClips.size() == 2, "Ctrl-click adds a clip to the selection");
+                require(view.isSelected(fixtureID) && view.isSelected(secondID)
+                            && close(view.timeSelection.start, 4.0) && close(view.timeSelection.end, 7.0),
+                        "Ctrl-click widens the selection to take the clip in");
+                require(view.selectedClipID() == secondID, "and the clicked clip becomes the primary one");
                 require(close(clipAt(1, 6.0)->getPosition().time.getStart().inSeconds(), 6.0),
                         "Gathering with Ctrl carries nothing");
                 ctrlClick(secondPoint);
-                require(view.selectedClips.size() == 1, "Ctrl-click takes a clip back out of the selection");
-                ctrlClick(secondPoint);
-                require(view.selectedClips.size() == 2, "The group can be gathered again");
+                require(view.isSelected(fixtureID) && view.isSelected(secondID),
+                        "A clip already inside the selection stays inside it");
                 view.mouseDown(event(secondPoint, secondPoint, false));
-                require(view.selectedClips.size() == 2,
-                        "A press inside a group keeps it, so the drag can carry all of it");
+                require(view.isSelected(fixtureID) && view.isSelected(secondID),
+                        "A press inside a selection keeps it, so the drag can carry all of it");
                 view.mouseUp(event(secondPoint, secondPoint, false));
-                require(view.selectedClips == std::vector<te::EditItemID>({secondID}),
-                        "A press inside a group that never travelled collapses onto the clip it landed on");
+                require(!view.isSelected(fixtureID) && view.isSelected(secondID)
+                            && close(view.timeSelection.start, 6.0) && close(view.timeSelection.end, 7.0),
+                        "A press inside a selection that never travelled collapses onto the clip it landed on");
                 require(close(clipAt(1, 6.0)->getPosition().time.getStart().inSeconds(), 6.0),
                         "and moves nothing");
+                // Shift on the lane widens a clicked clip's selection to the
+                // click, as it widens a swept one, and keeps the clip primary.
+                const auto shiftLeft = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier
+                                                        | juce::ModifierKeys::shiftModifier);
+                const juce::Point<float> laterLane {view.xFor(8.2), view.lane(1).getBottom() - 8.0f};
+                view.mouseDown(event(laterLane, laterLane, false, shiftLeft));
+                view.mouseUp(event(laterLane, laterLane, false, shiftLeft));
+                require(close(view.timeSelection.start, 6.0) && close(view.timeSelection.end, 8.25)
+                            && view.selectedClipID() == secondID,
+                        "Shift-click on the lane widens the selection from the clip to the cell clicked, clip kept");
                 session.deleteClip(secondID);
                 view.sync();
                 view.setSelection({});
@@ -274,7 +292,6 @@
             auto* toDuplicate = clipAt(1, 8.0);
             require(toDuplicate != nullptr, "The pasted clip is there to duplicate");
             view.setSelection({toDuplicate->itemID}, toDuplicate->itemID);
-            view.setRegionFromSelectedClips();
             require(close(view.timeSelection.start, 8.0) && close(view.timeSelection.end, 9.0),
                     "Selecting a clip sets the region to that clip's span");
             view.keyPressed(juce::KeyPress('D', juce::ModifierKeys::commandModifier, 0));

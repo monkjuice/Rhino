@@ -61,14 +61,19 @@
         session.undo();
         view.sync();
         const auto patternID = session.pattern().itemID;
-        // Named rather than selected: these checks count lime pixels outside a
-        // clip, and a time selection draws its edges in the same lime.
-        view.selected = patternID;
+        // The state a press on the clip's header leaves: the clip's own span
+        // is the selection, and a move carries what the selection holds. The
+        // selection's edges and its insert line are drawn in the lime these
+        // checks count, and they travel with the preview, so the columns
+        // under them at the previewed position are left out of the count.
+        view.setSelection({patternID}, patternID);
         const auto patternPosition = session.pattern().getPosition();
+        const auto patternLength = patternPosition.time.getLength().inSeconds();
         view.original = {patternPosition.time.getStart().inSeconds(), patternPosition.time.getEnd().inSeconds(),
                          patternPosition.offset.inSeconds()};
-        view.preview = {1.0, 1.0 + patternPosition.time.getLength().inSeconds(), patternPosition.offset.inSeconds()};
+        view.preview = {1.0, 1.0 + patternLength, patternPosition.offset.inSeconds()};
         view.originalTrack = view.previewTrack = 0;
+        view.gesture = ClipGesture::move;
         view.dragging = true;
         auto dragPreviewPicture = view.createComponentSnapshot(view.getLocalBounds());
         int dragPreviewOldPixels = 0, dragPreviewNewPixels = 0;
@@ -77,11 +82,14 @@
             {
                 if (!isMidiNotePixel(dragPreviewPicture.getPixelAt(x, y))) continue;
                 if (x < view.xFor(0.8)) ++dragPreviewOldPixels;
-                if (x >= view.xFor(1.0)) ++dragPreviewNewPixels;
+                if (x >= view.xFor(1.0) + 4.0f && x < view.xFor(1.0 + patternLength) - 3.0f) ++dragPreviewNewPixels;
             }
         require(dragPreviewOldPixels == 0 && dragPreviewNewPixels >= 25,
                 "Dragged MIDI clip contents must follow the live preview before mouse-up");
         view.dragging = false;
+        // The trim below names the clip rather than selecting it, because it
+        // counts lime pixels across the whole lane.
+        view.setSelection({});
         // Trimming the start is not a move: the window opens later over a
         // sequence that stays where it is, so every note that survives the
         // trim has to be drawn exactly where it already was. Carrying the

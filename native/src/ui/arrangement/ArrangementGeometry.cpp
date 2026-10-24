@@ -75,25 +75,67 @@ double Arrangement::timeAt(float x) const
     return viewStart + (x - headerWidth) / lane(0).getWidth() * viewSpan;
 }
 
+// The cut is the one the model will make on the drop (Session::moveClipRegion
+// cuts by the same function), so the preview shows the edges the drop leaves.
+RegionCut Arrangement::carriedCut(const ClipView& clip) const
+{
+    if (!dragging || gesture != ClipGesture::move || !timeSelection.covers(clip.track) || !timeSelection.isRange())
+        return {};
+    return cutClipByRegion(clip.position, timeSelection.start, timeSelection.end);
+}
+
 ClipGeometry Arrangement::displayedPosition(const ClipView& clip) const
 {
-    if (!dragging || !isSelected(clip.id) || gesture != ClipGesture::move)
-        return dragging && clip.id == selected ? preview : clip.position;
+    if (!dragging)
+        return clip.position;
+    if (gesture != ClipGesture::move)
+        return clip.id == selected ? preview : clip.position;
+    const auto cut = carriedCut(clip);
+    if (!cut.inside)
+        return clip.position;
     const auto delta = preview.start - original.start;
-    return {clip.position.start + delta, clip.position.end + delta, clip.position.offset};
+    return {cut.taken.start + delta, cut.taken.end + delta, cut.taken.offset};
 }
 
 int Arrangement::displayedTrack(const ClipView& clip) const
 {
-    if (!dragging || !isSelected(clip.id) || gesture != ClipGesture::move)
-        return dragging && clip.id == selected ? previewTrack : clip.track;
+    if (!dragging || gesture != ClipGesture::move || !carriedCut(clip).inside)
+        return clip.track;
     return clip.track + previewTrack - originalTrack;
+}
+
+// One piece until the selection is carried; then, for a clip it runs across,
+// the part that travels at its previewed place between whatever stays behind
+// either side of it, on the clip's own track.
+Arrangement::DisplayedPieces Arrangement::displayedPieces(const ClipView& clip) const
+{
+    DisplayedPieces pieces;
+    const auto add = [&pieces](ClipGeometry position, int track, bool carried)
+    {
+        pieces.items[static_cast<size_t>(pieces.count++)] = {position, track, carried};
+    };
+    const auto cut = carriedCut(clip);
+    if (!cut.inside)
+    {
+        add(displayedPosition(clip), displayedTrack(clip), false);
+        return pieces;
+    }
+    const auto delta = preview.start - original.start;
+    if (cut.keepsLeft)
+        add(cut.left, clip.track, false);
+    add({cut.taken.start + delta, cut.taken.end + delta, cut.taken.offset}, clip.track + previewTrack - originalTrack, true);
+    if (cut.keepsRight)
+        add(cut.right, clip.track, false);
+    return pieces;
 }
 
 juce::Rectangle<float> Arrangement::bounds(const ClipView& clip) const
 {
-    const auto p = displayedPosition(clip);
-    const auto track = displayedTrack(clip);
+    return boundsOf(displayedPosition(clip), displayedTrack(clip));
+}
+
+juce::Rectangle<float> Arrangement::boundsOf(ClipGeometry p, int track) const
+{
     return {xFor(p.start), lane(track).getY() + 5.0f,
             std::max(1.0f, xFor(p.end) - xFor(p.start)), lane(track).getHeight() - 10.0f};
 }
@@ -169,7 +211,9 @@ double Arrangement::snappedClipMoveStart(double desiredStart, double length, int
 
     for (const auto& clip : clips)
     {
-        if (isSelected(clip.id) || clip.track != targetTrack)
+        // A clip the selection carries, in part or whole, is on its way
+        // somewhere else, so its edges are nothing to snap to.
+        if (clip.track != targetTrack || carriedCut(clip).inside)
             continue;
         for (const auto edge : {clip.position.start, clip.position.end})
         {

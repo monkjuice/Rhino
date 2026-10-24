@@ -290,9 +290,9 @@ bool Arrangement::keyPressed(const juce::KeyPress& key)
         session.redo();
         return true;
     }
-    // Only with a clip to move: otherwise the arrows go on to the window.
+    // Only with a selection to move: otherwise the arrows go on to the window.
     if ((key.getKeyCode() == juce::KeyPress::leftKey || key.getKeyCode() == juce::KeyPress::rightKey)
-        && session.findClip(selected) != nullptr)
+        && timeSelection.active && timeSelection.isRange())
     {
         nudgeSelected(key.getKeyCode() == juce::KeyPress::rightKey ? 1 : -1, key.getModifiers().isShiftDown());
         return true;
@@ -373,7 +373,7 @@ bool Arrangement::keyPressed(const juce::KeyPress& key)
             deleteCards(selectedTracks);
             return true;
         }
-        if (focus == Focus::clip || focus == Focus::region)
+        if (focus == Focus::region)
             deleteSelection();
         return true;
     }
@@ -396,24 +396,46 @@ void Arrangement::cancelDrag()
 
 bool Arrangement::isSelected(te::EditItemID id) const
 {
-    return std::find(selectedClips.begin(), selectedClips.end(), id) != selectedClips.end();
+    for (const auto& clip : clips)
+        if (clip.id == id)
+            return timeSelection.touches(clip.position, clip.track);
+    return false;
+}
+
+bool Arrangement::isWhollySelected(const ClipView& clip) const
+{
+    return timeSelection.holdsWhole(clip.position, clip.track);
 }
 
 // Selecting clips is what makes Delete a clip operation. Callers that select
-// something else set the focus themselves, after this has cleared it.
+// something else set the focus themselves, after this has cleared it. The
+// clips are read off the timeline's own list, which every session call has
+// rebuilt by the time it returns; an id not on it selects nothing.
 void Arrangement::setSelection(std::vector<te::EditItemID> ids, te::EditItemID primary)
 {
     const auto previous = selected;
-    focus = ids.empty() ? Focus::none : Focus::clip;
-    selectedClips.clear();
+    TimeSelection box;
+    te::EditItemID first;
+    auto primaryFound = false;
     for (const auto id : ids)
-        if (!isSelected(id)) selectedClips.push_back(id);
-    selected = primary;
-    if (selected == te::EditItemID() || !isSelected(selected))
-        selected = selectedClips.empty() ? te::EditItemID() : selectedClips.front();
-    // Selecting clips is also a time selection - that is what makes Ctrl+D on
-    // a clip and Ctrl+D on its span the same command.
-    setRegionFromSelectedClips();
+        for (const auto& clip : clips)
+        {
+            if (clip.id != id) continue;
+            if (first == te::EditItemID()) first = id;
+            primaryFound = primaryFound || id == primary;
+            if (!box.active)
+                box = {clip.position.start, clip.position.end, clip.track, clip.track, true};
+            box.start = std::min(box.start, clip.position.start);
+            box.end = std::max(box.end, clip.position.end);
+            box.firstTrack = std::min(box.firstTrack, clip.track);
+            box.lastTrack = std::max(box.lastTrack, clip.track);
+            break;
+        }
+    clearTimeSelection();
+    if (box.active)
+        setTimeSelection(box.start, box.end, box.firstTrack, box.lastTrack);
+    focus = box.active ? Focus::region : Focus::none;
+    selected = primaryFound ? primary : first;
     if (selected != previous && clipSelected)
         clipSelected(selected);
 }
@@ -585,31 +607,28 @@ void Arrangement::mergeSelected()
     repaint();
 }
 
-// The whole selection moves by the step the primary clip moves by, in one undo
-// step, so nudging never splits a group apart.
+// The selection and its material move by one step of the grid, or a bar, in
+// one undo step: Live's "nudge a selection of material". The selection stays
+// what it was, one step along, so holding the key keeps nudging.
 void Arrangement::nudgeSelected(int direction, bool byBar)
 {
     cancelDrag();
-    auto* clip = session.findClip(selected);
-    if (!clip) return;
-    const auto old = clip->getPosition();
+    if (!timeSelection.active || !timeSelection.isRange()) return;
+    const auto region = timeSelection;
     const auto beats = byBar ? session.beatsPerBar() : resolvedGridBeats();
-    const auto startBeat = session.secondsToBeats(old.time.getStart().inSeconds());
-    const auto target = session.beatsToSeconds(startBeat + beats * (direction < 0 ? -1.0 : 1.0));
-    const auto delta = target - old.time.getStart().inSeconds();
-    auto moving = selectedClips;
-    if (std::find(moving.begin(), moving.end(), selected) == moving.end())
-        moving.push_back(selected);
-    std::vector<Session::ClipMove> moves;
-    for (const auto id : moving)
-        if (auto* each = session.findClip(id))
-        {
-            const auto position = each->getPosition();
-            const auto start = std::max(0.0, position.time.getStart().inSeconds() + delta);
-            moves.push_back({id, {start, start + position.time.getLength().inSeconds(), position.offset.inSeconds()}, -1});
-        }
-    const auto result = session.moveClips(moves);
-    if (result.failed() && status) status(result.getErrorMessage());
+    const auto startBeat = session.secondsToBeats(region.start);
+    const auto target = std::max(0.0, session.beatsToSeconds(startBeat + beats * (direction < 0 ? -1.0 : 1.0)));
+    if (std::abs(target - region.start) < 1.0e-7) return;
+    const auto result = session.moveClipRegion(region.start, region.end, region.firstTrack, region.lastTrack,
+                                               target, region.firstTrack);
+    if (result.failed())
+    {
+        if (status) status(result.getErrorMessage());
+        return;
+    }
+    setTimeSelection(target, target + region.length(), region.firstTrack, region.lastTrack);
+    focus = Focus::region;
+    repaint();
 }
 
 void Arrangement::changeListenerCallback(juce::ChangeBroadcaster*)

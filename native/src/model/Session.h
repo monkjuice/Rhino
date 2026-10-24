@@ -1132,6 +1132,19 @@ public:
     // the way Live does, so what lands is what was copied and nothing else.
     juce::Result pasteClipRegion(const ClipRegion&, double destinationStart,
                                  int destinationTrack, std::vector<te::EditItemID>& pasted);
+    // Carries a region's material to a new corner: the clips inside it whole,
+    // and of any clip crossing an edge the part inside, cut there as
+    // cutClipByRegion cuts (ClipGeometry.h). What it lands on gives way, the
+    // whole rectangle as a paste clears it, and lanes are made for rows that
+    // reach past the last track. One undo step, all or nothing: a row whose
+    // material may not land where it is going - MIDI on an audio lane, audio
+    // on a MIDI lane, anything on a group bus - refuses the whole move before
+    // anything is cut. A clip carried whole keeps its id, a piece cut from
+    // one takes a new id, and `moved`, when given, receives every clip that
+    // travelled. A region holding nothing moves nothing and succeeds.
+    juce::Result moveClipRegion(double startSeconds, double endSeconds, int firstTrack, int lastTrack,
+                                double destinationStart, int destinationTrack,
+                                std::vector<te::EditItemID>* moved = nullptr);
     // What a clip was coloured with by hand, or nothing, in which case it is
     // drawn in its track's colour. Cycling runs through the palette and then
     // back to nothing, so a clip can always rejoin its lane.
@@ -1668,6 +1681,17 @@ private:
     juce::Result editClipInEdit(te::EditItemID, ClipGeometry, ClipGesture, int targetTrack,
                                 const std::vector<te::EditItemID>& movingWith, bool& trackChanged,
                                 bool& changed, bool& devicesChanged);
+    // The moves of moveClips without their transaction, so a region move can
+    // split at its edges, clear its destination and carry the pieces inside
+    // one undo step. Names the lanes left and reached and the lanes whose
+    // devices a MIDI clip changed, as moveClips marks them, and whether any
+    // clip changed lanes or moved at all.
+    struct ClipMoveOutcome
+    {
+        std::vector<int> reached, gainedDevices;
+        bool anyTrackChanged = false, anyChanged = false;
+    };
+    juce::Result moveClipsInEdit(const std::vector<ClipMove>&, ClipMoveOutcome&);
     // SessionTransport.cpp - an import without a transaction, so importAudio
     // can add the lane it lands on in the same undo step.
     juce::Result importAudioInEdit(const juce::File&, int track, double startSeconds, double* endSeconds = nullptr);

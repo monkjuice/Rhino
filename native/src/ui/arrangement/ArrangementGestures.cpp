@@ -8,9 +8,11 @@
 // ArrangementAutomation.cpp and are offered the pointer first.
 //
 // The pointer obeys the rule in SelectionInput.h, which the note editor reads
-// too: a plain press on a clip takes that clip and drops the rest, a press on
-// empty lane sweeps out a region, Ctrl and Shift gather, and a clip is put
-// down by double-clicking a lane.
+// too: a plain press on a clip's header selects that clip's own span and
+// drops the rest, a press on empty lane sweeps out a region, Ctrl and Shift
+// widen the selection to take a clip in, a press on any clip header inside
+// the selection carries the whole selection, and a clip is put down by
+// double-clicking a lane.
 
 namespace rhino
 {
@@ -238,41 +240,40 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
     // A copy, not a reference: selecting the clip opens it in the note editor,
     // the session announces that, and the clip list is rebuilt under it.
     const auto clip = clips[static_cast<size_t>(index)];
-    // Ctrl or Shift gathers: the clip joins the selection or leaves it, the
-    // rest is untouched, and the press is over. It must not also start
-    // carrying, or every attempt to add one clip to a group would nudge the
-    // whole group.
+    // Ctrl or Shift widens the selection to take the clip in, and the press
+    // is over. It must not also start carrying, or every attempt to add one
+    // clip to a selection would nudge the whole selection. The selection is
+    // one rectangle, so the two modifiers mean the same thing on a clip, and
+    // a clip already inside stays inside.
     if (isMultiSelectModifier(event.mods))
     {
-        auto next = selectedClips;
-        if (isSelected(clip.id))
+        extendSelectionToClip(clip);
+        focus = Focus::region;
+        if (selected != clip.id)
         {
-            // Shift extends, so it never takes anything back out; Ctrl is the
-            // one that toggles.
-            if (isExtendSelectionModifier(event.mods))
-                return;
-            next.erase(std::remove(next.begin(), next.end(), clip.id), next.end());
+            selected = clip.id;
+            if (clipSelected) clipSelected(selected);
         }
-        else
-            next.push_back(clip.id);
-        // setSelection derives the region from what is now selected, so the
-        // gathered set is what a clipboard command will act on.
-        setSelection(std::move(next), clip.id);
-        // The working row follows the pointer even while a group is being
-        // gathered, so the card highlight cannot lag behind the clips.
+        // The working row follows the pointer even while a selection is being
+        // widened, so the card highlight cannot lag behind the clips.
         selectTrack(clip.track);
         repaint();
         return;
     }
-    // A plain press takes the clip and drops everything else - unless the clip
-    // is already part of a group, in which case the group is kept so the drag
-    // can carry all of it. A press on a group that never travels was a click
-    // after all, and collapses onto this clip on release.
-    if (!isSelected(clip.id))
+    // A plain press on the header of a clip the selection runs across keeps
+    // the selection, so the drag can carry all of it - the clips inside it
+    // whole, and of the clips crossing its edges the part inside. A press on
+    // any other clip, or on an edge, selects that clip's own span, the
+    // selection a marquee swept over exactly the clip would make; an edge
+    // trims one clip, never a selection. A press inside a selection wider
+    // than the clip that never travels was a click after all, and collapses
+    // onto this clip on release.
+    const auto carried = zone == ClipZone::header && timeSelection.touches(clip.position, clip.track);
+    if (!carried)
         setSelection({clip.id}, clip.id);
     else
     {
-        if (selectedClips.size() > 1)
+        if (!timeSelection.isExactly(clip.position, clip.track))
         {
             collapseSelectionOnRelease = true;
             collapseSelectionTo = clip.id;
@@ -282,12 +283,8 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
             selected = clip.id;
             if (clipSelected) clipSelected(selected);
         }
-        focus = Focus::clip;
+        focus = Focus::region;
     }
-    // Whatever the region was before - a span dragged out, or the rectangle a
-    // paste left behind - the gesture starting here is about these clips, so
-    // the region becomes theirs and travels with them.
-    setRegionFromSelectedClips();
     // Selecting a clip puts the line on its start, and the transport follows
     // the line, so hitting play after picking a clip starts at that clip.
     moveTransportToSelectionStart();
@@ -303,11 +300,17 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
     if (event.getNumberOfClicks() == 2 && clipOpened)
         clipOpened(clip.id);
     repaint();
-    original = preview = clip.position;
-    originalTrack = previewTrack = clip.track;
-    sourceDuration = clip.sourceDuration;
     gesture = zone == ClipZone::trimStart ? ClipGesture::trimLeft
         : zone == ClipZone::trimEnd ? ClipGesture::trimRight : ClipGesture::move;
+    // What the press took hold of. For a move it is the part of the clip the
+    // selection carries - the whole clip, or the part inside the selection -
+    // so the snap and the clamps are about the piece that travels and the
+    // selection follows it by the same distance. For a trim it is the clip.
+    const auto cut = gesture == ClipGesture::move
+        ? cutClipByRegion(clip.position, timeSelection.start, timeSelection.end) : RegionCut {};
+    original = preview = cut.inside ? cut.taken : clip.position;
+    originalTrack = previewTrack = clip.track;
+    sourceDuration = clip.sourceDuration;
     dragTime = timeAt(event.position.x);
     dragging = true;
 }
@@ -413,15 +416,18 @@ void Arrangement::mouseDrag(const juce::MouseEvent& event)
             targetTrack = session.trackCount();
         else
             targetTrack = originalTrack;
-        auto lowestSelectedTrack = originalTrack;
-        for (const auto& selectedClip : clips)
-            if (isSelected(selectedClip.id)) lowestSelectedTrack = std::min(lowestSelectedTrack, selectedClip.track);
-        targetTrack = std::max(targetTrack, originalTrack - lowestSelectedTrack);
+        // The selection travels as one, so its first row may not leave the
+        // top of the stack: the grabbed clip's row stops where that would
+        // happen.
+        targetTrack = std::max(targetTrack, originalTrack - timeSelection.firstTrack);
     }
     const auto rawStart = anchor + timeAt(event.position.x) - dragTime;
-    const auto editTime = gesture == ClipGesture::move
+    auto editTime = gesture == ClipGesture::move
         ? snappedClipMoveStart(rawStart, original.end - original.start, targetTrack, event.mods.isAltDown())
         : snapped(rawStart, event.mods.isAltDown());
+    // Nor may the selection's start leave the start of the song.
+    if (gesture == ClipGesture::move)
+        editTime = std::max(editTime, original.start - timeSelection.start);
     preview = previewClipEdit(original, gesture, editTime, sourceDuration);
     previewTrack = targetTrack;
     repaint();
@@ -506,44 +512,50 @@ void Arrangement::mouseUp(const juce::MouseEvent& event)
     {
         mouseDrag(event);
         dragging = false;
-        if (gesture == ClipGesture::move && selectedClips.size() > 1)
+        if (gesture == ClipGesture::move)
         {
-            struct Move { te::EditItemID id; ClipGeometry position; int track; };
-            std::vector<Move> moves;
-            for (const auto& clip : clips)
-                if (isSelected(clip.id)) moves.push_back({clip.id, clip.position, clip.track});
-            std::sort(moves.begin(), moves.end(), [this] (const auto& a, const auto& b)
-            {
-                return a.track + previewTrack - originalTrack < b.track + previewTrack - originalTrack;
-            });
+            // The whole selection moves by what the grabbed piece moved: one
+            // edit for the gesture, one undo step, one restart of playback,
+            // and refused whole if any of its rows may not land. The model
+            // cuts the clips crossing its edges there and carries the parts
+            // inside, the cut the preview was drawn from.
+            const auto region = timeSelection;
             const auto timeDelta = preview.start - original.start;
             const auto trackDelta = previewTrack - originalTrack;
-            // One move for the whole gesture: one undo step, one restart of
-            // playback, and refused whole if any clip may not land.
-            std::vector<Session::ClipMove> carried;
-            for (const auto& move : moves)
+            const auto result = session.moveClipRegion(region.start, region.end, region.firstTrack, region.lastTrack,
+                                                       region.start + timeDelta, region.firstTrack + trackDelta);
+            if (result.failed())
             {
-                const auto length = move.position.end - move.position.start;
-                const auto start = std::max(0.0, move.position.start + timeDelta);
-                carried.push_back({move.id, {start, start + length, move.position.offset}, move.track + trackDelta});
+                if (status) status(result.getErrorMessage());
             }
-            const auto result = session.moveClips(carried);
-            if (result.failed() && status) status(result.getErrorMessage());
-            else selectTrack(juce::jlimit(0, std::max(0, session.trackCount() - 1), previewTrack));
+            else
+            {
+                // The selection goes with its material; its rows are clamped
+                // to the tracks there are, the lanes the move made included.
+                setTimeSelection(region.start + timeDelta, region.end + timeDelta,
+                                 region.firstTrack + trackDelta, region.lastTrack + trackDelta);
+                focus = Focus::region;
+                selectTrack(juce::jlimit(0, std::max(0, session.trackCount() - 1), previewTrack));
+            }
         }
         else
         {
-            const auto result = session.editClip(selected, preview, gesture, gesture == ClipGesture::move ? previewTrack : -1);
+            const auto result = session.editClip(selected, preview, gesture);
             if (result.failed() && status) status(result.getErrorMessage());
-            else if (gesture == ClipGesture::move)
-                selectTrack(juce::jlimit(0, std::max(0, session.trackCount() - 1), previewTrack));
+            // The trimmed clip is the selection, at the span it now has.
+            else setSelection({selected}, selected);
         }
     }
-    // A press inside a group that never travelled was a click, and a click
-    // takes the one thing under it. Deciding it here rather than on the press
-    // is what lets the same press also carry the whole group.
+    // A press inside a wider selection that never travelled was a click, and
+    // a click takes the one clip under it. Deciding it here rather than on
+    // the press is what lets the same press also carry the whole selection.
+    // Selecting a clip puts the line, and the stopped transport, on its
+    // start, exactly as a click on a clip outside the selection does.
     else if (collapseSelectionOnRelease && collapseSelectionTo != te::EditItemID())
+    {
         setSelection({collapseSelectionTo}, collapseSelectionTo);
+        moveTransportToSelectionStart();
+    }
     cancelDrag();
     repaint();
 }

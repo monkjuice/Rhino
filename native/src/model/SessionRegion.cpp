@@ -17,8 +17,6 @@ namespace rhino
 {
 namespace
 {
-constexpr double regionTolerance = 1.0e-7;
-
 // Touching an edge is not overlapping it: a region that ends exactly where the
 // next clip starts must leave that clip alone, and a clip that ends exactly on
 // the region start is outside it.
@@ -33,6 +31,7 @@ bool crossesEdge(tracktion::core::TimeRange clip, double edge)
     return clip.getStart().inSeconds() < edge - regionTolerance
         && clip.getEnd().inSeconds() > edge + regionTolerance;
 }
+}
 
 // Tracktion's split refuses a time within a millisecond of either end of the
 // clip, and one cell of the grid at the deepest zoom is a fraction of one. A
@@ -42,7 +41,8 @@ bool crossesEdge(tracktion::core::TimeRange clip, double edge)
 // engine will cut, it does; nearer an end, the cut is made the way it makes
 // one - the clip's state, under new ids, takes the right-hand part, the
 // original keeps the left, and neither keeps a fade at the cut. The engine
-// also re-wraps a looped clip's offset; arrangement clips never loop.
+// also re-wraps a looped clip's offset; arrangement clips never loop. Shared
+// with the region move (SessionRegionMove.cpp), which cuts by the same rule.
 te::Clip* splitClipAt(te::ClipTrack& track, te::Clip& clip, double seconds)
 {
     const auto at = tracktion::core::TimePosition::fromSeconds(seconds);
@@ -60,7 +60,6 @@ te::Clip* splitClipAt(te::ClipTrack& track, te::Clip& clip, double seconds)
     right->setStart(at, true, false);
     clip.setEnd(at, true);
     return right;
-}
 }
 
 Session::ClipRegion Session::copyClipRegion(double startSeconds, double endSeconds,

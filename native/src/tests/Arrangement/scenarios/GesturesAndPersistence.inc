@@ -63,21 +63,24 @@
         scenario("gestures: clip clipboard");
         view.setSelection({id});
         view.selectedTrack = 1;
-        // Copy takes the selected clip; the insert point says where the paste
-        // lands, exactly as clicking an empty part of the lane would.
-        view.setInsertPoint(2.0, 1);
+        // Copy takes the selected clip, which is the selection; the insert
+        // point put down afterwards says where the paste lands, exactly as
+        // clicking an empty part of the lane would - and, as that click
+        // would, it replaces the selection, so the copy has to come first.
         view.keyPressed(juce::KeyPress('C', juce::ModifierKeys::commandModifier, 0));
+        view.setInsertPoint(2.0, 1);
         view.keyPressed(juce::KeyPress('V', juce::ModifierKeys::commandModifier, 0));
-        require(view.selectedClips.size() == 1, "Paste selects the new clip");
-        const auto pastedID = view.selectedClips.front();
+        require(view.selectedClipID() != te::EditItemID() && view.selectedClipID() != id, "Paste selects the new clip");
+        const auto pastedID = view.selectedClipID();
         const auto* pasted = session.findAudioClip(pastedID);
         require(pasted != nullptr, "Ctrl-V creates an audio clip");
         require(close(pasted->getPosition().time.getStart().inSeconds(), 2.0), "Paste anchors the copied clip at the insert point");
         require(close(view.timeSelection.start, 2.0) && close(view.timeSelection.end, 2.0 + view.clipboard.clips.front().end),
                 "Paste moves the time selection onto what it just pasted");
         session.deleteClip(pastedID);
+        // Selecting the clip is selecting its span: that span is what Delete
+        // below empties.
         view.setSelection({id});
-        view.clearTimeSelection();
 
         scenario("persistence: track state");
         session.toggleTrackMute(1);

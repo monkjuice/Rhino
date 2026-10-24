@@ -80,6 +80,37 @@ int runArrangementGeometryTest()
             || std::abs(minimumRegionPieceSeconds(0.5 / 4096.0) - 0.05 / 4096.0) > 1.0e-12
             || minimumRegionPieceSeconds(-1.0) != 0.0)
             throw std::runtime_error("The shortest piece a region keeps scales with a short region");
+        // A region cuts a clip it runs across by the same floor: the part
+        // inside goes, what is left either side stays, a graze is left out,
+        // and a crossing shorter than the floor goes whole.
+        {
+            const auto whole = cutClipByRegion({1.0, 2.0, 0.0}, 0.5, 3.0);
+            if (!whole.inside || whole.keepsLeft || whole.keepsRight
+                || !close(whole.taken.start, 1.0) || !close(whole.taken.end, 2.0) || !close(whole.taken.offset, 0.0))
+                throw std::runtime_error("A clip inside a region goes whole");
+            const auto both = cutClipByRegion({1.0, 5.0, 0.25}, 2.0, 3.0);
+            if (!both.inside || !both.keepsLeft || !both.keepsRight
+                || !close(both.taken.start, 2.0) || !close(both.taken.end, 3.0) || !close(both.taken.offset, 1.25)
+                || !close(both.left.start, 1.0) || !close(both.left.end, 2.0) || !close(both.left.offset, 0.25)
+                || !close(both.right.start, 3.0) || !close(both.right.end, 5.0) || !close(both.right.offset, 2.25))
+                throw std::runtime_error("A clip crossing both edges is cut at both, every piece keeping its place in the source");
+            if (cutClipByRegion({1.0, 2.0, 0.0}, 2.0, 3.0).inside || cutClipByRegion({1.0, 2.0, 0.0}, 3.0, 4.0).inside
+                || cutClipByRegion({1.0, 2.0, 0.0}, 0.0, 1.0).inside)
+                throw std::runtime_error("A clip touching or outside a region is not in it");
+            if (cutClipByRegion({1.0, 2.002, 0.0}, 2.0, 3.0).inside || cutClipByRegion({2.998, 4.0, 0.0}, 2.0, 3.0).inside)
+                throw std::runtime_error("A clip grazing a region by less than the floor is left out");
+            const auto crossing = cutClipByRegion({0.998, 2.0, 0.5}, 1.0, 3.0);
+            if (!crossing.inside || crossing.keepsLeft || crossing.keepsRight
+                || !close(crossing.taken.start, 0.998) || !close(crossing.taken.offset, 0.5))
+                throw std::runtime_error("A clip crossing an edge by less than the floor goes whole");
+            // The floor shrinks with a short region, so a deep-zoom cell takes
+            // exactly what it covers.
+            const auto cell = cutClipByRegion({0.0, 1.0, 0.0}, 0.5, 0.5005);
+            if (!cell.inside || !cell.keepsLeft || !cell.keepsRight || std::abs(cell.taken.end - cell.taken.start - 0.0005) > 1.0e-9)
+                throw std::runtime_error("A region shorter than a tenth of a second cuts by a tenth of itself");
+            if (cutClipByRegion({1.0, 2.0, 0.0}, std::nan(""), 3.0).inside || cutClipByRegion({1.0, 2.0, 0.0}, 1.5, 1.5).inside)
+                throw std::runtime_error("A region with no position or no width cuts nothing");
+        }
         GridSettings fixed {GridMode::fixed, AdaptiveGridWidth::medium, GridDivision::eighth, false};
         if (!close(resolvedGridBeats(fixed, 1.0, 4.0), resolvedGridBeats(fixed, 1000.0, 4.0)))
             throw std::runtime_error("Fixed grid ignores zoom");

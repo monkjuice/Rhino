@@ -37,10 +37,9 @@ bool Session::shouldShowClipInArrangement(te::Clip& clip) const
         || midi->getSequence().getNumNotes() > 0;
 }
 
-namespace
-{
 // A clip that changed lanes needs a new playback graph, not a restart of the
-// old one: the old graph has no node for it on the lane it arrived on.
+// old one: the old graph has no node for it on the lane it arrived on. Shared
+// with the region move in SessionRegion.cpp.
 void resumePlaybackAfterClipEdit(te::Edit& edit, bool laneChanged, bool wasPlaying, bool hadPlaybackContext)
 {
     auto& transport = edit.getTransport();
@@ -55,7 +54,6 @@ void resumePlaybackAfterClipEdit(te::Edit& edit, bool laneChanged, bool wasPlayi
     {
         edit.restartPlayback();
     }
-}
 }
 
 juce::Result Session::editClipInEdit(te::EditItemID id, ClipGeometry next, ClipGesture gesture, int targetTrack,
@@ -187,24 +185,14 @@ juce::Result Session::editClip(te::EditItemID id, ClipGeometry next, ClipGesture
     return juce::Result::ok();
 }
 
-juce::Result Session::moveClips(const std::vector<ClipMove>& moves)
+juce::Result Session::moveClipsInEdit(const std::vector<ClipMove>& moves, ClipMoveOutcome& outcome)
 {
-    if (moves.empty())
-        return juce::Result::ok();
-    if (moves.size() == 1)
-        return editClip(moves.front().id, moves.front().position, ClipGesture::move, moves.front().track);
+    outcome = {};
     std::vector<te::EditItemID> travelling;
     for (const auto& move : moves)
         travelling.push_back(move.id);
-    auto& transport = edit->getTransport();
-    const auto wasPlaying = transport.isPlaying();
-    const auto hadPlaybackContext = transport.isPlayContextActive();
-    auto& undoManager = edit->getUndoManager();
-    undoManager.beginNewTransaction("Move clips");
-    auto anyTrackChanged = false, anyChanged = false;
     // The lanes the clips left and reached, and those whose devices a MIDI
     // clip changed, as editClip names them.
-    std::vector<int> reached, gainedDevices;
     for (const auto& move : moves)
     {
         const auto* moving = findClip(move.id);
@@ -213,29 +201,46 @@ juce::Result Session::moveClips(const std::vector<ClipMove>& moves)
         const auto result = editClipInEdit(move.id, move.position, ClipGesture::move, move.track, travelling,
                                            trackChanged, changed, devicesChanged);
         if (result.failed())
-        {
-            undoManager.undoCurrentTransactionOnly();
-            repairPatternClip();
-            sendSynchronousChangeMessage();
             return result;
-        }
-        anyTrackChanged = anyTrackChanged || trackChanged;
-        anyChanged = anyChanged || changed;
-        reached.push_back(from);
+        outcome.anyTrackChanged = outcome.anyTrackChanged || trackChanged;
+        outcome.anyChanged = outcome.anyChanged || changed;
+        outcome.reached.push_back(from);
         if (const auto* moved = findClip(move.id); trackChanged && moved != nullptr)
-            (devicesChanged ? gainedDevices : reached).push_back(clipTrackIndex(*edit, *moved));
+            (devicesChanged ? outcome.gainedDevices : outcome.reached).push_back(clipTrackIndex(*edit, *moved));
     }
-    if (!anyChanged)
+    return juce::Result::ok();
+}
+
+juce::Result Session::moveClips(const std::vector<ClipMove>& moves)
+{
+    if (moves.empty())
+        return juce::Result::ok();
+    if (moves.size() == 1)
+        return editClip(moves.front().id, moves.front().position, ClipGesture::move, moves.front().track);
+    auto& transport = edit->getTransport();
+    const auto wasPlaying = transport.isPlaying();
+    const auto hadPlaybackContext = transport.isPlayContextActive();
+    auto& undoManager = edit->getUndoManager();
+    undoManager.beginNewTransaction("Move clips");
+    ClipMoveOutcome outcome;
+    if (const auto result = moveClipsInEdit(moves, outcome); result.failed())
+    {
+        undoManager.undoCurrentTransactionOnly();
+        repairPatternClip();
+        sendSynchronousChangeMessage();
+        return result;
+    }
+    if (!outcome.anyChanged)
     {
         undoManager.beginNewTransaction();
         return juce::Result::ok();
     }
     refreshLoop();
     undoManager.beginNewTransaction();
-    markClipsModified(reached);
-    if (!gainedDevices.empty())
-        markClipsModified(gainedDevices, ModelChange::devices);
-    resumePlaybackAfterClipEdit(*edit, anyTrackChanged, wasPlaying, hadPlaybackContext);
+    markClipsModified(outcome.reached);
+    if (!outcome.gainedDevices.empty())
+        markClipsModified(outcome.gainedDevices, ModelChange::devices);
+    resumePlaybackAfterClipEdit(*edit, outcome.anyTrackChanged, wasPlaying, hadPlaybackContext);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }

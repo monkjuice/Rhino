@@ -9,8 +9,10 @@ namespace rhino
 {
 
 // What the last click selected decides what is bounced, as it decides what
-// Delete removes: the cards, the clips picked by their headers, or a span
-// dragged over the lanes - which is bounced as a span, cut at its edges.
+// Delete removes: the cards, or the selection - a span of the timeline
+// whatever made it, bounced as a span cut at its edges. For a clicked clip
+// that span is the clip, whole. Only a primary clip with no span around it
+// is bounced as a clip.
 void Arrangement::bounceSelected()
 {
     cancelDrag();
@@ -20,7 +22,7 @@ void Arrangement::bounceSelected()
         bounceTracks(selectedTracks);
         return;
     }
-    if (selectedClips.empty() && selected == te::EditItemID() && timeSelection.active && timeSelection.isRange())
+    if (timeSelection.active && timeSelection.isRange())
     {
         bounceRegion(timeSelection);
         return;

@@ -2,14 +2,18 @@
 #include "ui/shared/Playhead.h"
 #include <algorithm>
 
-// The time selection and the clipboard commands built on it.
+// The selection and the clipboard commands built on it.
 //
-// One rule covers all four commands, and it is Live's: everything acts on a
-// region - a span of time across a run of tracks - and the region is either
-// the one dragged out in the lanes or the span of the clips that are selected.
-// Copy takes what is inside it, paste drops that at the insert point replacing
-// what it lands on, duplicate pastes at the region's own end and carries the
-// region along so the next Ctrl+D keeps extending, and Delete empties it.
+// There is one selection in the lanes, and it is Live's: a region, a span of
+// time across a run of tracks. Clicking a clip's header selects the clip's
+// own span on its track - the same selection a marquee swept over exactly the
+// clip would make - dragging over the lanes sweeps one out, and Shift or Ctrl
+// widens it. Every command reads that rectangle: copy takes what is inside
+// it, paste drops that at the insert point replacing what it lands on,
+// duplicate pastes at the region's own end and carries the region along so
+// the next Ctrl+D keeps extending, Delete empties it, and dragging any clip
+// header the region runs across carries all of its material
+// (ArrangementGestures.cpp, Session::moveClipRegion).
 
 namespace rhino
 {
@@ -22,9 +26,6 @@ void Arrangement::setTimeSelection(double start, double end, int firstTrack, int
     timeSelection.lastTrack = juce::jlimit(timeSelection.firstTrack, std::max(0, session.trackCount() - 1),
                                            std::max(firstTrack, lastTrack));
     timeSelection.active = true;
-    // Set here and re-set by setRegionFromSelectedClips, so a region only
-    // follows clips when it was actually read off them.
-    regionFollowsClips = false;
 }
 
 // A click with no drag. Paste lands here, and so does the material a duplicate
@@ -56,81 +57,63 @@ void Arrangement::moveTransportToSelectionStart()
     updatePlayhead();
 }
 
-// Selected clips stand in for a region that was never dragged out, so clicking
-// a clip and pressing Ctrl+D does exactly what dragging its span and pressing
-// Ctrl+D does.
-Arrangement::TimeSelection Arrangement::regionOfSelectedClips(bool previewed) const
+// Widens the selection to the one rectangle that holds both what was selected
+// and the clip, which is what Shift-clicking a clip does in Live. With
+// nothing selected the clip's own span is the selection.
+void Arrangement::extendSelectionToClip(const ClipView& clip)
 {
-    TimeSelection bounds;
-    for (const auto& clip : clips)
-        // The primary clip counts even when the gathered list is empty: a menu
-        // and a keyboard command can both name one clip without gathering it.
-        if (isSelected(clip.id) || (selectedClips.empty() && clip.id == selected))
-        {
-            const auto position = previewed ? displayedPosition(clip) : clip.position;
-            const auto track = previewed ? displayedTrack(clip) : clip.track;
-            if (!bounds.active)
-            {
-                bounds = {position.start, position.end, track, track, true};
-                continue;
-            }
-            bounds.start = std::min(bounds.start, position.start);
-            bounds.end = std::max(bounds.end, position.end);
-            bounds.firstTrack = std::min(bounds.firstTrack, track);
-            bounds.lastTrack = std::max(bounds.lastTrack, track);
-        }
-    return bounds;
+    if (!timeSelection.active)
+    {
+        setTimeSelection(clip.position.start, clip.position.end, clip.track, clip.track);
+        return;
+    }
+    setTimeSelection(std::min(timeSelection.start, clip.position.start), std::max(timeSelection.end, clip.position.end),
+                     std::min(timeSelection.firstTrack, clip.track), std::max(timeSelection.lastTrack, clip.track));
 }
 
-Arrangement::TimeSelection Arrangement::effectiveRegion() const
-{
-    if (timeSelection.active && timeSelection.isRange())
-        return timeSelection;
-    const auto fromClips = regionOfSelectedClips(false);
-    return fromClips.active ? fromClips : timeSelection;
-}
-
-// A drag previews rather than editing, so the region has to preview with it:
-// waiting for the drop would leave the highlight sitting at the position the
-// clip is being carried away from.
+// A drag previews rather than editing, so the highlight has to preview with
+// it: waiting for the drop would leave it sitting where the material is being
+// carried away from.
 Arrangement::TimeSelection Arrangement::displayedTimeSelection() const
 {
-    if (!dragging || !regionFollowsClips)
+    if (!dragging || gesture != ClipGesture::move || !timeSelection.active)
         return timeSelection;
-    const auto previewed = regionOfSelectedClips(true);
-    return previewed.active ? previewed : timeSelection;
+    return timeSelection.shifted(preview.start - original.start, previewTrack - originalTrack);
 }
 
-// A region selects no clips: sweeping across part of a clip is a span of the
-// timeline, and only a press on a clip's header takes the clip. The commands
-// that are about whole clips - reverse, mute, merge, bounce - still reach what
-// a region runs across, through this, when no clip has been picked.
+// Live's rule: R reverses "a selection of audio material, even if it contains
+// multiple audio clips", and mute, merge and the rest read the same way. A
+// primary clip with no range around it - a click in the ruler leaves one -
+// still names itself, so a key still has something to act on.
 std::vector<te::EditItemID> Arrangement::clipsToActOn() const
 {
-    if (!selectedClips.empty())
-        return selectedClips;
-    if (selected != te::EditItemID())
-        return {selected};
     std::vector<te::EditItemID> hits;
-    if (timeSelection.active && timeSelection.isRange())
-        for (const auto& clip : clips)
-            if (timeSelection.covers(clip.track)
-                && clip.position.start < timeSelection.end - 1.0e-7
-                && clip.position.end > timeSelection.start + 1.0e-7)
-                hits.push_back(clip.id);
+    for (const auto& clip : clips)
+        if (timeSelection.touches(clip.position, clip.track))
+            hits.push_back(clip.id);
+    if (hits.empty() && selected != te::EditItemID())
+        hits.push_back(selected);
     return hits;
 }
 
-// After a click or a marquee has changed which clips are selected, the region
-// follows them. Deriving it rather than remembering it is what keeps the two
-// from disagreeing.
-void Arrangement::setRegionFromSelectedClips()
+// Whether what the selection carries on one of its rows could land where the
+// drag would put it: MIDI needs a MIDI lane, audio an audio lane, and a group
+// bus takes neither. A prediction from the facts the sync gathered, drawn as
+// Live's mark on the row; the model refuses the drop itself on release. A row
+// past the last track takes a lane made for it, so it refuses nothing.
+bool Arrangement::previewRowRefused(int row) const
 {
-    clearTimeSelection();
-    const auto region = effectiveRegion();
-    if (region.active)
-        setTimeSelection(region.start, region.end, region.firstTrack, region.lastTrack);
-    regionFollowsClips = true;
+    if (!dragging || gesture != ClipGesture::move || !timeSelection.active)
+        return false;
+    const auto source = timeSelection.firstTrack + row;
+    const auto destination = source + previewTrack - originalTrack;
+    if (!juce::isPositiveAndBelow(destination, static_cast<int>(trackFacts.size())))
+        return false;
+    const auto& facts = factsFor(destination);
+    for (const auto& clip : clips)
+        if (clip.track == source && carriedCut(clip).inside && (facts.bus || facts.midi != clip.midi))
+            return true;
+    return false;
 }
 
 bool Arrangement::beginRegionGesture(const juce::MouseEvent& event)
@@ -142,19 +125,34 @@ bool Arrangement::beginRegionGesture(const juce::MouseEvent& event)
         return false;
     const auto time = std::max(0.0, timeAt(event.position.x));
     const auto bypass = event.mods.isAltDown();
-    // Shift drags the existing region's far edge rather than starting a new
-    // one, which is how a selection is widened without redoing it. A region is
-    // one rectangle, so there is nothing for Ctrl to add a second of: it
-    // starts a new region like a plain drag.
+    // Shift drags the existing selection's far edge rather than starting a
+    // new one, which is how a selection is widened without redoing it. The
+    // selection may have been made by clicking a clip, so the anchor is read
+    // off the rectangle itself: the corner farthest from the pointer holds
+    // and the near one follows. A region is one rectangle, so there is
+    // nothing for Ctrl to add a second of: it starts a new region like a
+    // plain drag.
     const auto extending = isExtendSelectionModifier(event.mods) && timeSelection.active;
-    if (!extending)
+    if (extending)
+    {
+        const auto farEdge = [](double at, double low, double high)
+        {
+            if (at < low) return high;
+            if (at > high) return low;
+            return at - low <= high - at ? high : low;
+        };
+        regionAnchorTime = farEdge(time, timeSelection.start, timeSelection.end);
+        regionAnchorTrack = static_cast<int>(farEdge(track, timeSelection.firstTrack, timeSelection.lastTrack));
+    }
+    else
     {
         regionAnchorTime = time;
         regionAnchorTrack = track;
+        // Cleared first: a fresh region names no clip.
+        setSelection({});
     }
-    // Cleared first: clearing the clip selection clears the region with it.
-    setSelection({});
     regionSelecting = true;
+    regionExtending = extending;
     // A press that has not moved yet is a line, not a span, so both edges take
     // the cell the pointer is inside; a shift-click is already a span, because
     // the region it is widening was there before the press.
@@ -174,8 +172,9 @@ void Arrangement::dragRegionGesture(const juce::MouseEvent& event)
         track = event.position.y < lanesTop ? 0 : std::max(0, session.trackCount() - 1);
     const auto bypass = event.mods.isAltDown();
     // Until the pointer has actually travelled, the gesture is still the click
-    // that started it and leaves a line rather than a one-cell span.
-    const auto dragged = event.getDistanceFromDragStart() >= 3;
+    // that started it and leaves a line rather than a one-cell span - unless
+    // it is widening a selection, which was a span before the press.
+    const auto dragged = regionExtending || event.getDistanceFromDragStart() >= 3;
     const auto first = std::min(regionAnchorTime, time);
     const auto last = std::max(regionAnchorTime, time);
     const auto start = snappedDown(first, bypass);
@@ -209,12 +208,12 @@ double Arrangement::insertPointTime() const
 }
 
 // A selection wins wherever the line genuinely crosses it, so cutting one clip
-// out of a gathered group still cuts only that one. With nothing selected under
-// the line - which is every click or sweep in a lane, because a region selects
-// no clips - the line cuts whatever it is drawn through, on the tracks the
-// region covers, so a region swept across four lanes cuts every clip its start
-// runs through. That rule is the one that matters: the click that aims the cut
-// is the same click that leaves nothing selected to cut.
+// out of a selection of several still cuts only that one. With nothing
+// selected under the line - a click in a lane leaves the line and no clip -
+// the line cuts whatever it is drawn through, on the tracks the region covers,
+// so a line put down across four lanes cuts every clip it runs through. That
+// rule is the one that matters: the click that aims the cut is the same click
+// that leaves nothing selected to cut.
 std::vector<te::EditItemID> Arrangement::clipsUnderLine(double seconds) const
 {
     std::vector<te::EditItemID> selectedHits, laneHits;
@@ -222,7 +221,7 @@ std::vector<te::EditItemID> Arrangement::clipsUnderLine(double seconds) const
     {
         if (!canSplitClipAt(clip.position, seconds))
             continue;
-        if (isSelected(clip.id) || clip.id == selected)
+        if (timeSelection.touches(clip.position, clip.track) || clip.id == selected)
             selectedHits.push_back(clip.id);
         // No region at all means the line is the playhead, and the working
         // track is the only lane the timeline can say it is about.
@@ -271,6 +270,21 @@ void Arrangement::paintTimeSelection(juce::Graphics& g)
         g.fillRectList(wash);
         g.setColour(juce::Colour(0xffc6d58c));
         g.drawRect(box, 1.0f);
+        // A row whose material could not land where the drag would put it
+        // wears the mark Live puts there, so the refusal shows before the
+        // drop rather than as a message after it.
+        for (int row = 0; row <= shown.lastTrack - shown.firstTrack; ++row)
+        {
+            if (!previewRowRefused(row)) continue;
+            const auto target = lane(shown.firstTrack + row);
+            const auto size = std::min(16.0f, target.getHeight() - 8.0f);
+            if (size < 8.0f) continue;
+            const juce::Rectangle<float> mark {left + 6.0f, target.getCentreY() - size * 0.5f, size, size};
+            g.setColour(palette::recordAccent);
+            g.drawEllipse(mark, 2.0f);
+            const auto inset = size * 0.22f;
+            g.drawLine(mark.getX() + inset, mark.getY() + inset, mark.getRight() - inset, mark.getBottom() - inset, 2.0f);
+        }
     }
     // The insert point is the region with no width: where a paste would land.
     const auto marker = xFor(shown.start);
@@ -294,7 +308,7 @@ juce::String Arrangement::barPositionText(double seconds) const
 }
 
 // A card that has the focus is what the clipboard commands act on, whole
-// (ArrangementTrackClipboard.cpp); otherwise they act on the region.
+// (ArrangementTrackClipboard.cpp); otherwise they act on the selection.
 void Arrangement::copySelection()
 {
     if (focus == Focus::track)
@@ -302,8 +316,8 @@ void Arrangement::copySelection()
         copyCards(selectedTracks);
         return;
     }
-    const auto region = effectiveRegion();
-    if (!region.isRange())
+    const auto region = timeSelection;
+    if (!region.active || !region.isRange())
     {
         if (status) status("Select clips or drag a span of the timeline to copy");
         return;
@@ -323,7 +337,7 @@ void Arrangement::cutSelection()
         cutCards(selectedTracks);
         return;
     }
-    const auto region = effectiveRegion();
+    const auto region = timeSelection;
     copySelection();
     if (clipboard.clips.empty())
         return;
@@ -355,10 +369,10 @@ void Arrangement::pasteSelection()
         if (status) status("Copy one or more clips first");
         return;
     }
-    // Paste goes to the insert point, which is the start of the time selection
-    // - dragged out, left by a click, or set by selecting a clip. Only when
-    // there is no time selection at all does it fall back to the clips.
-    const auto region = timeSelection.active ? timeSelection : effectiveRegion();
+    // Paste goes to the insert point, which is the start of the selection -
+    // dragged out, left by a click, or made by selecting a clip. With no
+    // selection at all it goes to the top of the working track.
+    const auto region = timeSelection;
     const auto start = std::max(0.0, region.active ? region.start : 0.0);
     const auto track = juce::jlimit(0, std::max(0, session.trackCount() - 1),
                                     region.active ? region.firstTrack : selectedTrack);
@@ -392,8 +406,8 @@ void Arrangement::duplicateSelected()
         duplicateCards(selectedTracks);
         return;
     }
-    const auto region = effectiveRegion();
-    if (!region.isRange())
+    const auto region = timeSelection;
+    if (!region.active || !region.isRange())
     {
         if (status) status("Select a clip or a span of the timeline to duplicate");
         return;
@@ -415,31 +429,29 @@ void Arrangement::duplicateSelected()
     setSelection(std::move(pasted));
     setTimeSelection(destination, destination + region.length(), region.firstTrack, region.lastTrack);
     focus = Focus::region;
-    if (status) status("Duplicated " + juce::String(selectedClips.size())
-                       + (selectedClips.size() == 1 ? " clip" : " clips"));
+    if (status) status("Duplicated " + juce::String(copied.clips.size())
+                       + (copied.clips.size() == 1 ? " clip" : " clips"));
     repaint();
 }
 
+// The selection is a span whatever made it: a clicked clip's own span deletes
+// the clip, and a swept one empties the timeline it covers, cutting the clips
+// that cross its edges. The line is left where the selection started.
 void Arrangement::deleteSelection()
 {
-    // A dragged-out region empties the timeline it covers, cutting the clips
-    // that cross its edges. Without one, Delete takes the selected clips whole.
-    if (timeSelection.active && timeSelection.isRange())
+    if (!timeSelection.active || !timeSelection.isRange())
     {
-        // Read before the selection is cleared, which clears the region too:
-        // the line goes where the region started, not to the top of track one.
-        const auto region = timeSelection;
-        const auto result = session.clearClipRegion(region.start, region.end, region.firstTrack, region.lastTrack);
-        if (result.failed() && status) status(result.getErrorMessage());
-        setSelection({});
-        setInsertPoint(region.start, region.firstTrack);
-        focus = Focus::region;
+        if (status) status("Select a clip or a span of the timeline to delete");
         return;
     }
-    if (selectedClips.empty() && selected != te::EditItemID()) selectedClips = {selected};
-    // One undo step for the whole selection.
-    session.deleteClips(selectedClips);
+    // Read before the selection is cleared: the line goes where the region
+    // started, not to the top of track one.
+    const auto region = timeSelection;
+    const auto result = session.clearClipRegion(region.start, region.end, region.firstTrack, region.lastTrack);
+    if (result.failed() && status) status(result.getErrorMessage());
     setSelection({});
+    setInsertPoint(region.start, region.firstTrack);
+    focus = Focus::region;
 }
 
 }

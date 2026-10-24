@@ -3,6 +3,7 @@
 #include "ArrangementGrid.h"
 #include "MonitorSelector.h"
 #include "ui/shared/LevelMeter.h"
+#include <array>
 #include <map>
 #include <memory>
 #include <unordered_map>
@@ -125,6 +126,9 @@ private:
         juce::Colour colour;
         int clipPlugins = 0;
         bool muted = false;
+        // What kind of lane the clip needs, read once per sync so the preview
+        // of a carried selection can say which rows would refuse it.
+        bool midi = false;
     };
     // What a sync keeps of each track between rebuilds, by the track's id:
     // its clip views and the files their waveforms are of, good while the
@@ -149,14 +153,19 @@ private:
     enum class ClipZone { trimStart, trimEnd, header, body };
     // What the last click selected, and therefore what Delete acts on. A track
     // is always highlighted as the working row, so "a track is selected" cannot
-    // be inferred from selectedTrack - it has to be recorded.
-    enum class Focus { none, clip, track, automation, region };
-    // A rectangle of the timeline: a span of time across a run of tracks. It is
-    // what copy, cut, paste, duplicate and delete all act on, so the same rule
-    // covers a dragged-out region and a clicked clip - selecting a clip sets
-    // the region to that clip's span, which is what makes Ctrl+D put the copy
-    // flush against its end. A click that never drags leaves a zero-length
-    // region: an insert point, and nothing else, which is where a paste lands.
+    // be inferred from selectedTrack - it has to be recorded. A region is the
+    // one selection the lanes have: a clip clicked by its header, a span swept
+    // out, or the rectangle a paste left.
+    enum class Focus { none, region, track, automation };
+    // The selection: a rectangle of the timeline, a span of time across a run
+    // of tracks. There is one kind of it, as in Live. Clicking a clip's header
+    // selects the clip's own span on its track - the same selection a marquee
+    // swept over exactly the clip would make - and dragging over the lanes
+    // sweeps one out. Every command reads it, which is what makes Ctrl+D on a
+    // clip and on its span the same command, and dragging any clip header it
+    // runs across carries all of its material. A click that never drags
+    // leaves a zero-length region: an insert point, and nothing else, which is
+    // where a paste lands.
     struct TimeSelection
     {
         double start = 0.0, end = 0.0;
@@ -165,6 +174,45 @@ private:
         double length() const { return std::max(0.0, end - start); }
         bool isRange() const { return end > start + 1.0e-7; }
         bool covers(int track) const { return active && track >= firstTrack && track <= lastTrack; }
+        // Runs across the clip, in part or whole: the clip is selected.
+        bool touches(ClipGeometry clip, int track) const
+        {
+            return covers(track) && isRange() && clip.start < end - 1.0e-7 && clip.end > start + 1.0e-7;
+        }
+        // Holds the whole of the clip.
+        bool holdsWhole(ClipGeometry clip, int track) const
+        {
+            return covers(track) && isRange() && clip.start >= start - 1.0e-7 && clip.end <= end + 1.0e-7;
+        }
+        // Is the clip's own span and nothing more: what clicking its header makes.
+        bool isExactly(ClipGeometry clip, int track) const
+        {
+            return covers(track) && firstTrack == lastTrack && std::abs(clip.start - start) < 1.0e-7
+                && std::abs(clip.end - end) < 1.0e-7;
+        }
+        TimeSelection shifted(double seconds, int tracks) const
+        {
+            auto moved = *this;
+            moved.start += seconds;
+            moved.end += seconds;
+            moved.firstTrack += tracks;
+            moved.lastTrack += tracks;
+            return moved;
+        }
+    };
+    // While the selection is carried, a clip it runs across is drawn in
+    // pieces: the part inside the selection travels with it and what is left
+    // either side stays where it is. A clip not carried is one piece, itself.
+    struct DisplayedPiece
+    {
+        ClipGeometry position;
+        int track = 0;
+        bool carried = false;
+    };
+    struct DisplayedPieces
+    {
+        std::array<DisplayedPiece, 3> items;
+        int count = 0;
     };
     // Automation is edited by dragging a point, or by lifting a lane that has
     // never been drawn off its resting line, which is what makes it active.
@@ -211,7 +259,15 @@ private:
     void updateScroll();
     void zoom(double factor, double anchor);
     void cancelDrag();
+    // Whether the selection runs across a clip, in part or whole. A clip
+    // clicked by its header is selected, and so is one a swept span covers.
     bool isSelected(te::EditItemID) const;
+    // Whether it holds the whole clip, which is what the clip's outline says.
+    bool isWhollySelected(const ClipView&) const;
+    // Selects clips by id: the one rectangle that holds them all, which is
+    // what clicking the first and Shift-clicking the rest would make. The
+    // primary - the clip the lower pane shows - is the one named, or else the
+    // first. No ids selects nothing: the rectangle goes, insert point included.
     void setSelection(std::vector<te::EditItemID>, te::EditItemID primary = {});
     void openCreatedClip(te::EditItemID created);
     // Records that the last click landed on a track card, and reports it.
@@ -224,21 +280,20 @@ private:
     // down moves the transport onto it and tells the session where Stop should
     // return to.
     void moveTransportToSelectionStart();
-    // The region a command acts on: the dragged-out one when there is one,
-    // otherwise the span of the selected clips, so both read the same way.
-    TimeSelection effectiveRegion() const;
-    // Where the region is drawn. While a clip drag previews, the engine has
-    // not moved anything yet, so the region follows the previewed geometry the
-    // clips are being drawn at. Display only: the commands read the region the
-    // edit is actually in.
+    // Widens the selection to take a clip in: Shift-click, and Ctrl-click,
+    // on a clip's header.
+    void extendSelectionToClip(const ClipView&);
+    // Where the selection is drawn. While it is carried, the engine has not
+    // moved anything yet, so the highlight travels with the pieces being
+    // drawn at their previewed places. Display only: the commands read the
+    // region the edit is actually in.
     TimeSelection displayedTimeSelection() const;
-    // The bounding rectangle of the selected clips, taken either from the edit
-    // or from what is currently being previewed.
-    TimeSelection regionOfSelectedClips(bool previewed) const;
-    // What a command about whole clips acts on: the clips picked by their
-    // headers, or with none picked, the clips a dragged region runs across.
+    // What a command about whole clips acts on: every clip the selection runs
+    // across, in part or whole.
     std::vector<te::EditItemID> clipsToActOn() const;
-    void setRegionFromSelectedClips();
+    // Whether what the carried selection holds on one of its rows could not
+    // land where the drag would put it, so the refusal shows before the drop.
+    bool previewRowRefused(int row) const;
     bool beginRegionGesture(const juce::MouseEvent&);
     void dragRegionGesture(const juce::MouseEvent&);
     void endRegionGesture();
@@ -459,10 +514,22 @@ private:
     // clip keeps its size while the pane over it is dragged.
     float fullLaneContentHeight() const;
     bool masterResizeEdgeAt(juce::Point<float>) const;
+    // What the carried selection takes of a clip while it is dragged: the
+    // clip whole, the part inside the selection, or nothing. The cut the model
+    // will make on the drop, so the preview shows the edges the drop leaves.
+    RegionCut carriedCut(const ClipView&) const;
+    // Where a clip is drawn: its carried piece at its previewed place while the
+    // selection is dragged, otherwise the clip itself. The hit tests and the
+    // waveform repaints read these; the painter reads every piece.
     ClipGeometry displayedPosition(const ClipView&) const;
     int displayedTrack(const ClipView&) const;
+    DisplayedPieces displayedPieces(const ClipView&) const;
     juce::Rectangle<float> bounds(const ClipView&) const;
+    juce::Rectangle<float> boundsOf(ClipGeometry, int track) const;
     int hit(juce::Point<float>) const;
+    // ArrangementClipPainter.cpp: every clip, piece by piece.
+    void paintClips(juce::Graphics&);
+    void paintClipPiece(juce::Graphics&, const ClipView&, const DisplayedPiece&, juce::Rectangle<float> dirty);
     void changeListenerCallback(juce::ChangeBroadcaster*) override;
     void visibilityChanged() override;
     void scrollBarMoved(juce::ScrollBar*, double) override;
@@ -553,8 +620,11 @@ private:
     // and on again silently moved an adaptive grid to fixed - the two controls
     // now show the same value, so that quietly rewrote what the person read.
     GridMode gridModeWhenSnapping = GridMode::adaptive;
+    // The primary clip: the one the last press on a header took, which is what
+    // the lower pane shows and what a trim edits. Inside the selection, until
+    // a lane press or a paste replaces it; the selection itself is
+    // timeSelection below.
     te::EditItemID selected;
-    std::vector<te::EditItemID> selectedClips;
     // A copied rectangle rather than clip ids: a cut deletes its sources, and
     // so does an undo made between the copy and the paste.
     Session::ClipRegion clipboard;
@@ -568,10 +638,11 @@ private:
     std::vector<int> selectedTracks {0};
     int trackSelectionAnchor = 0;
     bool dragging = false;
-    // A plain press inside a group of selected clips keeps the group, so the
-    // drag carries all of it. If the press turns out never to have been a
-    // drag, it was a click, and a click takes the one clip under it - which is
-    // what every list in the OS does, and can only be decided on release.
+    // A plain press on a clip inside a selection wider than the clip keeps the
+    // selection, so the drag carries all of it. If the press turns out never
+    // to have been a drag, it was a click, and a click takes the one clip
+    // under it - which is what every list in the OS does, and can only be
+    // decided on release.
     bool collapseSelectionOnRelease = false;
     te::EditItemID collapseSelectionTo;
     // Where the live drag is, so the frame clock can carry it on while the
@@ -583,16 +654,20 @@ private:
     juce::ModifierKeys dragModifiers;
     TimeSelection timeSelection;
     bool regionSelecting = false;
-    // A region read off the selected clips belongs to those clips, so it has to
-    // travel with them when they are moved, trimmed or nudged. One dragged out
-    // over the lanes belongs to the timeline and stays where it was put.
-    bool regionFollowsClips = false;
+    // A Shift press widens the selection that was there, so it is a span from
+    // the press on, where a plain press is a line until it travels.
+    bool regionExtending = false;
     // Unsnapped: which cell each edge of a dragged region takes depends on
     // which side of the anchor the pointer ended up, so the anchor has to be
     // re-snapped on every move rather than fixed when the press landed.
     double regionAnchorTime = 0.0;
     int regionAnchorTrack = 0;
     ClipGesture gesture = ClipGesture::move;
+    // What the press took hold of and where it is now. For a move it is the
+    // piece of the grabbed clip the selection carries - the clip whole, or the
+    // part inside the selection - so the snap and the clamps are about what
+    // travels; the whole selection follows it by the same distance. For a
+    // trim it is the clip.
     ClipGeometry original, preview;
     int originalTrack = 0, previewTrack = 0;
     double dragTime = 0.0, sourceDuration = 0.0;

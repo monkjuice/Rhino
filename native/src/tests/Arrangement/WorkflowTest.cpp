@@ -21,6 +21,7 @@
 #include "dj/DjTrack.h"
 #include "dj/DjEngine.h"
 #include <algorithm>
+#include <array>
 #include <functional>
 #include <stdexcept>
 
@@ -104,6 +105,8 @@ int runArrangementTest()
        #include "scenarios/ClipBounce.inc"
         scenario("region clipboard");
        #include "scenarios/RegionClipboard.inc"
+        scenario("one selection, carried whole");
+       #include "scenarios/RegionMove.inc"
         scenario("no clip is left too short to hear");
        #include "scenarios/ClipSlivers.inc"
         scenario("arrangement pan");

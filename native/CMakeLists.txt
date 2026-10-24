@@ -65,6 +65,7 @@ target_sources(RhinoNative PRIVATE
     src/model/SessionAudioClips.cpp
     src/model/SessionWarp.cpp
     src/model/SessionRegion.cpp
+    src/model/SessionRegionMove.cpp
     src/model/SessionMerge.cpp
     src/model/SessionBounce.cpp
     src/model/SessionExport.cpp
@@ -94,6 +95,7 @@ target_sources(RhinoNative PRIVATE
     src/ui/arrangement/Arrangement.cpp
     src/ui/arrangement/ArrangementGeometry.cpp
     src/ui/arrangement/ArrangementPainter.cpp
+    src/ui/arrangement/ArrangementClipPainter.cpp
     src/ui/arrangement/ArrangementSync.cpp
     src/ui/arrangement/ArrangementGestures.cpp
     src/ui/arrangement/ArrangementSelection.cpp

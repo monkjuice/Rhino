@@ -191,6 +191,20 @@ void StepGrid::mouseDown(const juce::MouseEvent& event)
     collapseSelectionOnRelease = false;
     clickedNoteState = {};
     dragTravelled = false;
+    // The middle button pans, and answers first, as it does in the
+    // arrangement: it is about the view, so nothing under the pointer - a
+    // note, the keys, the ruler or the velocity lane - gets a say.
+    if (event.mods.isMiddleButtonDown())
+    {
+        grabKeyboardFocus();
+        gesture = Gesture::pan;
+        panAnchor = event.position;
+        panStartStep = stepScroll;
+        panStartPitch = lowestVisiblePitch;
+        setHoveredNote({});
+        setMouseCursor(juce::MouseCursor::DraggingHandCursor);
+        return;
+    }
     if (!event.mods.isRightButtonDown() && isOverKeyboard(event.position))
     {
         grabKeyboardFocus();
@@ -492,6 +506,32 @@ void StepGrid::autoScrollDrag()
     }
 }
 
+// The view follows the pointer: the steps move the pixels the mouse did, and
+// the rows move by the whole rows it did, so the note that was under the
+// cursor stays under it. Drum rows are the Drum Rack's bank and stay put, as
+// they do for the wheel and the keys.
+void StepGrid::panView(juce::Point<float> pointer)
+{
+    const auto maximumStart = std::max(0.0, static_cast<double>(session.editorStepCount()) - visibleStepSpan());
+    stepScroll = std::clamp(panStartStep - (pointer.x - panAnchor.x) / cellWidth(), 0.0, maximumStart);
+    horizontalScroll.setCurrentRange(stepScroll, visibleStepSpan(), juce::dontSendNotification);
+    if (!session.isPatternDrums())
+    {
+        // Dragging down carries the notes down and brings the pitches above
+        // them into view, so the lowest row on show climbs by the rows travelled.
+        const auto next = juce::jlimit(0, 127 - visiblePitchRows() + 1,
+                                       panStartPitch + juce::roundToInt((pointer.y - panAnchor.y) / rowHeight()));
+        if (next != lowestVisiblePitch)
+        {
+            lowestVisiblePitch = next;
+            manualPitchScroll = true;
+            rebuildVisibleNotes();
+        }
+    }
+    updatePlayhead();
+    repaint();
+}
+
 juce::Result StepGrid::resizeCurrentNoteTo(int index)
 {
     if (!resizingNoteState.isValid())
@@ -559,6 +599,13 @@ void StepGrid::mouseDrag(const juce::MouseEvent& event)
         loopPreviewStartStep = std::min(loopAnchorStep, edge);
         loopPreviewEndStep = std::max(loopAnchorStep, edge);
         repaint();
+        return;
+    }
+    // Before dragPosition is recorded: a pan follows the pointer itself, and
+    // must never be mistaken for a drag the gesture clock should autoscroll.
+    if (gesture == Gesture::pan)
+    {
+        panView(event.position);
         return;
     }
     if (gesture == Gesture::none) return;
@@ -638,6 +685,16 @@ void StepGrid::mouseUp(const juce::MouseEvent& event)
             session.setLoopRange(timelineTimeForLoopStep(loopPreviewStartStep),
                                  timelineTimeForLoopStep(loopPreviewEndStep));
         repaint();
+        return;
+    }
+    // A pan opened no note gesture, so it has none to close.
+    if (gesture == Gesture::pan)
+    {
+        panView(event.position);
+        gesture = Gesture::none;
+        updatePointer(event.position, event.mods);
+        if (isMouseOver(true))
+            updateHover(event.position);
         return;
     }
     // A press inside a group that never travelled was a click, and a click

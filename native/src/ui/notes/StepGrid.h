@@ -49,7 +49,7 @@ public:
 private:
     friend int runArrangementTest();
     friend int runUiProfile();
-    enum class Gesture { none, draw, move, resize, select, keyboard,
+    enum class Gesture { none, draw, move, resize, select, keyboard, pan,
                          velocityDrag, velocityDraw, velocitySelect, laneResize };
     static constexpr bool isVelocityLaneGesture(Gesture g)
     {
@@ -128,6 +128,10 @@ private:
     // the gesture timer rather than by pointer movement, because a pointer
     // held still outside the panel sends no more drags.
     void autoScrollDrag();
+    // Middle-button pan, the arrangement's: carries the steps and the pitch
+    // rows so that whatever was under the pointer when the button went down
+    // stays there.
+    void panView(juce::Point<float> pointer);
     void moveDraggedNotesAt(juce::Point<float>);
     // Pointer position to musical position and back. The marquee keeps its
     // anchor in these rather than in pixels: the view scrolls under a drag
@@ -278,6 +282,11 @@ private:
     int pitchRowCount = Session::pitches;
     juce::Point<float> keyboardDragPosition {-1.0f, -1.0f};
     double keyboardScrollRemainder = 0.0;
+    // Where a pan began. The anchors are absolute, as the arrangement's are,
+    // so a pan that runs into the end of the clip and back returns exactly.
+    juce::Point<float> panAnchor;
+    double panStartStep = 0.0;
+    int panStartPitch = 0;
     double dragStartStep = -1.0;
     double resizingStartStep = 0.0, resizeTarget = 0.0;
     juce::ValueTree movingNoteState, resizingNoteState;

@@ -148,8 +148,10 @@ bool Arrangement::beginRegionGesture(const juce::MouseEvent& event)
     {
         regionAnchorTime = time;
         regionAnchorTrack = track;
-        // Cleared first: a fresh region names no clip.
-        setSelection({});
+        // The primary clip stays as it is until the sweep ends, which names
+        // the next one (nameSweptClip): the shell reads it on every change,
+        // and clearing it here closed the note editor the sweep was about to
+        // show a part of.
     }
     regionSelecting = true;
     regionExtending = extending;
@@ -187,6 +189,7 @@ void Arrangement::endRegionGesture()
 {
     regionSelecting = false;
     moveTransportToSelectionStart();
+    nameSweptClip();
     if (status && timeSelection.isRange())
     {
         const auto tracks = timeSelection.lastTrack - timeSelection.firstTrack + 1;
@@ -194,6 +197,53 @@ void Arrangement::endRegionGesture()
                + juce::String(tracks) + (tracks == 1 ? " track" : " tracks"));
     }
     repaint();
+}
+
+// Of the clips a finished sweep runs across, the primary is the one the press
+// landed in, or else the nearest to it, on the press's row before any other,
+// as in Live, where selecting part of a clip shows that clip. A sweep that
+// widened a selection keeps the primary it had while it still runs across
+// it, and a span with no clip in it, or an insert point, names none. A MIDI
+// clip becomes the note editor's clip, as a header press makes it, and the
+// span is reported so the editor can show the part swept.
+void Arrangement::nameSweptClip()
+{
+    te::EditItemID primary;
+    auto midi = false;
+    auto nearestRowsAway = 0;
+    auto nearestGap = 0.0;
+    for (const auto& clip : clips)
+    {
+        if (!timeSelection.touches(clip.position, clip.track))
+            continue;
+        if (regionExtending && clip.id == selected)
+        {
+            primary = clip.id;
+            midi = clip.midi;
+            break;
+        }
+        const auto rowsAway = std::abs(clip.track - regionAnchorTrack);
+        const auto gap = std::max({0.0, clip.position.start - regionAnchorTime, regionAnchorTime - clip.position.end});
+        if (primary == te::EditItemID() || rowsAway < nearestRowsAway
+            || (rowsAway == nearestRowsAway && gap < nearestGap))
+        {
+            primary = clip.id;
+            midi = clip.midi;
+            nearestRowsAway = rowsAway;
+            nearestGap = gap;
+        }
+    }
+    const auto previous = selected;
+    selected = primary;
+    // The session announces this at once, so the shell already reads the new
+    // primary, and the list of clips is rebuilt under the call.
+    if (midi && !(session.hasPatternClip() && session.pattern().itemID == primary))
+        if (const auto result = session.selectPatternClip(primary); result.failed() && status)
+            status(result.getErrorMessage());
+    if (selected != previous && clipSelected)
+        clipSelected(selected);
+    if (selected != te::EditItemID() && clipSpanSwept)
+        clipSpanSwept(selected, timeSelection.start, timeSelection.end);
 }
 
 // Where the line is. The line the lanes draw is the region's start - the

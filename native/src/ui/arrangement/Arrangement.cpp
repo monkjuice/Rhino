@@ -3,6 +3,7 @@
 #include "ui/shared/UiVisibility.h"
 #include <optional>
 #include <set>
+#include <utility>
 
 namespace rhino
 {
@@ -386,7 +387,14 @@ void Arrangement::cancelDrag()
     dragTravelled = false;
     collapseSelectionOnRelease = false;
     collapseSelectionTo = {};
-    regionSelecting = false;
+    // A sweep cut short never names its clip, and the primary it kept until
+    // its release may lie outside the span by now: then it names none, and
+    // says so.
+    if (std::exchange(regionSelecting, false) && selected != te::EditItemID() && !isSelected(selected))
+    {
+        selected = {};
+        if (clipSelected) clipSelected(selected);
+    }
     loopGesture = LoopGesture::none;
     automationGesture = AutomationGesture::none;
     automationRow = -1;

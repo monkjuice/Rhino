@@ -97,6 +97,47 @@ void StepGrid::clearStepSelection()
     stepSelection = {};
 }
 
+// The arrangement's selection, carried into the steps of the open clip.
+void StepGrid::showTimeSpan(double startSeconds, double endSeconds)
+{
+    if (!session.hasPatternClip())
+        return;
+    // The clip may have changed under an editor the shell is hiding, and its
+    // length decides the zoom's range: caught up first, or the catch-up when
+    // the editor is shown would put back the zoom a new length opens at.
+    if (session.editorStepCount() != visibleStepCount)
+        rebuildVisibleNotes();
+    const auto clipStartBeat = session.secondsToBeats(session.pattern().getPosition().time.getStart().inSeconds());
+    const auto stepAt = [this, clipStartBeat](double seconds)
+    {
+        return (session.secondsToBeats(seconds) - clipStartBeat) / 4.0 * session.editorStepResolution();
+    };
+    // Held to the clip itself, which can end short of the grid's last step.
+    const auto steps = static_cast<double>(session.editorStepCount());
+    const auto clipEnd = std::min(steps, session.patternLengthBeats() / 4.0 * session.editorStepResolution());
+    const auto first = std::clamp(stepAt(startSeconds), 0.0, clipEnd);
+    const auto last = std::clamp(stepAt(endSeconds), 0.0, clipEnd);
+    if (last <= first)
+        return;
+    // Exactly the span when the zoom reaches it, and centred when it is
+    // narrower than the deepest view. A long clip opens deeper than the
+    // zoom's own limit, and may be framed as deep.
+    stepZoom = std::clamp(steps / (last - first), 1.0, std::max(8.0, steps / Session::defaultSteps));
+    stepScroll = first - (visibleStepSpan() - (last - first)) * 0.5;
+    syncHorizontalScroll();
+    if (computePitchRowCount() != pitchRowCount)
+        changeListenerCallback(nullptr);
+    // Last, because a rebuild reads the region off the notes again.
+    std::vector<juce::ValueTree> caught;
+    for (const auto& note : session.editorNotes())
+        if (note.startSteps < last && note.startSteps + note.lengthSteps > first)
+            caught.push_back(note.state);
+    setSelectedStates(std::move(caught));
+    setStepSelection(first, last);
+    updatePlayhead();
+    repaint();
+}
+
 StepGrid::StepSelection StepGrid::effectiveStepRegion() const
 {
     if (stepSelection.active && stepSelection.isRange())

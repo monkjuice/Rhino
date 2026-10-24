@@ -4,8 +4,9 @@
         // the clips crossing its edges the part inside, cut there; a row whose
         // material may not land where it is going refuses the whole move and
         // says so before the drop; and the arrow keys nudge the same material.
-        // The fixtures live out past thirty seconds, on lanes the region
-        // scenario left clean.
+        // The sweep that begins in the MIDI clip makes it the primary clip and
+        // shows the part swept in the note editor. The fixtures live out past
+        // thirty seconds, on lanes the region scenario left clean.
         {
             view.gridSettings.mode = GridMode::fixed;
             view.gridSettings.fixedDivision = GridDivision::sixteenth;
@@ -46,6 +47,9 @@
                                 || candidate->getPosition().time.getStart().inSeconds() >= 40.0,
                             "The lanes are clear where the move fixtures go");
             const std::array<int, 4> startingClips {clipsOn(0), clipsOn(1), clipsOn(2), clipsOn(3)};
+            // Read before the fixtures, because making a MIDI clip points the
+            // note editor at it.
+            const auto patternBefore = session.hasPatternClip() ? session.pattern().itemID : te::EditItemID();
 
             // Two bars of MIDI on the first lane, and under it an audio clip
             // the span will cut and one it will take whole.
@@ -71,6 +75,37 @@
                     ("The fixtures are on screen: " + juce::String(view.viewStart) + " + " + juce::String(view.viewSpan)
                      + " across " + juce::String(view.getWidth()) + " x " + juce::String(view.getHeight())).toRawUTF8());
 
+            // Three notes in the MIDI clip, a step long each, one before the
+            // span the sweep below selects, one inside it and one after it. A
+            // step is a sixteenth, an eighth of a second here. The note editor
+            // is then put back on the clip it was showing.
+            require(patternBefore != te::EditItemID() && patternBefore != midiID,
+                    "The note editor shows another clip before the sweep");
+            require(session.selectPatternClip(midiID).wasOk() && session.editorStepCount() == 32,
+                    "The two-bar MIDI clip is thirty-two steps");
+            juce::ValueTree noteBefore, noteInside, noteAfter;
+            require(session.addNote(1.0, 60, 1.0, &noteBefore).wasOk() && session.addNote(8.0, 62, 1.0, &noteInside).wasOk()
+                        && session.addNote(28.0, 64, 1.0, &noteAfter).wasOk(),
+                    "Notes either side of the span and one inside it");
+            require(session.selectPatternClip(patternBefore).wasOk(), "The note editor goes back to the clip it showed");
+            // An editor the shell is hiding, as it hides the note editor while
+            // the Device View shows, still on the other clip's length.
+            juce::Component pane;
+            auto hiddenEditor = std::make_unique<StepGrid>(session);
+            hiddenEditor->setSize(1000, 250);
+            hiddenEditor->changeListenerCallback(nullptr);
+            pane.addChildComponent(*hiddenEditor);
+            require(isHiddenInShell(*hiddenEditor) && hiddenEditor->visibleStepCount != 32,
+                    "The hidden editor was laid out for a clip of another length");
+            te::EditItemID sweptClip;
+            auto sweptStart = -1.0, sweptEnd = -1.0;
+            view.clipSpanSwept = [&](te::EditItemID clip, double start, double end)
+            {
+                sweptClip = clip;
+                sweptStart = start;
+                sweptEnd = end;
+            };
+
             // The sweep: from half a second into the MIDI clip to the end of
             // the whole audio clip, across both lanes.
             drag({view.xFor(32.55), lowerRow(0)}, {view.xFor(34.9), lowerRow(1)});
@@ -83,7 +118,43 @@
                      + ", pressed at y " + juce::String(lowerRow(0))).toRawUTF8());
             require(view.isSelected(midiID) && view.isSelected(audioPartID) && view.isSelected(audioWholeID),
                     "and every clip it runs across is selected, in part or whole");
-            require(view.selectedClipID() == te::EditItemID(), "with no primary clip");
+            // The clip the sweep began in is the one the lower pane shows, as
+            // in Live, where selecting part of a clip shows that clip.
+            require(view.selectedClipID() == midiID, "The clip the sweep began in is the primary one");
+            require(session.hasPatternClip() && session.pattern().itemID == midiID,
+                    "A sweep across part of a MIDI clip points the note editor at it");
+            require(sweptClip == midiID && close(sweptStart, 32.5) && close(sweptEnd, 35.0),
+                    "and reports the span it selected, for the editor to show");
+            view.clipSpanSwept = nullptr;
+            // What the shell does with the report: the note editor shows that
+            // part of the clip, steps four to twenty-four of thirty-two.
+            {
+                auto editor = std::make_unique<StepGrid>(session);
+                editor->setSize(1000, 250);
+                editor->changeListenerCallback(nullptr);
+                editor->showTimeSpan(sweptStart, sweptEnd);
+                require(editor->stepSelection.active && close(editor->stepSelection.start, 4.0)
+                            && close(editor->stepSelection.end, 24.0) && !editor->regionFromNotes,
+                        "The note editor's region is the span swept, in its own steps, its start marked");
+                require(close(editor->stepScroll, 4.0) && close(editor->visibleStepSpan(), 20.0),
+                        "and the editor is framed on exactly that part of the clip");
+                require(editor->selectedStates() == std::vector<juce::ValueTree> {noteInside},
+                        "The note inside the span is selected, and the notes either side of it are not");
+                editor->showTimeSpan(33.0, 33.125);
+                require(close(editor->stepSelection.start, 8.0) && close(editor->stepSelection.end, 9.0)
+                            && close(editor->visibleStepSpan(), 4.0) && close(editor->stepScroll, 6.5),
+                        "A span narrower than the deepest view is centred in it");
+                // A hidden editor catches up with the new clip before it is
+                // framed, so showing it keeps the frame rather than opening
+                // the new clip at its default zoom.
+                hiddenEditor->showTimeSpan(sweptStart, sweptEnd);
+                hiddenEditor->setVisible(true);
+                require(!isHiddenInShell(*hiddenEditor) && hiddenEditor->visibleStepCount == 32
+                            && close(hiddenEditor->stepScroll, 4.0) && close(hiddenEditor->visibleStepSpan(), 20.0),
+                        "An editor shown after it was framed hidden keeps the frame");
+                pane.removeChildComponent(hiddenEditor.get());
+                hiddenEditor.reset();
+            }
 
             // Grabbed by the whole audio clip's header and carried two rows
             // down and a beat right: the selection previews where it would
@@ -270,6 +341,7 @@
                         made.push_back(candidate->itemID);
                 for (const auto made_id : made) session.deleteClip(made_id);
             }
+            require(session.selectPatternClip(patternBefore).wasOk(), "The note editor goes back to the clip it showed");
             view.setSelection({});
             view.clearTimeSelection();
             view.viewStart = previousViewStart;

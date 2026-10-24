@@ -24,6 +24,11 @@ public:
     bool keyPressed(const juce::KeyPress&) override;
     void zoomIn();
     void zoomOut();
+    // A span of the song, in seconds, shown in the open clip: the part of it
+    // a sweep across the arrangement's lanes selected. It becomes the
+    // editor's region, the notes it runs across are selected, as a marquee
+    // over every pitch would select them, and the view is framed on it.
+    void showTimeSpan(double startSeconds, double endSeconds);
     void setScaleHighlight(int selection);
     // Draw mode: the pointer becomes a pencil, so a press paints notes and a
     // drag paints a run of them. With it off the pointer selects, which is

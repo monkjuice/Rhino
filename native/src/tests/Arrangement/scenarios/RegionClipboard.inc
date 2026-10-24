@@ -80,10 +80,11 @@
                         "A drag across a clip's lower row covers the whole cells it touched");
                 // A span across part of a clip selects that part of the clip:
                 // a span is the one kind of selection there is, so the clip
-                // counts as selected, no clip is primary, and the commands
-                // about whole clips reach the clip the span runs across.
-                require(view.isSelected(fixtureID) && view.selectedClipID() == te::EditItemID(),
-                        "and selects the clip it runs across, with no primary clip");
+                // counts as selected, and the commands about whole clips reach
+                // the clip the span runs across. The clip the sweep began in
+                // is the primary one, the one the lower pane shows.
+                require(view.isSelected(fixtureID) && view.selectedClipID() == fixtureID,
+                        "and selects the clip it runs across, which becomes the primary one");
                 require(view.focus == Arrangement::Focus::region, "The region keeps the focus, so Delete empties it");
                 view.muteSelected();
                 require(session.findClip(fixtureID)->isMuted(), "Mute still reaches a clip the region runs across");

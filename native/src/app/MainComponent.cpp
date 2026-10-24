@@ -94,6 +94,14 @@ MainComponent::MainComponent(Session& s)
     // note editor, and a selection that is neither closes the pane.
     arrangement.clipSelected = [this](te::EditItemID) { refreshEditorPanes(); };
     arrangement.clipOpened = [this](te::EditItemID id) { openClip(id); };
+    // A span swept across part of a MIDI clip is shown in the note editor,
+    // framed and selected there, whether the editor is showing yet or not:
+    // the Clip toggle then opens it on that part.
+    arrangement.clipSpanSwept = [this](te::EditItemID clip, double start, double end)
+    {
+        if (session.hasPatternClip() && session.pattern().itemID == clip)
+            grid.showTimeSpan(start, end);
+    };
     audioClip.status = files.status;
     // The panel's Split button advertises Ctrl+E, so it has to cut where
     // Ctrl+E cuts. The timeline owns the line; the panel only asks for it.

@@ -43,8 +43,8 @@ public:
     // focus is.
     void insertTrack(Session::TrackType);
     // The clip a command would act on, or an invalid id when the selection is
-    // a track, a region or nothing. The shell reads it to decide which editor
-    // the lower pane should be showing.
+    // a track, an insert point, a span with no clip in it, or nothing. The
+    // shell reads it to decide which editor the lower pane should be showing.
     te::EditItemID selectedClipID() const { return selected; }
     // Cuts clips in two at the line. Public because Ctrl+E is a shell shortcut
     // rather than an arrangement one: the timeline rarely has the keyboard when
@@ -97,6 +97,10 @@ public:
     // editor a clip belongs in is the shell's business, not the timeline's.
     std::function<void(te::EditItemID)> clipSelected;
     std::function<void(te::EditItemID)> clipOpened;
+    // A sweep across the lanes has ended on a span that runs across its
+    // primary clip: the clip and the span, in seconds, so the clip's editor
+    // can show the part of it that was swept.
+    std::function<void(te::EditItemID, double start, double end)> clipSpanSwept;
 private:
     friend int runArrangementTest();
     friend int runUiProfile();
@@ -297,6 +301,8 @@ private:
     bool beginRegionGesture(const juce::MouseEvent&);
     void dragRegionGesture(const juce::MouseEvent&);
     void endRegionGesture();
+    // Names the primary clip a finished sweep leaves, and reports the span.
+    void nameSweptClip();
     void paintTimeSelection(juce::Graphics&);
     // The clips a split would cut. A selection wins wherever the line actually
     // crosses it; with nothing selected under the line the line cuts whatever
@@ -620,10 +626,10 @@ private:
     // and on again silently moved an adaptive grid to fixed - the two controls
     // now show the same value, so that quietly rewrote what the person read.
     GridMode gridModeWhenSnapping = GridMode::adaptive;
-    // The primary clip: the one the last press on a header took, which is what
-    // the lower pane shows and what a trim edits. Inside the selection, until
-    // a lane press or a paste replaces it; the selection itself is
-    // timeSelection below.
+    // The primary clip: the one the last press on a header took, or the one a
+    // sweep began in, which is what the lower pane shows and what a trim
+    // edits. Inside the selection, until another sweep or a paste replaces
+    // it; the selection itself is timeSelection below.
     te::EditItemID selected;
     // A copied rectangle rather than clip ids: a cut deletes its sources, and
     // so does an undo made between the copy and the paste.

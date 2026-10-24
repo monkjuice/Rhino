@@ -14,6 +14,7 @@
 #include "ui/audioclip/AudioClipPanel.h"
 #include "ui/dj/DjView.h"
 #include "ui/shared/Playhead.h"
+#include "ui/shared/UiVisibility.h"
 #include "app/PushController.h"
 #include "ui/preferences/PreferencesPanel.h"
 // The DJ booth scenario reads a deck's material, and the booth's edges fill

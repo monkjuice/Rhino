@@ -119,9 +119,11 @@ ctest --test-dir instruments/rhino-forge/build -C Release -j 8 --output-on-failu
 - `--snapshot`, `--profile`, `--profile-audio` and `--render` are development tools in the same binary, not test cases
   ([Proving a Forge change changed nothing](proving-a-forge-change-changed-nothing.md)).
 - Two more tools in `tests/ForgeTestRender.cpp` take a preset of any format: `.forgepreset`, `.SerumPreset` or `.vital`.
-  - `--audition <preset> <out.wav>` plays a bass note and then a chord, writes them to the WAV, and prints the
-    conversion's warnings and the peak and RMS level. It is the quick way to hear a conversion, or to find one that is
-    silent.
+  - `--audition <preset> <out.wav>` renders four seconds at 48 kHz in 512-sample blocks, C1 (note 36) from 0 to
+    0.6 s and a C major chord (C4 E4 G4) from 0.8 to 2.4 s, writes them to the WAV, and prints the conversion's
+    warnings and the peak and RMS level. It is the quick way to hear a conversion, or to find one that is silent, and
+    the render a factory preset is measured on: a numpy pass over the WAV gives the bass note's share of energy below
+    60 and 120 Hz and the spectral centroid per frame ([Writing Forge factory presets](writing-forge-factory-presets.md)).
   - `--convert <preset> <out.forgepreset>` writes the converted patch.
 - The test binary replaces the global `operator new` to count allocations (`AllocationCounter`,
   `tests/ForgeTestSupport.h`), which is how area `engine` proves a block allocates nothing. It cannot see

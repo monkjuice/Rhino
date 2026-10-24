@@ -4,7 +4,7 @@ type: component
 summary: Two per-voice filters of 34 types in six families, each source routed into either, both or neither and FILTER 1 optionally in series into FILTER 2, shown as one two-bank module, with the drawn response and the audio read from the same header.
 tags: [forge, filter, dsp]
 sources: []
-updated: 2026-10-22
+updated: 2026-10-23
 ---
 
 # Forge filter
@@ -32,6 +32,7 @@ Type indices are stored in patches, so new types are only ever appended. LOW, HI
 - **Seated rows.** TYPE sits along the display's top edge. The routing chips A, B, C, S and N, plus KEY, sit along its foot (`Seat` in `ui/ForgeModule.h`). The oscillators also seat MODE and their loop strip.
 - **DRIVE** affects only the routed sources. Switching the module off bypasses DRIVE as well, while the filter state keeps running so that switching back on does not click.
 - **KEY** tracks the voice's sounding pitch, including glide, from middle C. It is off by default, and the display ignores it.
+- **FORMANT reads CUTOFF as a vowel.** `filterVowelPosition` is the cutoff's position on a log scale from 30 Hz to 18 kHz (`filterCutoffPosition`) times 4, so A sits at 30 Hz, E near 148 Hz, I near 735 Hz, O near 3.6 kHz and U at 18 kHz, and the two nearest vowels' formants are blended, so a sweep is one mouth moving. The matrix does not move the cutoff along that scale but in the parameter's range, skew 0.25 (`src/ForgeParameters.cpp`): normalised 0.25 is about 100 Hz, 0.45 about 770 Hz and 0.65 about 3.2 kHz ([Writing Forge factory presets](writing-forge-factory-presets.md)).
 
 ## Display
 

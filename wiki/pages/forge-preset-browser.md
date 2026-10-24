@@ -4,7 +4,7 @@ type: component
 summary: LOAD opens a browser over Forge's modules that lists the player's own bank in Documents/Rhino Forge/Presets, filled with the factory set on first use, beside the machine's Serum 2 and Vital libraries, read only, all listed from file heads alone.
 tags: [forge, presets, ui, browser]
 sources: []
-updated: 2026-10-19
+updated: 2026-10-23
 ---
 
 # Forge preset browser and bank
@@ -16,7 +16,7 @@ Built on 2026-10-18/19. Paths are under `instruments/rhino-forge/`.
 `src/ForgePresetBank.*` holds the bank. It knows nothing about the panel and never runs on the audio thread.
 
 - The bank is one folder tree, `Documents/Rhino Forge/Presets` (`presetBank::root()`, redirected by `setRootForTests`). The player arranges it freely with `createFolder`, `rename`, `moveInto` and `remove`. `remove` sends to the recycle bin. Each operation refuses a taken name rather than overwrite.
-- `presetBank::ensure()` makes the bank the first time and copies the factory set from `presets/Factory` into `Factory/`. *Restore factory presets* (`restoreFactory`) copies back only the missing ones. The source is found upward from the binary by `sourceFolderAbove` (`core/ForgeTableFiles.h`), as `tables/` is, so a build with no source tree has no factory set. The set is copied, not read where it ships, so the player can rename, move and delete it like their own presets ([Forge presets and state](forge-presets-and-state.md)).
+- `presetBank::ensure()` makes the bank the first time and copies the factory set from `presets/Factory` into `Factory/`, subfolders included: `restoreFactory` finds the files recursively and keeps each one's path relative to the source, so `presets/Factory/Drum n Bass/` lists as a folder under Factory in the tree with no browser change (checked 2026-10-23 with `--snapshot ... PRESETS`; [Writing Forge factory presets](writing-forge-factory-presets.md)). *Restore factory presets* (`restoreFactory`) copies back only the missing ones. The source is found upward from the binary by `sourceFolderAbove` (`core/ForgeTableFiles.h`), as `tables/` is, so a build with no source tree has no factory set. The set is copied, not read where it ships, so the player can rename, move and delete it like their own presets ([Forge presets and state](forge-presets-and-state.md)).
 - `libraries()` lists the bank first. Then, where they exist, it lists `Documents/Xfer/Serum 2 Presets/Presets` and `Documents/Vital`, both read only. A preset from those libraries is converted when it is opened and never written back ([Forge preset import](forge-preset-import.md)).
 - The styles are Vital's nine (`presetStyles()`). `canonicalPresetStyle` maps other synths' words onto them ("Arp" becomes Sequence, "Pluck" becomes Keys) and drops words it does not know. A Serum preset's style comes from its name prefix (BA, LD, PD, PL...) or from its folder's name.
 - Favourites belong to the machine. They are stored as `<Favourites><Preset path/>` in `%APPDATA%\Rhino Forge\Settings.xml`, beside the theme (`Processor::readFavouritePresets`, `saveFavouritePresets`), so a Serum or Vital preset can be a favourite without Forge writing into another synth's folder. The browser rewrites the paths when a file moves.
@@ -51,6 +51,7 @@ Area `browser` (`tests/ForgeTestsBrowser.cpp`, CTest `forge_browser`) covers the
 ## Related
 
 - [Forge presets and state](forge-presets-and-state.md)
+- [Writing Forge factory presets](writing-forge-factory-presets.md)
 - [Forge preset import (Serum 2 and Vital)](forge-preset-import.md)
 - [Forge editor (panel)](forge-editor.md)
 - [Forge themes and Merli](forge-themes.md)

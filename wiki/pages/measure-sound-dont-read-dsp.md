@@ -4,7 +4,7 @@ type: convention
 summary: Claims about pitch, level or timbre are settled by rendering audio and measuring it by a route that cannot agree with the DSP by construction.
 tags: [both, testing, audio, measurement]
 sources: []
-updated: 2026-10-09
+updated: 2026-10-23
 ---
 
 # Measure sound, don't read the DSP
@@ -18,6 +18,7 @@ What a synth or a device *sounds* like is settled by rendering audio and measuri
 - **Pitch.** Forge's `tuningSuite()` (`tests/ForgeTestsOscillator.cpp`) renders notes at 44.1 and 48 kHz, finds each fundamental by FFT peak interpolation, and requires it within 2 cents of nominal. `AGENTS.md` still places it in a `ForgeTests.cpp` that no longer exists. Rhino's `AutoTuneTest.cpp` does the same with a windowed transform on a synthesised vowel ([Rhino Tune](rhino-tune.md)).
 - **Response.** `EqTest.cpp` sweeps sines through [Rhino EQ](rhino-eq.md) and compares the output with the drawn curve. `VocoderTest.cpp` measures which of four carrier tones a single modulator tone lets through.
 - **Level.** Forge's `levelSuite()` (`tests/ForgeTestsSpectral.cpp`) requires a [spectral oscillator](forge-spectral.md) to keep a sample's level at its root and an octave either side.
+- **A preset's claim.** A factory preset that calls itself a sub or a growl is checked on its `--audition` render: the share of the C1 note's energy below 60 and 120 Hz for a sub, the spectral centroid per 43 ms frame for a growl whose LFOs are meant to move it, peak and RMS for all. Forge's Drum n Bass set shipped on those figures, not on its script ([Writing Forge factory presets](writing-forge-factory-presets.md)).
 - **Tempo, mix and effect.** `DjTest.cpp` measures the DJ mixer's bands, kills, fader curves, crossfader and cue bus on tones, the compressor by how far it holds a loud tone down and lifts a quiet one, the send unit by when a click comes back, the mic's talkover by the master's dip and its release, a braked stop and start by the frames of material they cover, a hand on the platter by which way the deck runs, the pitch effect by zero-crossing frequency, a vinyl brake by the silence it ends in, times an echo's repeats and a trans gate, and analyses a synthesised 126.5 BPM A-minor beat with a drop at bar 8 ([DJ view and the booth](dj-view.md)).
 - **Fail against the old behaviour.** Forge's voice-tail check requires a stopping voice to end more than 66 dB below its peak. The old hard cut left 39 dB, so the test fails on the code it replaced. A test that fails the first time it runs is worth more than one written to pass: `EqTest`'s click check caught coefficients swapped without a crossfade.
 
@@ -41,4 +42,5 @@ Decode files with Python's `wave` plus numpy, or with an `ffmpeg.exe` bundled in
 
 - [Displays draw from the DSP](displays-draw-from-the-dsp.md)
 - [Writing Rhino tests](writing-rhino-tests.md)
+- [Writing Forge factory presets](writing-forge-factory-presets.md)
 - [Why a patch copied from Serum sounds different](serum-patches-sound-different.md)

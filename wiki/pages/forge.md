@@ -4,7 +4,7 @@ type: component
 summary: Rhino's independent wavetable and spectral synth, a VST3 and standalone app built from one JUCE AudioProcessor.
 tags: [forge, synth, overview]
 sources: []
-updated: 2026-10-22
+updated: 2026-10-23
 ---
 
 # Rhino Forge
@@ -46,7 +46,7 @@ Forge follows Serum 2's manual for structure: layout, routing and drag-to-modula
 | `src/` | The translation units for the Processor and the Editor |
 | `tests/` | One file per area, 22 areas (`forge_test_areas` in `CMakeLists.txt`) |
 | `tables/` | Ten factory wavetables, `make-tables.py` that writes them, and the git-ignored `user/` where the panel's NEW and SAVE write ([Forge oscillators and wavetables](forge-oscillators.md)) |
-| `presets/` | `Factory/`, the 18 factory presets, and `make-presets.py`, which writes them ([Forge presets and state](forge-presets-and-state.md)); also `aLiLBitDark.forgepreset`, a format 1 file that the current build refuses |
+| `presets/` | `Factory/`, the 29 factory presets (18 at its root, eleven in `Factory/Drum n Bass/`), and `make-presets.py`, which writes them ([Forge presets and state](forge-presets-and-state.md), [Writing Forge factory presets](writing-forge-factory-presets.md)); also `aLiLBitDark.forgepreset`, a format 1 file that the current build refuses |
 
 ## Documentation
 
@@ -55,11 +55,12 @@ state and hosting guides, are the canonical engineering documentation ([Document
 
 ## Status
 
-As of 2026-10-22:
+As of 2026-10-23:
 
 - **Done:** everything from M1 to M14b except the items below, plus M16a to M16c. M16d is partly done. M13b is partly done: four arp slots arrived on 2026-10-13 as the ARP plate's buttons (commit `8f28dc7`); EDIT ALL has not.
 - **Done on 2026-10-18/19:** the preset browser and bank, the factory set planned in M8, and import of Serum 2 and Vital presets. A converted Serum preset's absolute level is not yet calibrated against Serum ([Forge preset import](forge-preset-import.md)).
 - **Done on 2026-10-22:** M15, a second filter, in parallel or in series with the first ([Forge filter](forge-filter.md)). The importers do not fill it yet.
+- **Done on 2026-10-23:** a Drum n Bass folder in the factory set, eleven growls, leads and subs, 29 presets in all ([Writing Forge factory presets](writing-forge-factory-presets.md)).
 - **Not started:**
   - M13c, the pattern editor.
   - M14c, sample noise sources.

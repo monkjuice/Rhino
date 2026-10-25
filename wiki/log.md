@@ -1220,3 +1220,10 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/pointer-and-selection.md (Alt + wheel sets the note editor's row height; the marquee anchors in lines)
 - updated: pages/headless-ui-snapshots.md (the keys picture's rows at the 8 px floor; `RHINO_NOTE_DRUMS_SNAPSHOT`)
 - updated: index.md (Note editor's summary; the new page)
+
+## [2026-10-25] update | Arrangement: an arrow in a track card's bottom-right corner folds the automation lanes under it (99b4e24)
+- source: rhino-a9's brief, checked against native/src/model/SessionTracks.cpp (`setTrackAutomationFolded`), SessionAutomation.cpp (`showTrackAutomation`), SessionInternal.h, native/src/ui/arrangement/Arrangement.h, ArrangementAutomation.cpp (`layoutRows`, `automationFoldBounds`, `beginAutomationFoldGesture`), ArrangementAutomationPaint.cpp (`paintAutomationFold`), ArrangementGestures.cpp (`mouseDown`), ArrangementRename.cpp (`trackNameBounds`) and scenario AutomationLanes.inc; commit 99b4e24; all six CTest cases pass (native_arrangement_workflow 57.5 s), and the three fold snapshots showed the open, folded and one-line cards as described
+- updated: pages/automation.md (the session's own paragraph reviewed and completed: the button's ground, no arrow on a too-short row, the margin clear of the resize edge and armed stripe, `mouseDown` order, `ModelChange::none`, focus dropped on fold, only an own-lane reveal unfolds and outside the undo step, the test)
+- updated: pages/headless-ui-snapshots.md (`RHINO_AUTOMATION_FOLD_SNAPSHOT`, written by the session: the band it captures and that it deletes old files)
+- updated: pages/arrangement-view.md (folded lane rows are zero-height rows; the card's second arrow beside the name's fold)
+- updated: pages/session-model.md (the automation fold among the view settings that skip undo and pass `ModelChange::none`)

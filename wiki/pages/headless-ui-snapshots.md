@@ -36,6 +36,10 @@ mixer, from `DjBooth.inc` in `native_arrangement_workflow` ([DJ view and the boo
 case, every card's meter and the main row's fed a different level (a held peak above a falling bar) and one row folded,
 deleting any old
 file first; it is the way to see the meters without opening the app ([Track level meters](level-meters.md)).
+`RHINO_AUTOMATION_FOLD_SNAPSHOT` writes three PNGs beside the path it names, its name with `-open`, `-folded` and
+`-short` appended: a 160 px band of the arrangement from track 0's card down, with its lane row open, folded away by
+the arrow in the card's corner, and with the card folded to its one line, from `AutomationLanes.inc` in the same case,
+deleting any old files first ([Track automation](automation.md)).
 `RHINO_PREFERENCES_SNAPSHOT` writes the Preferences panel on its MIDI tab at 560 x 480, with a `Theme`, from
 `KeyboardCurves.inc` in the same case, deleting any old file first ([Keyboard velocity curves](keyboard-velocity-curves.md)).
 `RHINO_TIME_ROW_SNAPSHOT` writes the arrangement's time row at four zooms, stacked - two minutes, a 1/32 grid, a 1/512

@@ -4,7 +4,7 @@ type: component
 summary: Per-track lanes stored as Rhino's own ValueTree children, naming their device by key rather than slot, and played by the engine from parameter curves the session mirrors after every change.
 tags: [rhino, automation, arrangement, devices]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-25
 ---
 
 # Track automation
@@ -22,6 +22,8 @@ A lane with fewer than two points is revealed but inert: a dotted line at the kn
 ## Reaching it
 
 Right-click a knob in the Device View (`DeviceEditorPanel::showParameterMenu`): *Show automation* draws the lane over the track, *Show automation on new lane* stacks a dimmed copy of the track underneath, *Hide* removes the lane, *Delete* clears its points. On a lane, a click adds a node and starts dragging it; a double-click removes one.
+
+**Folding the lanes under a track** (commit `99b4e24`, 2026-10-25, at the user's request). A card whose track has at least one lane on a row of its own carries an arrow in the bottom-right corner of its name side (`automationFoldBounds`, `beginAutomationFoldGesture` in `ArrangementAutomation.cpp`, `paintAutomationFold` in `ArrangementAutomationPaint.cpp`). Clicking it folds those rows away and clicking again brings them back at their height; it points right while folded and down while open, the rule the arrow before the name follows, on a ground of the name's colour at 16% so it reads as a button rather than a second copy of that arrow. A card whose lanes are all drawn over its own clips has nothing under it and no arrow; neither has a row too short to hold it (a hidden group member). Its 7 px margin (`automationFoldMargin`) keeps it clear of the ±4 px bottom edge a card is resized from and of the armed stripe, and `mouseDown` offers it right after the name's arrow, before a press can select or carry the card. The fold is `rhinoAutomationFolded` on the track state (`Session::setTrackAutomationFolded`, `SessionTracks.cpp`), a view setting written without undo and marked `ModelChange::none`, like the row's own fold. The folded rows are laid out at no height (`layoutRows`), the rule a collapsed group's members take, so hit tests and painters skip them with no case of their own, and the lanes stay in the document and go on playing. Folding away a lane that holds the keyboard drops automation focus, or Delete would clear a curve nobody can see. *Show automation on new lane* clears the fold, outside its undo step, so a lane asked for under a folded track is seen; *Show automation*, drawn over the track and visible anyway, leaves it. On a row folded to its one line the arrow shares the name's line and the name stops short of it (`trackNameBounds`). `AutomationLanes.inc` covers all of it and can write PNGs ([Seeing the UI without taking the screen](headless-ui-snapshots.md)).
 
 ## How it plays
 

@@ -198,14 +198,28 @@
         require(selectionGrid.selectedStates().size() == 1
                 && selectionGrid.isSelected(selectionGrid.selectedStates().front()),
                 "Clicking a note selects it and nothing else");
-        // The right button is the eraser, in either mode, and it takes the
-        // whole note however far into it the press landed.
+        // The right button asks rather than erases: it opens a menu for the
+        // note it landed on, caught here before it reaches the screen, and
+        // Delete there takes the whole note however far into it the press
+        // landed. It used to erase on the press.
+        int menusShown = 0;
+        std::function<void(int)> chooseFromMenu;
+        selectionGrid.presentMenu = [&menusShown, &chooseFromMenu](juce::PopupMenu, std::function<void(int)> choose)
+        {
+            ++menusShown;
+            chooseFromMenu = std::move(choose);
+        };
         const auto rightButton = juce::ModifierKeys(juce::ModifierKeys::rightButtonModifier);
+        const auto notesBeforeRightClick = session.editorNotes().size();
         selectionGrid.mouseDown(gridEvent(splitPoint, splitPoint, false, rightButton));
         selectionGrid.mouseUp(gridEvent(splitPoint, splitPoint, false, rightButton));
+        require(menusShown == 1 && session.hasNote(1, 48) && session.editorNotes().size() == notesBeforeRightClick,
+                "Right-clicking inside a sustained note opens its menu and erases nothing");
+        chooseFromMenu(StepGrid::deleteCommand);
         selectionGrid.changeListenerCallback(nullptr);
         require(!session.hasNote(1, 48) && !session.hasNote(3, 48),
-                "Right-clicking inside a sustained note erases the complete note body");
+                "Delete from that menu takes the complete note body");
+        selectionGrid.presentMenu = nullptr;
         session.undo();
         session.undo();
         selectionGrid.changeListenerCallback(nullptr);
@@ -385,14 +399,20 @@
         require(session.removeNotes({gatherState}), "Can clear the gathering fixture");
         selectionGrid.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey));
         selectionGrid.changeListenerCallback(nullptr);
+        // Erasing a run is the pencil's: in draw mode a stroke that starts on a
+        // note erases what it crosses. The right button did this until it
+        // became the menu's.
         const auto eraseCellA = selectionGrid.cell(1, rowForPitch(48)).getCentre();
         const auto eraseCellB = selectionGrid.cell(3, rowForPitch(48)).getCentre();
-        const auto right = juce::ModifierKeys(juce::ModifierKeys::rightButtonModifier);
-        selectionGrid.mouseDown(gridEvent(eraseCellA, eraseCellA, false, right));
-        selectionGrid.mouseDrag(gridEvent(eraseCellA, eraseCellB, true, right));
-        selectionGrid.mouseUp(gridEvent(eraseCellA, eraseCellB, true, right));
+        require(selectionGrid.keyPressed(juce::KeyPress('B', juce::ModifierKeys(), 'b')) && selectionGrid.isDrawMode(),
+                "B turns draw mode on for erasing");
+        selectionGrid.mouseDown(gridEvent(eraseCellA, eraseCellA, false));
+        selectionGrid.mouseDrag(gridEvent(eraseCellA, eraseCellB, true));
+        selectionGrid.mouseUp(gridEvent(eraseCellA, eraseCellB, true));
         require(!session.hasNote(1, 48) && !session.hasNote(2, 48) && !session.hasNote(3, 48),
-                "Right-dragging from an existing note erases notes under the cursor");
+                "A draw-mode stroke from an existing note erases notes under the cursor");
+        require(selectionGrid.keyPressed(juce::KeyPress('B', juce::ModifierKeys(), 'b')) && !selectionGrid.isDrawMode(),
+                "B turns draw mode back off");
         session.undo();
         require(session.hasNote(1, 48), "Undo restores notes erased by a grid stroke");
         session.undo();

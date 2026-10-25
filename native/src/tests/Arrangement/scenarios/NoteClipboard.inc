@@ -78,14 +78,14 @@
             require(command('V'), "What was cut can be pasted somewhere else");
             require(noteAt(12.0, 50).isValid(), "The cut note comes back where it was asked for");
 
-            // A region read off the notes is not drawn: the notes already show
-            // what is selected, and a band across every pitch row on top of
-            // them reads as a marquee still being dragged.
+            // Selecting notes sets the region and leaves the insert line where
+            // it was: the notes already show what is selected, and the line
+            // says only where a paste would land.
+            clipboardGrid.setStepInsertPoint(12.0);
             clipboardGrid.setSelectedStates({noteAt(0.0, 48)});
-            require(clipboardGrid.stepSelection.active && clipboardGrid.regionFromNotes,
-                    "Selecting notes sets the region but marks it as theirs");
-            clipboardGrid.setStepSelection(0.0, 4.0);
-            require(!clipboardGrid.regionFromNotes, "A span asked for by itself is not a note selection");
+            require(clipboardGrid.stepSelection.active && close(clipboardGrid.stepSelection.start, 0.0)
+                        && close(clipboardGrid.insertStep, 12.0),
+                    "Selecting notes sets the region and leaves the insert line alone");
 
             // An explicit span draws its insert point and nothing else. The
             // marquee and the notes it catches are already two ways of showing
@@ -109,5 +109,57 @@
             // paste is not steered by a span nobody can see any more.
             clipboardGrid.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey));
             require(!clipboardGrid.stepSelection.active, "Escape clears the region");
+            require(clipboardGrid.insertStep < 0.0, "and the insert line");
             require(clipboardGrid.selectedStates().empty(), "Escape clears the note selection");
+
+            // Copy and paste with nothing clicked in between. A copy carries
+            // the insert line to the end of what it copied, so the paste lies
+            // beside its source. It used to land on the source and replace it
+            // with itself: nothing showed, and dragging the "copy" away left
+            // a hole where the source had been, which read as a cut.
+            {
+                std::vector<juce::ValueTree> everything;
+                for (const auto& note : session.editorNotes()) everything.push_back(note.state);
+                session.beginNoteGesture("Paste fixture");
+                session.removeNotes(everything);
+                session.endNoteGesture();
+                juce::ValueTree copied, other;
+                session.beginNoteGesture("Paste fixture notes");
+                require(session.addNote(2.0, 60, 2.0, &copied).wasOk() && session.addNote(0.0, 64, 1.0, &other).wasOk(),
+                        "Two notes for the paste fixture");
+                session.endNoteGesture();
+                clipboardGrid.changeListenerCallback(nullptr);
+
+                clipboardGrid.setSelectedStates({copied});
+                require(command('C'), "Ctrl+C copies the note");
+                require(close(clipboardGrid.insertStep, 4.0), "and carries the insert line to the end of what it copied");
+                require(command('V'), "Ctrl+V straight after it pastes");
+                require(noteAt(2.0, 60) == copied, "The source is untouched: a paste never lands on what was copied");
+                require(noteAt(4.0, 60).isValid() && noteCount() == 3, "The copy lies beside it");
+                require(close(clipboardGrid.insertStep, 6.0), "and the line moves past the copy");
+                require(command('V') && noteAt(6.0, 60).isValid() && noteCount() == 4,
+                        "so a second paste lies beside the first rather than writing over it");
+
+                // The line is not the region, which every change in the
+                // document reads off the selected notes again.
+                session.sendSynchronousChangeMessage();
+                require(close(clipboardGrid.insertStep, 8.0), "The line survives a change elsewhere in the document");
+
+                // Duplicate takes its own copy and leaves the clipboard alone,
+                // as the arrangement's does.
+                clipboardGrid.setSelectedStates({other});
+                require(command('D') && noteAt(1.0, 64).isValid(), "Ctrl+D duplicates the other note");
+                clipboardGrid.setStepInsertPoint(12.0);
+                require(command('V') && noteAt(12.0, 60).isValid() && !noteAt(12.0, 64).isValid(),
+                        "and Ctrl+V still pastes what was copied before it");
+
+                // With no line - after Escape - a paste goes just after the
+                // selected notes, never on top of them.
+                clipboardGrid.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey));
+                clipboardGrid.setSelectedStates({noteAt(4.0, 60)});
+                const auto before = noteCount();
+                require(command('V') && noteAt(4.0, 60).isValid() && noteAt(6.0, 60).isValid() && noteCount() == before,
+                        "With no line a paste lands after the selection, replacing what is there and nothing it copied from");
+                clipboardGrid.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey));
+            }
         }

@@ -195,6 +195,10 @@ int runArrangementTest()
        #include "scenarios/NoteResize.inc"
         scenario("note pan: the middle button carries the view");
        #include "scenarios/NotePan.inc"
+        scenario("note menu: the right button asks and never erases");
+       #include "scenarios/NoteMenu.inc"
+        scenario("note keys: the keyboard stays clear of the grid and names the key under the pointer");
+       #include "scenarios/NoteKeys.inc"
         // Each builds a document of its own, so none leans on or disturbs the
         // shared clip.
         scenario("velocity lane: markers, drags and keys");

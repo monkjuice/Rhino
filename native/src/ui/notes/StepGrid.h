@@ -43,14 +43,25 @@ public:
     bool isVelocityLaneShown() const { return velocityLaneShown; }
     // What the Info View says about the part of the editor under the pointer.
     juce::String getTooltip() override;
-    void focusGained(juce::Component::FocusChangeType) override;
     void focusLost(juce::Component::FocusChangeType) override;
     void resized() override;
+    // Where the editor says what a command did, or why it refused: the shell
+    // points it at the readout, as it does the arrangement's.
+    std::function<void(juce::String)> status;
 private:
     friend int runArrangementTest();
     friend int runUiProfile();
     enum class Gesture { none, draw, move, resize, select, keyboard, pan,
                          velocityDrag, velocityDraw, velocitySelect, laneResize };
+    // What the right button's menus offer, StepGridMenu.cpp. A divide into n
+    // parts is divideCommand + n.
+    enum MenuCommand
+    {
+        cutCommand = 1, copyCommand, pasteCommand, duplicateCommand, deleteCommand, fillCommand,
+        selectAllCommand, addNoteCommand, drawModeCommand, velocityLaneCommand, loopCommand,
+        octaveUpCommand, semitoneUpCommand, semitoneDownCommand, octaveDownCommand,
+        divideCommand = 100
+    };
     static constexpr bool isVelocityLaneGesture(Gesture g)
     {
         return g == Gesture::velocityDrag || g == Gesture::velocityDraw
@@ -70,11 +81,20 @@ private:
     // velocity lane folds away rather than squeeze sixteen rows under it.
     static constexpr float octaveLabelRowHeight = 8.0f;
     struct CopiedNote { double step = 0.0; int pitch = 0; double length = 1.0; int velocity = 100; };
-    // The arrangement's time selection, in steps instead of seconds, and it
-    // drives the same four commands. A click leaves it zero-length - an insert
-    // point, which is where a paste lands - and selecting notes sets it to
-    // their span rounded out to whole steps, so a bar of notes duplicates as a
-    // bar rather than as the distance between its first and last note.
+    // What a copy takes and a paste puts down: each note from the region's
+    // start and from its lowest pitch, and how wide the region was, which is
+    // what a paste occupies - so a rest at either end survives the round trip.
+    struct NoteClipboard
+    {
+        std::vector<CopiedNote> notes;
+        int basePitch = 0;
+        double spanSteps = 0.0;
+    };
+    // The arrangement's time selection, in steps instead of seconds, which
+    // copy, cut and duplicate act on. A click leaves it zero-length, and
+    // selecting notes sets it to their span rounded out to whole steps, so a
+    // bar of notes duplicates as a bar rather than as the distance between its
+    // first and last note. Where a paste lands is insertStep's, below.
     struct StepSelection
     {
         double start = 0.0, end = 0.0;
@@ -112,6 +132,8 @@ private:
     void zoomPitchAt(double factor, float pointerY);
     void scrollPitchBy(int semitones);
     void paintKeyboard(juce::Graphics&);
+    // What a row is called: its pad's sound on a drum clip, else its note.
+    juce::String rowName(int pitch) const;
     // What a paint has to cover, as the arrangement has it: the clip, or with
     // cullRepaints off the whole panel, for a test to compare against.
     juce::Rectangle<float> repaintArea(const juce::Graphics&) const;
@@ -169,17 +191,43 @@ private:
     // span of the selected notes.
     StepSelection effectiveStepRegion() const;
     void setStepRegionFromSelection();
-    void paintStepSelection(juce::Graphics&);
+    void paintInsertLine(juce::Graphics&);
     bool copySelection();
     bool cutSelection();
     bool pasteSelection();
     bool duplicateSelection();
     bool deleteSelection();
     bool fillSelectionToClipEnd();
+    bool captureRegion(const StepSelection&, NoteClipboard&) const;
+    bool pasteNotes(const NoteClipboard&, double atStep, const juce::String& actionName);
+    // Where a paste lands: on the insert line when there is one, else just
+    // after the selected notes, never on top of them.
+    double pasteStep() const;
+    void setInsertStep(double step);
+    // Left and Right: the selected notes along the clip, by a step or with Alt
+    // by a sixteenth of one.
+    bool nudgeSelection(double steps);
+    bool divideSelection(int parts);
+    void report(const juce::String&) const;
     juce::Result moveCurrentNotesBy(double stepDelta, int pitchDelta);
     juce::Result resizeCurrentNoteTo(int index);
     juce::Result resizeCurrentNoteTo(juce::Point<float>, bool freeLength);
     void updatePointer(juce::Point<float>, const juce::ModifierKeys&);
+    // What mouseDrag does for the gesture under way; mouseDrag then names the
+    // key the pointer or the note in hand is on.
+    void dragGesture(const juce::MouseEvent&);
+    // The key the keyboard names: the pitch of the note being carried or
+    // resized, else of the row or the marker under the point; -1 for none.
+    int pitchNamedAt(juce::Point<float>) const;
+    void setHoveredPitch(int pitch);
+    juce::Rectangle<int> keyHoverArea(int pitch) const;
+    // The right button, StepGridMenu.cpp: what a right-click takes, the two
+    // menus it can open, and what their items do.
+    void openContextMenu(juce::Point<float>);
+    juce::PopupMenu noteMenu() const;
+    juce::PopupMenu gridMenu() const;
+    void presentContextMenu(juce::PopupMenu);
+    void performMenuCommand(int command);
     void beginMarquee(const juce::MouseEvent&);
     void updateMarqueeSelection();
     void toggleDrawMode();
@@ -242,13 +290,19 @@ private:
     std::array<float, Session::steps * maxPitchRows> noteLengths {}, noteStartOffsets {};
     std::vector<VisibleNote> visibleNotes;
     std::vector<juce::ValueTree> selectedNoteStates;
-    std::vector<CopiedNote> noteClipboard;
+    NoteClipboard noteClipboard;
     StepSelection stepSelection;
-    // A region read off the selected notes is not drawn: the notes already
-    // show what is selected, and a band across every pitch row on top of them
-    // reads as a marquee that is still being dragged. Only a span the user
-    // asked for by itself - a marquee, a click, a paste - is worth drawing.
-    bool regionFromNotes = false;
+    // Live's insert marker: where a paste lands, and the one line drawn for a
+    // selection. A click in the lanes or on the ruler puts it down and a
+    // marquee leaves it at the start of what it swept; a copy carries it to
+    // the end of what was copied and a paste to the end of what was pasted,
+    // so a paste never lands on its own source and pastes in a row lie end to
+    // end. Kept apart from the region, which every rebuild reads again off the
+    // selected notes. Negative when there is none.
+    double insertStep = -1.0;
+    // The clip the editor last showed. A line in one clip means nothing in
+    // the next.
+    te::EditItemID shownClip;
     std::vector<MovingNote> movingNotes;
     Gesture gesture = Gesture::none;
     bool adding = true, showingDrumLabels = false, noteMoved = false, manualPitchScroll = false, movingGroup = false, resizingFromLeft = false;
@@ -271,10 +325,7 @@ private:
     // press a few pixels from the right edge is a click, not a request to
     // scroll to the end of the clip.
     bool dragTravelled = false;
-    int lastHit = -1, clipboardBasePitch = 0;
-    // How wide the copied region was, which is what a paste occupies and what
-    // a duplicate steps forward by.
-    double clipboardSpanSteps = 0.0;
+    int lastHit = -1;
     int moveGrabPitch = -1;
     int visibleStepCount = Session::defaultSteps;
     int lowestVisiblePitch = Session::lowestNote;
@@ -301,6 +352,17 @@ private:
     // with the lane dragged shut leaves the toggle bringing back its old size.
     float laneResizeStartY = 0.0f, laneResizeStartHeight = 0.0f, laneResizeStartRequest = 0.0f;
     juce::ValueTree hoveredNoteState;
+    // The key lit and named on the keyboard, -1 for none, and how tall its
+    // name stands on a row squeezed thinner than that.
+    int hoveredPitch = -1;
+    static constexpr float keyTagHeight = 13.0f;
+    // Where the grid's menu was opened, for Add Note; -1 when it was opened
+    // somewhere with no pitch, the velocity lane.
+    int menuStep = -1, menuPitch = -1;
+    // How a context menu reaches the screen. A scenario swaps it for one that
+    // picks an item, so a right-click is tested without a menu window opening
+    // on the desktop of whoever runs the suite.
+    std::function<void(juce::PopupMenu, std::function<void(int)>)> presentMenu;
     // A marker drag's notes as they were at the press. Every step is measured
     // from these, never from the last step, so a group pushed into a rail
     // comes back to its own spacing.

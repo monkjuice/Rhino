@@ -4,7 +4,8 @@
 
 // The velocity lane's pointer: the cursor, hover, a marker drag, a stroke in
 // draw mode, the lane's marquee and the divider. StepGridVelocity.cpp says
-// what the lane is.
+// what the lane is. Hover here is the whole editor's: the marker that lights
+// and the key the keyboard names.
 
 namespace rhino
 {
@@ -51,6 +52,62 @@ void StepGrid::updateHover(juce::Point<float> point)
             next = visibleNotes[static_cast<size_t>(index)].state;
     }
     setHoveredNote(next);
+    setHoveredPitch(pitchNamedAt(point));
+}
+
+int StepGrid::pitchNamedAt(juce::Point<float> point) const
+{
+    // A note in hand names its own key, wherever the pointer strays from its
+    // row; a stroke, a marquee or the divider in the lane names none.
+    const auto held = gesture == Gesture::move ? movingNoteState
+                    : gesture == Gesture::resize ? resizingNoteState
+                    : gesture == Gesture::velocityDrag ? clickedNoteState
+                    : juce::ValueTree();
+    if (held.isValid())
+    {
+        const auto* note = laneNoteFor(held);
+        return note != nullptr ? note->pitch : -1;
+    }
+    if (isVelocityLaneGesture(gesture))
+        return -1;
+    // Over the lane, the marker that lit: Live's locator, the other way round.
+    if (isOverLaneBlock(point))
+    {
+        const auto* note = hoveredNoteState.isValid() ? laneNoteFor(hoveredNoteState) : nullptr;
+        return note != nullptr ? note->pitch : -1;
+    }
+    if (point.x < 0.0f || point.x >= gridRight() || point.y < headerHeight || point.y >= headerHeight + rowAreaHeight())
+        return -1;
+    // As cellHit finds the row, so the key named is the row a press would take.
+    const auto rows = visiblePitchRows();
+    const auto row = std::clamp(static_cast<int>((point.y - headerHeight) / rowAreaHeight() * rows), 0, rows - 1);
+    return lowestVisiblePitch + rows - 1 - row;
+}
+
+void StepGrid::setHoveredPitch(int pitch)
+{
+    if (pitch == hoveredPitch)
+        return;
+    for (const auto key : {hoveredPitch, pitch})
+        if (const auto area = keyHoverArea(key); !area.isEmpty())
+            repaint(area);
+    hoveredPitch = pitch;
+}
+
+// The key's row and the rows either side of it, which a name standing taller
+// than a thin row reaches into.
+juce::Rectangle<int> StepGrid::keyHoverArea(int pitch) const
+{
+    const auto rows = visiblePitchRows();
+    const auto row = lowestVisiblePitch + rows - 1 - pitch;
+    if (pitch < 0 || row < 0 || row >= rows || getHeight() <= 0)
+        return {};
+    const auto height = rowHeight();
+    const auto reach = std::max(height, (keyTagHeight - height) * 0.5f + 1.0f);
+    return juce::Rectangle<float>(0.0f, headerHeight + static_cast<float>(row) * height - reach,
+                                  labelWidth, height + 2.0f * reach)
+        .getIntersection({0.0f, headerHeight, labelWidth, rowAreaHeight()})
+        .getSmallestIntegerContainer();
 }
 
 void StepGrid::setHoveredNote(const juce::ValueTree& state)
@@ -71,7 +128,10 @@ void StepGrid::setHoveredNote(const juce::ValueTree& state)
 void StepGrid::mouseExit(const juce::MouseEvent&)
 {
     if (gesture == Gesture::none)
+    {
         setHoveredNote({});
+        setHoveredPitch(-1);
+    }
     if (dividerHot)
     {
         dividerHot = false;
@@ -85,8 +145,8 @@ bool StepGrid::velocityLaneMouseDown(const juce::MouseEvent& event)
     if (!isOverLaneBlock(point))
         return false;
     grabKeyboardFocus();
-    // The right button erases in the grid. Here a marker can stand for a note
-    // scrolled out of sight, and an eraser would delete what nobody can see.
+    // The left button only: the right one has opened its menu before this is
+    // asked (StepGridMenu.cpp).
     if (!event.mods.isLeftButtonDown())
         return true;
     if (isOverLaneDivider(point))
@@ -305,6 +365,7 @@ void StepGrid::updateVelocityMarquee()
             caught.push_back(note.state);
     setSelectedStates(std::move(caught));
     setStepSelection(std::floor(firstStep), std::ceil(lastStep));
+    setInsertStep(std::floor(firstStep));
 }
 
 // Plain: every target starting in a step column the stroke crossed since the

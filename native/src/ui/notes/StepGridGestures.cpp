@@ -10,7 +10,8 @@
 // rule as well: a press on a note takes that note and drops the rest, a press
 // on empty space sweeps out a marquee, Ctrl and Shift gather, and a note is
 // put down by double-clicking a cell. Painting a run of notes by dragging is
-// what draw mode is for, and the right button erases in either mode.
+// what draw mode is for, and the right button opens a menu in either mode
+// (StepGridMenu.cpp).
 
 namespace rhino
 {
@@ -246,12 +247,20 @@ void StepGrid::mouseDown(const juce::MouseEvent& event)
         loopPreviewStartStep = loopPreviewEndStep = loopAnchorStep;
         return;
     }
+    // The right button offers what can be done to what it landed on - notes,
+    // the grid, the lane - and edits nothing by itself. It used to erase, in
+    // either mode, so every right-click meant as a question cost a note.
+    if (event.mods.isRightButtonDown())
+    {
+        openContextMenu(event.position);
+        return;
+    }
     if (velocityLaneMouseDown(event))
         return;
     // A resize handle is the one part of a note that is not the note: it is
     // offered first, and only to the plain pointer. A pencil has no handles,
     // and a gathering press is about the selection rather than the shape.
-    if (!drawMode && !event.mods.isRightButtonDown() && !isMultiSelectModifier(event.mods))
+    if (!drawMode && !isMultiSelectModifier(event.mods))
     {
         const auto resizeIndex = resizeHit(event.position);
         if (resizeIndex >= 0)
@@ -282,21 +291,6 @@ void StepGrid::mouseDown(const juce::MouseEvent& event)
     // selects it, and the selection sets the region instead.
     if (noteIndex < 0)
         setStepInsertPoint(std::floor(stepAtX(event.position.x)));
-
-    // The right button erases in either mode, which is the one gesture that
-    // never had to be learned twice.
-    if (event.mods.isRightButtonDown())
-    {
-        gesture = Gesture::draw;
-        adding = false;
-        visited.reset();
-        dragPosition = event.position;
-        session.beginNoteGesture("Erase notes");
-        if (noteIndex >= 0)
-            session.removeNotes({visibleNotes[static_cast<size_t>(noteIndex)].state});
-        startTimerHz(60);
-        return;
-    }
 
     // Draw mode is a pencil: empty space takes a note, a note under the point
     // goes away, and dragging carries on doing whichever of those the press
@@ -593,6 +587,15 @@ juce::Result StepGrid::resizeCurrentNoteTo(juce::Point<float> position, bool fre
 
 void StepGrid::mouseDrag(const juce::MouseEvent& event)
 {
+    dragGesture(event);
+    // Whatever the drag did - carried a note to another row, scrolled the
+    // keys under a still pointer - the keyboard names what it is on now.
+    if (gesture != Gesture::none)
+        setHoveredPitch(pitchNamedAt(event.position));
+}
+
+void StepGrid::dragGesture(const juce::MouseEvent& event)
+{
     if (loopDragActive)
     {
         const auto edge = loopStepAt(event.position.x, event.mods.isAltDown());
@@ -679,7 +682,7 @@ void StepGrid::mouseUp(const juce::MouseEvent& event)
 {
     if (loopDragActive)
     {
-        mouseDrag(event);
+        dragGesture(event);
         loopDragActive = false;
         if (event.getDistanceFromDragStart() >= 3 && loopPreviewEndStep > loopPreviewStartStep)
             session.setLoopRange(timelineTimeForLoopStep(loopPreviewStartStep),
@@ -765,6 +768,8 @@ void StepGrid::updateMarqueeSelection()
     // The span says what the region is, not the notes it happened to catch: a
     // span dragged around two notes with a rest between them keeps the rest.
     setStepSelection(std::floor(firstStep), std::ceil(lastStep));
+    // A paste goes to the start of a span swept for it, as in Live.
+    setInsertStep(std::floor(firstStep));
 }
 
 void StepGrid::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)
@@ -780,18 +785,17 @@ void StepGrid::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWh
         adjustVelocity(wheelDelta > 0.0f ? 1 : -1);
         return;
     }
-    if (isShortcutDown(event.mods))
+    // While Ctrl+E's divide is open, the wheel sets how many parts. Otherwise
+    // Ctrl and the wheel zoom, as they do nearly everywhere else: they used
+    // to open a divide of their own, which chopped the selected notes for
+    // anyone reaching for the zoom.
+    if (subdivisionActive && isShortcutDown(event.mods))
     {
-        if (!subdivisionActive)
-        {
-            beginSubdivision();
-            return;
-        }
         adjustSubdivision(wheelDelta > 0.0f ? 1 : -1);
         return;
     }
     finishSubdivision();
-    if (event.mods.isShiftDown())
+    if (event.mods.isShiftDown() || isShortcutDown(event.mods))
     {
         // Keep whatever is below the pointer stable while the visible range
         // changes. Over the keys there is no timeline to zoom, only lanes.
@@ -799,10 +803,24 @@ void StepGrid::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWh
             zoomPitchAt(std::exp(wheelDelta * 2.0f), event.position.y);
         else
             zoomAt(std::exp(wheelDelta * 2.0f), event.position.x);
-        return;
     }
-    const auto semitones = std::max(1, juce::roundToInt(std::abs(wheelDelta) * 8.0f));
-    scrollPitchBy(wheelDelta > 0.0f ? semitones : -semitones);
+    // A wheel turned sideways, or a trackpad swiped sideways, travels along
+    // the clip, as it does in the arrangement; it used to scroll the pitch.
+    else if (std::abs(wheel.deltaX) > std::abs(wheel.deltaY))
+    {
+        const auto maximumStart = std::max(0.0, static_cast<double>(session.editorStepCount()) - visibleStepSpan());
+        stepScroll = std::clamp(stepScroll - wheel.deltaX * visibleStepSpan() * 0.3, 0.0, maximumStart);
+        syncHorizontalScroll();
+        updatePlayhead();
+        repaint();
+    }
+    else
+    {
+        const auto semitones = std::max(1, juce::roundToInt(std::abs(wheelDelta) * 8.0f));
+        scrollPitchBy(wheelDelta > 0.0f ? semitones : -semitones);
+    }
+    // The rows moved under a pointer that did not.
+    setHoveredPitch(pitchNamedAt(event.position));
 }
 
 }

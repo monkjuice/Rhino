@@ -124,6 +124,8 @@
             // The first note's marker starts on the gutter's edge, so its ring
             // is cut by the lane's clip.
             paintedGrid.hoveredNoteState = paintedGrid.laneNotes.front().state;
+            // A key lit and named, whose name stands over the keys either side.
+            paintedGrid.hoveredPitch = paintedGrid.lowestVisiblePitch + 5;
             const auto divider = paintedGrid.laneDividerBounds().toNearestInt();
             const auto lane = paintedGrid.velocityLaneBounds().toNearestInt();
             const auto labels = static_cast<int>(paintedGrid.labelWidth);

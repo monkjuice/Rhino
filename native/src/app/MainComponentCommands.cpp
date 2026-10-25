@@ -276,7 +276,7 @@ void MainComponent::showHelpMenu(juce::Component& target)
                     "Drag an empty lane or cell  Select what it sweeps\nClick  Select that one clip or note\n"
                     "Ctrl+click  Add one or take it back out / Shift+click  Add one\n"
                     "Double-click a cell  Add a note there\nB  Draw mode in the MIDI editor: drag paints notes\n"
-                    "Right-drag in the MIDI editor  Erase notes\n"
+                    "Right-click in the MIDI editor  Options for the notes or the grid there\n"
                     "Ctrl+X / Ctrl+C / Ctrl+V  Cut, copy and paste the selection, or whole tracks from their cards\n"
                     "Ctrl+D  Duplicate it directly after itself\nCtrl+E  Split the selected clip at the playhead\n"
                     "Ctrl+J  Merge the selected audio clips into one audio file\n"

@@ -89,6 +89,7 @@ target_sources(RhinoNative PRIVATE
     src/ui/notes/StepGridPainter.cpp
     src/ui/notes/StepGridGestures.cpp
     src/ui/notes/StepGridEditing.cpp
+    src/ui/notes/StepGridMenu.cpp
     src/ui/notes/StepGridVelocity.cpp
     src/ui/notes/StepGridVelocityGestures.cpp
     src/ui/notes/StepGridVelocityPainter.cpp

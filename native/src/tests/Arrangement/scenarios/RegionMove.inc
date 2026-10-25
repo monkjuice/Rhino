@@ -134,7 +134,7 @@
                 editor->changeListenerCallback(nullptr);
                 editor->showTimeSpan(sweptStart, sweptEnd);
                 require(editor->stepSelection.active && close(editor->stepSelection.start, 4.0)
-                            && close(editor->stepSelection.end, 24.0) && !editor->regionFromNotes,
+                            && close(editor->stepSelection.end, 24.0) && close(editor->insertStep, 4.0),
                         "The note editor's region is the span swept, in its own steps, its start marked");
                 require(close(editor->stepScroll, 4.0) && close(editor->visibleStepSpan(), 20.0),
                         "and the editor is framed on exactly that part of the clip");
@@ -152,6 +152,8 @@
                 require(!isHiddenInShell(*hiddenEditor) && hiddenEditor->visibleStepCount == 32
                             && close(hiddenEditor->stepScroll, 4.0) && close(hiddenEditor->visibleStepSpan(), 20.0),
                         "An editor shown after it was framed hidden keeps the frame");
+                require(close(hiddenEditor->insertStep, 4.0),
+                        "and the insert line the span put down, which the catch-up takes for this clip's own");
                 pane.removeChildComponent(hiddenEditor.get());
                 hiddenEditor.reset();
             }

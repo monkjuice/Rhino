@@ -155,12 +155,16 @@
                     "A click on empty lane clears the selection and leaves the insert point there");
 
             // The right button, a double-click and the gutter do nothing to
-            // the notes: a marker can stand for a note nobody can see.
+            // the notes: a marker can stand for a note nobody can see. The
+            // right button opens the note's menu instead, caught here.
             const auto quiet = stack.changeRevision;
             const auto right = juce::ModifierKeys(juce::ModifierKeys::rightButtonModifier);
+            int menus = 0;
+            grid.presentMenu = [&menus](juce::PopupMenu, std::function<void(int)>) { ++menus; };
             stroke(head(p), head(p).translated(0.0f, -20.0f), right);
-            require(velocityOf(p) == 100 && stack.editorNotes().size() == 6 && stack.changeRevision == quiet,
-                    "The right button neither erases nor drags in the lane");
+            require(velocityOf(p) == 100 && stack.editorNotes().size() == 6 && stack.changeRevision == quiet && menus == 1,
+                    "The right button neither erases nor drags in the lane; it opens the note's menu");
+            grid.presentMenu = nullptr;
             grid.mouseDown(laneEvent(at(6.5, 64.0f), at(6.5, 64.0f), false, left, 2));
             grid.mouseUp(laneEvent(at(6.5, 64.0f), at(6.5, 64.0f), false, left, 2));
             require(stack.editorNotes().size() == 6 && stack.changeRevision == quiet,

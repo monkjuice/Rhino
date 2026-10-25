@@ -13,12 +13,12 @@ StepGrid::StepGrid(Session& s) : session(s), vblank(this, [this] { updatePlayhea
     setOpaque(true);
     setWantsKeyboardFocus(true);
     setTitle("Pattern notes");
-    setDescription("Step editor. Drag to select, double-click a cell for a note, B for draw mode. "
-                   "Drag the piano keys sideways to resize the lanes, up and down to scroll them. "
+    setDescription("Step editor. Drag to select, double-click a cell for a note, right-click for options, "
+                   "B for draw mode. Drag the piano keys sideways to resize the lanes, up and down to scroll them. "
                    "The velocity lane under the notes: drag a marker to change its note's velocity.");
     drawButton.setButtonText("Draw");
-    drawButton.setTooltip("Draw mode (B). Drag to paint notes; with it off, drag selects and "
-                          "double-clicking a cell adds one note. The right button always erases.");
+    drawButton.setTooltip("Draw mode (B). Drag to paint notes, and press a note to erase it; with it off, drag "
+                          "selects and double-clicking a cell adds one note. Right-click for options in either.");
     drawButton.setClickingTogglesState(true);
     drawButton.setWantsKeyboardFocus(false);
     drawButton.setColour(juce::TextButton::buttonColourId, palette::noteEditorButton);
@@ -141,10 +141,6 @@ void StepGrid::setSelectedStates(std::vector<juce::ValueTree> states)
             if (std::find(states.begin(), states.end(), state) == states.end())
                 toggled.push_back(state);
     }
-    // The insert line shows only for a region asked for by itself, and the
-    // selection decides whether that is still so.
-    const auto insertLineStep = [this] { return stepSelection.active && !regionFromNotes ? stepSelection.start : -1.0; };
-    const auto lineBefore = insertLineStep();
     selectedNoteStates = std::move(states);
     selectedNotes.reset();
     for (const auto& state : selectedNoteStates)
@@ -159,11 +155,6 @@ void StepGrid::setSelectedStates(std::vector<juce::ValueTree> states)
     if (getHeight() <= 0)
         return;
     repaint(footerBounds().getSmallestIntegerContainer());
-    if (const auto lineAfter = insertLineStep(); lineAfter != lineBefore)
-        for (const auto step : {lineBefore, lineAfter})
-            if (step >= 0.0)
-                repaint(juce::Rectangle<float>(xForStep(step) - 2.0f, headerHeight, 6.0f, timeAreaBottom() - headerHeight)
-                            .getSmallestIntegerContainer());
     if (changed && !few)
     {
         repaint();
@@ -243,10 +234,10 @@ void StepGrid::setDrawMode(bool shouldDraw)
     drawMode = shouldDraw;
     drawButton.setToggleState(drawMode, juce::dontSendNotification);
     setDescription(drawMode
-        ? "Step editor, draw mode. Drag to paint notes, or velocities in the velocity lane, "
-          "right-drag to erase, B to go back to selecting."
-        : "Step editor. Drag to select, double-click a cell for a note, B for draw mode. "
-          "Drag the piano keys sideways to resize the lanes, up and down to scroll them. "
+        ? "Step editor, draw mode. Drag to paint notes, or velocities in the velocity lane; "
+          "press a note to erase it, B to go back to selecting."
+        : "Step editor. Drag to select, double-click a cell for a note, right-click for options, "
+          "B for draw mode. Drag the piano keys sideways to resize the lanes, up and down to scroll them. "
           "The velocity lane under the notes: drag a marker to change its note's velocity.");
     repaint(footerBounds().getSmallestIntegerContainer());
 }
@@ -355,6 +346,8 @@ void StepGrid::timerCallback()
         case Gesture::velocitySelect: updateVelocityMarquee(); repaint(); break;
         default: break;
     }
+    // Pitch may have scrolled under a pointer held still at the edge.
+    setHoveredPitch(pitchNamedAt(dragPosition));
 }
 
 bool StepGrid::keyPressed(const juce::KeyPress& key)
@@ -416,8 +409,14 @@ bool StepGrid::keyPressed(const juce::KeyPress& key)
         return copySelection();
     if (command && key.getKeyCode() == 'X')
         return cutSelection();
+    // Always the editor's own: here it divides notes, and a refusal must not
+    // fall through to the shell, where Ctrl+E splits the arrangement's clip.
     if (command && key.getKeyCode() == 'E')
-        return subdivisionActive || beginSubdivision();
+    {
+        if (!subdivisionActive && !beginSubdivision())
+            report("Select a note, or notes on one pitch, to divide");
+        return true;
+    }
     if (command && key.getKeyCode() == 'V')
         return pasteSelection();
     if (command && key.getKeyCode() == 'D')
@@ -435,6 +434,13 @@ bool StepGrid::keyPressed(const juce::KeyPress& key)
                 session.resizeNote(state, std::max(0.0625, note->length + amount));
         session.endNoteGesture();
         return true;
+    }
+    // Live's keys: Left and Right carry the selected notes a step along the
+    // clip, and with Alt a sixteenth of one. Shift is their length, above.
+    if (!command && (key.getKeyCode() == juce::KeyPress::leftKey || key.getKeyCode() == juce::KeyPress::rightKey))
+    {
+        const auto step = key.getModifiers().isAltDown() ? 1.0 / 16.0 : 1.0;
+        return nudgeSelection(key.getKeyCode() == juce::KeyPress::rightKey ? step : -step);
     }
     if (!command
         && (key.getKeyCode() == juce::KeyPress::upKey || key.getKeyCode() == juce::KeyPress::downKey))
@@ -459,22 +465,20 @@ bool StepGrid::keyPressed(const juce::KeyPress& key)
     {
         clearSelection();
         clearStepSelection();
+        setInsertStep(-1.0);
         repaint();
         return true;
     }
     return false;
 }
 
-void StepGrid::focusGained(juce::Component::FocusChangeType)
-{
-    repaint();
-}
-
+// Nothing is drawn for the focus: the cyan frame that was drawn round the
+// whole editor for as long as it held the keys read as a selection of its
+// own, and the arrangement draws none either.
 void StepGrid::focusLost(juce::Component::FocusChangeType)
 {
     finishSubdivision();
     finishVelocityAdjustment();
-    repaint();
 }
 
 int StepGrid::automaticLowestPitch() const
@@ -517,6 +521,14 @@ void StepGrid::changeListenerCallback(juce::ChangeBroadcaster*)
     {
         staleWhileHidden = true;
         return;
+    }
+    // The insert line marks a place in one clip, and in the next it would
+    // mark nothing anyone chose.
+    if (const auto clip = session.hasPatternClip() ? session.pattern().itemID : te::EditItemID(); clip != shownClip)
+    {
+        shownClip = clip;
+        insertStep = -1.0;
+        repaint();
     }
     syncHorizontalScroll();
     const auto previousLowestPitch = lowestVisiblePitch;

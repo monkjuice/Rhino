@@ -77,16 +77,35 @@ void StepGrid::paintKeyboard(juce::Graphics& g)
         // see StepGridInternal.h for why they have to agree.
         drawSnappedText(g, pitchName(pitch), key.reduced(3.0f, 0.0f).toNearestInt(), juce::Justification::centredRight);
     }
+    // The key under the pointer, or of the note in hand, is lit in the note
+    // colour and named however squeezed the rows are, so the pitch of any
+    // cell is read by pointing at it. Last, so that on a thin row the name can
+    // stand over the keys either side.
+    const auto hoveredRow = lowestVisiblePitch + rows - 1 - hoveredPitch;
+    if (hoveredPitch < 0 || hoveredRow < 0 || hoveredRow >= rows)
+        return;
+    const auto tag = juce::Rectangle<float>(0.0f, headerHeight + hoveredRow * height, width, height)
+                         .withSizeKeepingCentre(width, std::max(height, keyTagHeight));
+    if (!dirty.intersects(tag))
+        return;
+    juce::Graphics::ScopedSaveState scope(g);
+    g.reduceClipRegion(juce::Rectangle<float>(0.0f, headerHeight, labelWidth, rowAreaHeight()).getSmallestIntegerContainer());
+    g.setColour(palette::noteBody);
+    g.fillRect(tag);
+    g.setColour(palette::keyHoverText);
+    g.setFont(uiFontBold(9.0f));
+    drawSnappedText(g, rowName(hoveredPitch), tag.reduced(3.0f, 0.0f).toNearestInt(),
+                    juce::Justification::centredRight, true);
+}
+
+juce::String StepGrid::rowName(int pitch) const
+{
+    return session.isPatternDrums() ? session.patternNoteName(pitch).value_or(pitchName(pitch)) : pitchName(pitch);
 }
 
 void StepGrid::paint(juce::Graphics& g)
 {
     g.fillAll(palette::sideSurface);
-    if (hasKeyboardFocus(true))
-    {
-        g.setColour(juce::Colour(0xff55c7eb).withAlpha(0.12f));
-        g.fillRect(getLocalBounds().removeFromTop(static_cast<int>(headerHeight)));
-    }
     g.setFont(uiFont(10.0f));
     // What this repaint has to cover. The playhead invalidates a strip a few
     // pixels wide every display refresh, below the header and right of the
@@ -113,6 +132,15 @@ void StepGrid::paint(juce::Graphics& g)
         static_cast<int>(std::floor(stepScroll + (dirty.getX() - labelWidth) / stepWidth)) - 1);
     const auto dirtyLastStep = std::min(lastVisibleStep,
         static_cast<int>(std::ceil(stepScroll + (dirty.getRight() - labelWidth) / stepWidth)) + 1);
+    const auto rows = visiblePitchRows();
+    // Everything on the time axis is cut at the keys' edge, up to the velocity
+    // lane, which cuts its own. A step scrolled part-way into view starts left
+    // of it, and zoomed in, one step is wider than the keys: its cells, notes
+    // and number were painted over the whole keyboard and under the loop
+    // button, which is how the keys vanished.
+    g.saveState();
+    g.reduceClipRegion(juce::Rectangle<float>(labelWidth, 0.0f, gridWidth(), timeAreaBottom())
+                           .getSmallestIntegerContainer());
     if (dirty.getY() < headerHeight)
         for (int step = 0; step < steps; ++step)
         {
@@ -122,12 +150,16 @@ void StepGrid::paint(juce::Graphics& g)
             // A number is centred on its cell and may be wider than it.
             if (!dirty.intersects(headerCell.expanded(16.0f, 0.0f)))
                 continue;
+            // One cut by either edge reads as another number - the tail of 21
+            // is a 1 beside the loop button - so a step whose number does not
+            // fit whole between the keys and the panel's edge goes without.
+            const auto number = juce::String(step + 1);
+            const auto half = juce::GlyphArrangement::getStringWidth(g.getCurrentFont(), number) * 0.5f;
+            if (headerCell.getCentreX() - half < labelWidth || headerCell.getCentreX() + half > gridRight())
+                continue;
             g.setColour(juce::Colour(step % 4 == 0 ? 0xffd4dacd : 0xff78818a));
-            drawSnappedText(g, juce::String(step + 1), headerCell.toNearestInt(), juce::Justification::centred);
+            drawSnappedText(g, number, headerCell.toNearestInt(), juce::Justification::centred);
         }
-    if (dirty.getX() < labelWidth)
-        paintKeyboard(g);
-    const auto rows = visiblePitchRows();
     const auto scaleIndex = scaleHighlight - 2;
     const bool scaleEnabled = !session.isPatternDrums() && scaleIndex >= 0;
     const auto root = scaleEnabled ? scaleIndex % 12 : 0;
@@ -227,6 +259,11 @@ void StepGrid::paint(juce::Graphics& g)
             }
         }
     }
+    g.restoreState();
+    // After the header's numbers, which are drawn in the font set above: the
+    // keyboard sets its own.
+    if (dirty.getX() < labelWidth)
+        paintKeyboard(g);
     // Under everything that crosses the whole time area: the loop band, the
     // playhead, the insert line and the marquee all run through the lane.
     paintVelocityLane(g, dirty, stepWidth, dirtyFirstStep, dirtyLastStep);
@@ -275,14 +312,8 @@ void StepGrid::paint(juce::Graphics& g)
         g.setColour(playheadColour);
         g.fillRect(playhead, headerHeight, 2.0f, timeAreaBottom() - headerHeight);
     }
-    if (hasKeyboardFocus(true))
-    {
-        g.setColour(juce::Colour(0xff55c7eb));
-        g.drawRect(getLocalBounds().toFloat().reduced(1.0f), 2.0f);
-    }
-    // Over the notes and under the marquee: the region is what the clipboard
-    // commands act on, so it has to read as covering what it contains.
-    paintStepSelection(g);
+    // Over the notes and under the marquee: where a paste will land.
+    paintInsertLine(g);
     if ((gesture == Gesture::select || gesture == Gesture::velocitySelect) && !selectionBox.isEmpty())
     {
         g.setColour(juce::Colour(0x3355c7eb));
@@ -296,8 +327,10 @@ void StepGrid::paint(juce::Graphics& g)
     }
     if (subdivisionActive && subdivisionCount >= 2)
     {
-        const auto centre = subdivisionSourceBounds.getCentre();
-        const auto badge = juce::Rectangle<float>(centre.x - 17.0f, subdivisionSourceBounds.getY() - 28.0f, 34.0f, 22.0f);
+        // Over the note, but never over the keys when the note starts off the
+        // left of the view.
+        const auto centre = std::max(subdivisionSourceBounds.getCentreX(), labelWidth + 19.0f);
+        const auto badge = juce::Rectangle<float>(centre - 17.0f, subdivisionSourceBounds.getY() - 28.0f, 34.0f, 22.0f);
         g.setColour(juce::Colour(0xffe5e8df));
         g.fillRoundedRectangle(badge, 3.0f);
         g.setColour(juce::Colour(0xff252a30));
@@ -335,8 +368,8 @@ void StepGrid::paint(juce::Graphics& g)
                                            : "Ctrl+Up/Down, or hold V + Up/Down or wheel",
                             hint.toNearestInt(), juce::Justification::centredLeft, true);
         else
-            drawSnappedText(g, "Drag to select  -  double-click a cell for a note", hint.toNearestInt(),
-                            juce::Justification::centredLeft, true);
+            drawSnappedText(g, "Drag to select  -  double-click a cell for a note  -  right-click for options",
+                            hint.toNearestInt(), juce::Justification::centredLeft, true);
     }
 }
 

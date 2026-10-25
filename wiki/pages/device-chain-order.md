@@ -1,10 +1,10 @@
 ---
 title: Device chain order
 type: concept
-summary: A track's plugin list is its signal chain - the hidden DJ input, MIDI FX, instrument, audio FX, the hidden DJ output, then a channel strip of Utility, fader and meter whose Utility sits on a different side of the fader on starter and added tracks - so the first visible device is plugin 1; how every add and every drag keeps that order.
-tags: [rhino, devices, signal-chain, dj, gotcha]
+summary: A track's plugin list is its signal chain - the hidden DJ input (on a return track followed by its aux return), MIDI FX, instrument, audio FX, the hidden DJ output, a channel strip of Utility, fader and meter whose Utility sits on a different side of the fader on starter and added tracks, then one send per return - so the first visible device is plugin 1, or 2 on a return; how every add and every drag keeps that order.
+tags: [rhino, devices, signal-chain, dj, returns, gotcha]
 sources: []
-updated: 2026-10-15
+updated: 2026-10-25
 ---
 
 # Device chain order
@@ -13,13 +13,13 @@ A track's plugin list *is* its signal chain: each device reads what the one in f
 
 ## The order
 
-At plugin index 0 the DJ booth's hidden input (`DjTrackInjectorDevice`, "DJ Input"); then MIDI effects, the instrument and audio effects; then the booth's hidden output (`DjTrackTapDevice`, "DJ Output"); then, hidden from the Device View like the two DJ ends, the channel strip: Rhino's Utility, the engine's Volume & Pan and, straight behind it on every track since 2026-10-15, the engine's level meter the card reads ([Track level meters](level-meters.md)), the Utility's place depending on how the track was made (below). `isTrackInfrastructure` in `native/src/model/SessionDevices.cpp` reads the catalog's `infrastructure` flag and also counts the engine's `volume` and `level` types. The two DJ ends are made with every track by `ensureDjPortDevices` and pass audio through until a deck binds them ([DJ decks play live through the track's chain](dj-decks-play-live-through-the-track.md)); neither can be moved (`canBeMoved`) or deleted. Each add path builds the order:
+At plugin index 0 the DJ booth's hidden input (`DjTrackInjectorDevice`, "DJ Input"); then MIDI effects, the instrument and audio effects; then the booth's hidden output (`DjTrackTapDevice`, "DJ Output"); then, hidden from the Device View like the two DJ ends, the channel strip: Rhino's Utility, the engine's Volume & Pan and, straight behind it on every track since 2026-10-15, the engine's level meter the card reads ([Track level meters](level-meters.md)), the Utility's place depending on how the track was made (below). Since commit `b7bd73c` the chain ends with one `te::AuxSendPlugin` per return track, after the meter (post-fader sends), and a return track has a `te::AuxReturnPlugin` straight after the DJ input, so its first visible device is plugin 2 ([Return tracks and sends](return-tracks.md)). `isTrackInfrastructure` in `native/src/model/SessionDevices.cpp` reads the catalog's `infrastructure` flag and also counts the engine's `volume`, `level`, aux send and aux return types, so no send or aux return shows, moves or deletes. The two DJ ends are made with every track by `ensureDjPortDevices` and pass audio through until a deck binds them ([DJ decks play live through the track's chain](dj-decks-play-live-through-the-track.md)); neither can be moved (`canBeMoved`) or deleted. Each add path builds the order:
 
 - `switchTrackInstrument` puts an instrument after the DJ input and any leading MIDI effects, at the old instrument's index ([One instrument per track](one-instrument-per-track.md)).
 - `addMidiEffectDevice` puts a MIDI effect immediately in front of the instrument, or, on a track with no instrument yet, after the DJ input and the MIDI effects already at the front, which is where `switchTrackInstrument` will put one.
 - An audio effect, a channel-strip facility like Utility included, goes on either kind of track, in front of the first infrastructure plugin after the DJ input (`channelStripInsertIndex`), which is the DJ output: so a device added later always lands ahead of it, in the part of the chain a deck hears.
-- All three start counting at `djInputEnd` (`SessionInternal.h`): 1 when the DJ input heads the chain, else 0.
-- On the main track an effect is appended to the edit's master list, and the engine's `canBeAddedToMaster` refuses the rest ([The main track](main-track.md)). A group bus takes audio effects only.
+- Instruments and MIDI effects start counting at `djInputEnd` (`SessionInternal.h`), which is 1 when the DJ input heads the chain and 0 otherwise. Audio effects (`channelStripInsertIndex`) and the DJ output's placement (`ensureDjPortDevices`) start at `chainHeadEnd`, which also skips an aux return right after the DJ input, so an effect added to a return lands after its way in.
+- On the main track an effect is appended to the edit's master list, and the engine's `canBeAddedToMaster` refuses the rest ([The main track](main-track.md)). A group bus and a return track take audio effects only.
 
 **Raw plugin indices count the hidden input** (since 2026-10-12). A track's first visible device is plugin 1, so `Session`'s `slot` arguments, `DeviceTarget::slot` and `DeviceSlot::pluginIndex` are one higher than before, and the scenarios that named a track's first device as slot 0 moved to 1 (`EditingAndAutomation.inc`, `Persistence.inc`, `AudioClipEditing.inc`, `TempoChange.inc`). Find a device through `deviceSlots` and its `pluginIndex`, or a hidden one by its type, rather than by counting.
 
@@ -48,3 +48,4 @@ An audio effect dropped on an audio clip goes into that clip's own plugin list (
 - [The main track](main-track.md)
 - [DJ decks play live through the track's chain](dj-decks-play-live-through-the-track.md)
 - [Track level meters](level-meters.md)
+- [Return tracks and sends](return-tracks.md)

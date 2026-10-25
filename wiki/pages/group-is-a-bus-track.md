@@ -4,7 +4,7 @@ type: decision
 summary: A group's bus is a plain te::AudioTrack kept in getAudioTracks(), so every track-indexed path reaches it with no second code path.
 tags: [rhino, groups, mixer, decision]
 sources: []
-updated: 2026-10-12
+updated: 2026-10-25
 ---
 
 # A group is an ordinary bus track
@@ -35,6 +35,7 @@ The structure is **positional**: a bus followed by the run of tracks whose `rhin
 - Deleting a bus leaves members naming a missing track, and asking `getDestinationTrack()` instead of `usesDefaultAudioOut()` made an offline render never return ([Offline renders that never return](renders-that-never-return.md)).
 - The routing is positional in the engine too: a member's output names its bus by its place in the track list, so an edit loaded from a copy of the state with tracks removed (the DJ bounce's, until it went on 2026-10-12) must set every member's output again by id ([Track groups (bus tracks)](track-groups.md), [A deck's bounce renders on a worker against a copy of the document](dj-bounce-on-a-copy.md)).
 - Groups do not nest: a routing tree is deliberately not built.
+- Return tracks (commit `b7bd73c`, 2026-10-25) follow the same pattern, and a return refuses what a bus refuses through one shared check, `carriesOtherTracks` ([A return is an ordinary track at the foot of the stack](return-track-at-the-foot-of-the-stack.md)).
 - Old documents' `rhinoTrackGroup` nodes are rebuilt on load by `migrateLegacyTrackGroups`, an accommodation [No backward compatibility for .rhinoedit](no-rhinoedit-back-compat.md) would remove.
 
 ## Related
@@ -43,3 +44,4 @@ The structure is **positional**: a bus followed by the run of tracks whose `rhin
 - [Mixer](mixer.md)
 - [Session, the model](session-model.md)
 - [Track kinds: audio and MIDI](track-kinds.md)
+- [A return is an ordinary track at the foot of the stack](return-track-at-the-foot-of-the-stack.md)

@@ -194,6 +194,14 @@ every scenario of `DjLiveChain.inc`).
     MIDI lane of its own (`addTrack(TrackType::midi, -1, &lane)`, `createClip`, `selectPatternClip`), and the
     clipboard and gesture scenarios after it go on using that clip. Rows no longer go below 8 px
     (`minimumRowHeight`), so `NoteKeys.inc`'s thin-rows check now expects that floor.
+22. **The newest playing track is `firstReturnTrack() - 1`.** Since commit `b7bd73c` a new document has four
+    playing tracks and two return tracks under them, six in all (`firstReturnTrack() == 4`), and every lane a command
+    makes lands above the returns ([Return tracks and sends](return-tracks.md)). About 40 scenarios read a new track
+    as `trackCount() - 1` or counted four tracks, and were changed to use `firstReturnTrack()`. `ReturnTracks.inc`
+    renders, so it sits before `GesturesAndPersistence.inc`, and each of its scenarios builds a document of its own.
+    `--profile-ui` and `--profile-stress` add tracks until `firstReturnTrack()` reaches their count, so they keep the
+    same number of playing tracks, with the two starter returns and a send per return on every track besides.
+    `StressProfile`'s `readLayout` skips returns. After the change both tools were compiled but not run.
 
 ## Timing, not checking
 

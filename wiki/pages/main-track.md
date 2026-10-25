@@ -4,7 +4,7 @@ type: concept
 summary: The main output row is the edit's master plugin list, addressed as track index trackCount() so track-indexed calls need no sentinel.
 tags: [rhino, mixer, tracks]
 sources: []
-updated: 2026-10-11
+updated: 2026-10-25
 ---
 
 # The main track
@@ -24,7 +24,7 @@ Every device, parameter and automation call takes a track index, and `DeviceTarg
 
 ## In the arrangement
 
-The row is pinned under the scrolling lanes, so `laneContentHeight` excludes it and the timeline grid carries on through it. Clicking it opens its chain in the Device View. Its height is a view setting held by `Arrangement`, not the document: 28 px by default, dragged from its top edge between 26 and 120 px. Track header controls are children of `laneHeaders`, which crops them so a tall row never draws over the main row.
+The row is pinned under the scrolling lanes, so `laneContentHeight` excludes it and the timeline grid carries on through it. Clicking it opens its chain in the Device View. Its height is a view setting held by `Arrangement`, not the document: 28 px by default, dragged from its top edge between 26 and 120 px. Track header controls are children of `laneHeaders`, which crops them so a tall row never draws over the main row. The return tracks, when the song has any, are the last rows of the stack, directly above it (since `b7bd73c`). The main row is not a `te::AudioTrack`, so it carries no sends ([Return tracks and sends](return-tracks.md)).
 
 ## Pitfalls
 
@@ -38,3 +38,4 @@ The row is pinned under the scrolling lanes, so `laneContentHeight` excludes it 
 - [Device chain order](device-chain-order.md)
 - [Session, the model](session-model.md)
 - [Arrangement view](arrangement-view.md)
+- [Return tracks and sends](return-tracks.md)

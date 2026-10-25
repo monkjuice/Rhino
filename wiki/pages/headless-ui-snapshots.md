@@ -42,6 +42,9 @@ the arrow in the card's corner, and with the card folded to its one line, from `
 deleting any old files first ([Track automation](automation.md)).
 `RHINO_PREFERENCES_SNAPSHOT` writes the Preferences panel on its MIDI tab at 560 x 480, with a `Theme`, from
 `KeyboardCurves.inc` in the same case, deleting any old file first ([Keyboard velocity curves](keyboard-velocity-curves.md)).
+`RHINO_RETURN_TRACKS_SNAPSHOT` writes the left 420 px of the arrangement's cards at 2x scale, with a `Theme`, from
+`ReturnTracks.inc` in the same case. It turns a few sends up first so the knobs show their arcs, and deletes any old
+file first ([Return tracks and sends](return-tracks.md)).
 `RHINO_TIME_ROW_SNAPSHOT` writes the arrangement's time row at four zooms, stacked - two minutes, a 1/32 grid, a 1/512
 grid and the deepest zoom - from `BrowserDrops.inc` in the same case, deleting any old file first
 ([Arrangement view](arrangement-view.md#the-time-row)).

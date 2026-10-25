@@ -4,7 +4,7 @@ type: component
 summary: Cut, copy, paste, duplicate and delete on whole track cards; a copy is the track's own state, pasted with new engine ids and new device keys, a bus standing for its whole group; pasted into another opened document it keeps its audio, its beats and only the sidechains that came along.
 tags: [rhino, arrangement, editing, clipboard, groups, tempo]
 sources: []
-updated: 2026-10-24
+updated: 2026-10-25
 ---
 
 # Track clipboard (cards)
@@ -43,6 +43,8 @@ Open: the clipboard is in-process, so two RhinoDAW instances cannot share it (th
 ## Delete
 
 `removeTracks` deletes the tracks and every member of a bus among them as one undo step, in `removeAudioTrack`'s order: clear sidechain sources naming them, `dissolveGroupInEdit` while the bus still exists, then delete by id. It refuses the main row and removing every track. **Delete on a bus card now deletes the whole group**, as in Live; it used to call `removeAudioTrack`, which kept the members. Ctrl+Shift+G is the way to drop only the bus. Delete now acts on every selected card, not only the working one.
+
+**Return tracks** (since `b7bd73c`; [Return tracks and sends](return-tracks.md)) are never copied: `copyTracks` and `duplicateTracks` leave them out, and a cut leaves them in place, since a cut deletes only what it could copy. Delete does take a return, along with every send to it, in the same undo step. "Keep at least one track" counts only tracks that are not returns. Pastes and duplicates land above the returns, and a pasted track keeps its sends.
 
 ## In the arrangement
 

@@ -51,7 +51,8 @@ void Arrangement::buildRows()
 // A row inside a collapsed group is laid out at no height rather than left out.
 // Everything that reaches a track through the stack - its lane, its clips, its
 // header controls - then answers with an empty rectangle and draws nothing,
-// which is one rule instead of a hidden case in each of them.
+// which is one rule instead of a hidden case in each of them. A lane row whose
+// track has folded its lanes away takes the same rule.
 void Arrangement::layoutRows()
 {
     auto top = 0.0f;
@@ -59,7 +60,8 @@ void Arrangement::layoutRows()
     {
         row.top = top;
         row.height = isTrackHidden(row.track) ? 0.0f
-            : row.automation < 0 ? laneHeightFor(row.track) : automationRowHeight;
+            : row.automation < 0 ? laneHeightFor(row.track)
+            : factsFor(row.track).automationFolded ? 0.0f : automationRowHeight;
         top += row.height;
     }
     rowsHeight = top;
@@ -484,6 +486,49 @@ void Arrangement::endAutomationGesture(const juce::MouseEvent& event)
                               : result.getErrorMessage());
     updateAutomationHover(event.position, event.mods.isAltDown());
     repaint();
+}
+
+// Only a lane on a row of its own is under the track, so a card whose lanes are
+// all drawn over its clips has nothing to fold. A row too short to hold the
+// arrow clear of its bottom edge goes without one.
+juce::Rectangle<float> Arrangement::automationFoldBounds(int track) const
+{
+    if (!juce::isPositiveAndBelow(track, static_cast<int>(trackLanes.size())))
+        return {};
+    const auto& lanes = trackLanes[static_cast<size_t>(track)];
+    if (std::none_of(lanes.begin(), lanes.end(), [](const auto& automation) { return automation.ownLane; }))
+        return {};
+    const auto row = lane(track);
+    if (row.getHeight() < automationFoldSize + automationFoldMargin * 2.0f)
+        return {};
+    return {headerWidth - automationFoldMargin - automationFoldSize,
+            row.getBottom() - automationFoldMargin - automationFoldSize, automationFoldSize, automationFoldSize};
+}
+
+bool Arrangement::beginAutomationFoldGesture(const juce::MouseEvent& event)
+{
+    if (!event.mods.isLeftButtonDown() || event.position.x >= headerWidth)
+        return false;
+    const auto track = cardAt(event.position);
+    if (track < 0 || !automationFoldBounds(track).contains(event.position))
+        return false;
+    // Read before touching the session: its announcement rebuilds the lanes.
+    const auto folded = factsFor(track).automationFolded;
+    const auto name = factsFor(track).name;
+    // A lane folded out of sight cannot keep the keyboard, or Delete would
+    // clear a curve nobody can see.
+    if (!folded && focus == Focus::automation && focusedAutomation.track == track)
+        for (const auto& automation : trackLanes[static_cast<size_t>(track)])
+            if (automation.ownLane && isFocusedAutomation(automation.target))
+            {
+                focusedAutomation = {};
+                focus = Focus::none;
+            }
+    const auto done = session.setTrackAutomationFolded(track, !folded);
+    if (status)
+        status(done.failed() ? done.getErrorMessage()
+                             : (folded ? "Showing the automation under " : "Folded away the automation under ") + name);
+    return true;
 }
 
 void Arrangement::showAutomationMenu(Session::DeviceTarget target)

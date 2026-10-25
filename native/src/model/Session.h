@@ -573,6 +573,12 @@ public:
     // (setTrackGroupCollapsed).
     bool isTrackFolded(int track) const;
     juce::Result setTrackFolded(int track, bool folded);
+    // The lanes a track has sent to rows of their own, folded away under it by
+    // the arrow in the card's bottom-right corner and kept. Another view
+    // setting. Revealing a lane on a row of its own unfolds them again, so the
+    // lane asked for is the lane seen.
+    bool isTrackAutomationFolded(int track) const;
+    juce::Result setTrackAutomationFolded(int track, bool folded);
     juce::Result setTrackName(int track, const juce::String& name);
     // The card's own colour, and the colour its clips take unless one of them
     // has been given a colour of its own.

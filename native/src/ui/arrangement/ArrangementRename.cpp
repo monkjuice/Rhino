@@ -45,9 +45,13 @@ juce::Rectangle<int> Arrangement::trackNameBounds(int track) const
         return {};
     const auto row = lane(track);
     const auto left = disclosureBounds(track).getRight() + disclosureGap;
-    return juce::Rectangle<float>(left, row.getY() + static_cast<float>(cardControlsTop),
-                                  headerWidth - 6.0f - left, 18.0f)
-        .toNearestInt();
+    auto line = juce::Rectangle<float>(left, row.getY() + static_cast<float>(cardControlsTop),
+                                       headerWidth - 6.0f - left, 18.0f);
+    // A row folded to its one line has the lanes' arrow on the name's line,
+    // so the name stops short of it.
+    if (const auto fold = automationFoldBounds(track); fold.intersects(line))
+        line.setRight(fold.getX() - disclosureGap);
+    return line.toNearestInt();
 }
 
 bool Arrangement::isRenaming() const

@@ -53,9 +53,9 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
         repaint();
         return;
     }
-    // The fold arrow answers before anything else on a card: a click on it is
+    // The fold arrows answer before anything else on a card: a click on one is
     // about what the row shows, not a request to select or carry the track.
-    if (beginDisclosureGesture(event))
+    if (beginDisclosureGesture(event) || beginAutomationFoldGesture(event))
         return;
     // An automation row answers for its own lane wherever it is clicked,
     // header included, because its header is the lane's only label.

@@ -97,7 +97,8 @@ void Arrangement::sync()
         const auto name = session.trackName(track);
         trackFacts.push_back({name, session.trackColour(track),
                               session.trackType(track) == Session::TrackType::midi,
-                              session.isGroupBusTrack(track), session.isTrackFolded(track)});
+                              session.isGroupBusTrack(track), session.isTrackFolded(track),
+                              session.isTrackAutomationFolded(track)});
         mute[index]->setTooltip("Mute " + name + " - silences this track while the rest keeps playing.");
         solo[index]->setTooltip("Solo " + name + " - silences every track that is not soloed.");
         // The dot is the same whatever the track records, because the track

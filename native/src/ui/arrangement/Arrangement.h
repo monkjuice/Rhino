@@ -428,8 +428,14 @@ private:
     bool beginAutomationGesture(const juce::MouseEvent&);
     void dragAutomationGesture(const juce::MouseEvent&);
     void endAutomationGesture(const juce::MouseEvent&);
+    // The arrow in a card's bottom-right corner that folds away the lanes the
+    // track has sent to rows of their own, and brings them back. Empty on a
+    // card with no such lane, which carries no arrow.
+    juce::Rectangle<float> automationFoldBounds(int track) const;
+    bool beginAutomationFoldGesture(const juce::MouseEvent&);
     // ArrangementAutomationPaint.cpp
     void paintAutomationRow(juce::Graphics&, int row);
+    void paintAutomationFold(juce::Graphics&, int track, juce::Colour);
     // Where a click would drop a node, drawn on the curve it would join.
     void paintAutomationGhost(juce::Graphics&, int row, const Session::TrackAutomation&) const;
     // The level under the pointer, floated over the lanes. Painted last rather
@@ -561,7 +567,7 @@ private:
     {
         juce::String name;
         juce::Colour colour;
-        bool midi = false, bus = false, folded = false;
+        bool midi = false, bus = false, folded = false, automationFolded = false;
     };
     std::vector<TrackFacts> trackFacts;
     const TrackFacts& factsFor(int track) const;
@@ -762,6 +768,10 @@ private:
     // The fold arrow every card carries before its name, and the room the name
     // gives up to it.
     static constexpr float disclosureSize = 13.0f, disclosureLeft = 2.0f, disclosureGap = 4.0f;
+    // The lanes' arrow in the card's bottom-right corner. The margin keeps it
+    // clear of the bottom edge a card is resized from and of the armed stripe
+    // down the right.
+    static constexpr float automationFoldSize = 15.0f, automationFoldMargin = 7.0f;
     // A card is name plus one control line at its shortest; the mixer line is
     // the next thing that fits, and past that a row only gets roomier.
     static constexpr float minimumLaneHeight = 32.0f, mixerLaneHeight = 54.0f, maximumLaneHeight = 260.0f;

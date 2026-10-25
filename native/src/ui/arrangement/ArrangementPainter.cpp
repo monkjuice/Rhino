@@ -318,6 +318,7 @@ void Arrangement::paintTrackCards(juce::Graphics& g)
         // light card, light on a dark one, so every colour stays readable. A
         // card being renamed gives that line to the editor instead.
         paintDisclosure(g, track, cardColour.contrasting(0.8f));
+        paintAutomationFold(g, track, cardColour.contrasting(0.8f));
         g.setColour(cardColour.contrasting(0.8f));
         g.setFont(uiFontBold(11.0f));
         if (renamingTrack != track)

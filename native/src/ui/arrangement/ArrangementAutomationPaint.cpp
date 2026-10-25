@@ -188,6 +188,29 @@ void Arrangement::paintAutomationReadout(juce::Graphics& g)
     drawSnappedText(g, text, box.getSmallestIntegerContainer(), juce::Justification::centred, true);
 }
 
+// On a ground of its own, so it reads as a button rather than as a second copy
+// of the bare arrow before the name. It follows that arrow's rule: right while
+// the lanes are folded away, down while they show. Drawn in the name's colour,
+// which is picked to read on the card.
+void Arrangement::paintAutomationFold(juce::Graphics& g, int track, juce::Colour colour)
+{
+    const auto area = automationFoldBounds(track);
+    if (area.isEmpty())
+        return;
+    g.setColour(colour.withAlpha(0.16f));
+    g.fillRoundedRectangle(area, 3.0f);
+    const auto centre = area.getCentre();
+    juce::Path arrow;
+    if (factsFor(track).automationFolded)
+        arrow.addTriangle(centre.x - 2.0f, centre.y - 4.0f, centre.x - 2.0f, centre.y + 4.0f,
+                          centre.x + 3.0f, centre.y);
+    else
+        arrow.addTriangle(centre.x - 4.0f, centre.y - 2.0f, centre.x + 4.0f, centre.y - 2.0f,
+                          centre.x, centre.y + 3.0f);
+    g.setColour(colour);
+    g.fillPath(arrow);
+}
+
 // The ghost row: the track repeated dimly so the curve above it lines up with
 // something recognisable, plus the lane's name in the header.
 void Arrangement::paintGhostRow(juce::Graphics& g, int row)

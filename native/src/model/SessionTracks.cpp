@@ -203,6 +203,28 @@ juce::Result Session::setTrackFolded(int track, bool folded)
     return juce::Result::ok();
 }
 
+bool Session::isTrackAutomationFolded(int track) const
+{
+    auto* audio = audioTrack(track);
+    return audio != nullptr && static_cast<bool>(audio->state.getProperty(trackAutomationFoldedID, false));
+}
+
+juce::Result Session::setTrackAutomationFolded(int track, bool folded)
+{
+    const auto tracks = audioTracks();
+    if (!juce::isPositiveAndBelow(track, tracks.size()))
+        return juce::Result::fail("Select a track to fold its automation.");
+    // Written without undo, as the row's own fold is: the lanes and their
+    // curves are untouched, and they go on playing while folded.
+    if (folded)
+        tracks[track]->state.setProperty(trackAutomationFoldedID, true, nullptr);
+    else
+        tracks[track]->state.removeProperty(trackAutomationFoldedID, nullptr);
+    markModified(track, ModelChange::none);
+    sendSynchronousChangeMessage();
+    return juce::Result::ok();
+}
+
 juce::Result Session::setTrackName(int track, const juce::String& name)
 {
     const auto tracks = audioTracks();

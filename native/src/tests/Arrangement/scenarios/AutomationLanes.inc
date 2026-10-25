@@ -46,6 +46,8 @@
                 "Automation shown on the track itself adds no row");
         require(view.trackLanes[0].size() == 1 && !view.trackLanes[0].front().active(),
                 "A revealed lane is carried by the view and starts inactive");
+        require(view.automationFoldBounds(0).isEmpty(),
+                "A lane drawn over the track's own clips leaves nothing under the card to fold");
 
         require(session.showTrackAutomation(laneTarget, true).wasOk(), "The same lane can be moved to its own row");
         view.sync();
@@ -330,6 +332,73 @@
         view.sync();
         require(view.rows.size() == rowsWithoutLanes + 1 && !view.trackLanes[0].front().active(),
                 "Deleting a curve keeps the lane on screen");
+
+        // The arrow in the card's bottom-right corner folds the lanes under a
+        // track away and brings them back, keeping them either way.
+        {
+            const auto card = view.lane(0);
+            const auto fold = view.automationFoldBounds(0);
+            require(!fold.isEmpty(), "A card with a lane on a row of its own carries the lanes' arrow");
+            require(fold.getX() > view.cardControlsWidth + view.cardDividerWidth && fold.getRight() <= view.headerWidth
+                        && fold.getY() > card.getCentreY() && fold.getBottom() <= card.getBottom(),
+                    "in the bottom-right corner of the card's name side");
+            require(view.cardResizeEdgeAt({fold.getCentreX(), fold.getBottom()}) < 0,
+                    "clear of the bottom edge the row is resized from");
+            for (int track = 1; track < session.trackCount(); ++track)
+                if (view.trackLanes[static_cast<size_t>(track)].empty())
+                    require(view.automationFoldBounds(track).isEmpty(), "A card with no lanes has no arrow");
+
+            // Painted, not composed, so a render is the coverage it can have.
+            // The PNGs are only written when somebody asks to look at them.
+            const auto shot = juce::SystemStats::getEnvironmentVariable("RHINO_AUTOMATION_FOLD_SNAPSHOT", {});
+            const auto picture = [&view, &shot, &require](const juce::String& suffix)
+            {
+                const auto band = juce::Rectangle<int>(0, static_cast<int>(view.lane(0).getY()) - 4,
+                                                       view.getWidth(), 160);
+                const auto image = view.createComponentSnapshot(band);
+                require(image.getWidth() == band.getWidth(), "The card renders with its lanes' arrow");
+                if (shot.isEmpty())
+                    return;
+                const auto file = juce::File(shot).getSiblingFile(juce::File(shot).getFileNameWithoutExtension()
+                                                                  + suffix + ".png");
+                file.deleteFile();
+                if (auto stream = file.createOutputStream())
+                    juce::PNGImageFormat().writeImageToStream(image, *stream);
+            };
+            picture("-open");
+
+            const auto laneRowHeight = view.rowBounds(1).getHeight();
+            view.mouseDown(laneEvent(fold.getCentre(), fold.getCentre(), false));
+            view.mouseUp(laneEvent(fold.getCentre(), fold.getCentre(), false));
+            view.sync();
+            require(session.isTrackAutomationFolded(0) && view.rowBounds(1).getHeight() == 0.0f,
+                    "Clicking the arrow folds the lane rows under the track away");
+            require(std::abs(view.lane(1).getY() - view.lane(0).getBottom()) < 0.001f,
+                    "and the next track closes up under the card");
+            require(view.trackLanes[0].size() == 1 && session.trackAutomationState(laneTarget).visible,
+                    "Folded lanes are kept, not hidden");
+            require(!view.automationFoldBounds(0).isEmpty(), "The arrow stays to bring them back");
+            picture("-folded");
+
+            view.mouseDown(laneEvent(fold.getCentre(), fold.getCentre(), false));
+            view.mouseUp(laneEvent(fold.getCentre(), fold.getCentre(), false));
+            view.sync();
+            require(!session.isTrackAutomationFolded(0) && std::abs(view.rowBounds(1).getHeight() - laneRowHeight) < 0.001f,
+                    "and clicking it again brings them back at their height");
+
+            require(session.setTrackAutomationFolded(0, true).wasOk() && session.showTrackAutomation(laneTarget, true).wasOk()
+                        && !session.isTrackAutomationFolded(0),
+                    "Revealing a lane on a row of its own unfolds the lanes, so the lane asked for is seen");
+
+            require(session.setTrackFolded(0, true).wasOk(), "The card folds to its one line");
+            view.sync();
+            const auto shortFold = view.automationFoldBounds(0);
+            require(!shortFold.isEmpty() && static_cast<float>(view.trackNameBounds(0).getRight()) <= shortFold.getX(),
+                    "On a row folded to its one line the arrow keeps its corner and the name stops short of it");
+            picture("-short");
+            require(session.setTrackFolded(0, false).wasOk(), "The card unfolds again");
+            view.sync();
+        }
         require(session.hideTrackAutomation(laneTarget).wasOk(), "A lane can be hidden again");
         view.sync();
         require(view.rows.size() == rowsWithoutLanes && view.trackLanes[0].empty(),

@@ -49,6 +49,9 @@ extern const juce::Identifier mappedParametersID;
 extern const juce::Identifier automationOwnLaneID;
 extern const juce::Identifier automationTimeID;
 extern const juce::Identifier automationValueID;
+// A track whose lane rows are folded away. On the track, beside the row's own
+// fold, because SessionAutomation.cpp clears it when a lane is revealed.
+extern const juce::Identifier trackAutomationFoldedID;
 extern const juce::Identifier trackGroupBusID;
 extern const juce::Identifier trackGroupMemberID;
 extern const juce::Identifier trackGroupCollapsedID;

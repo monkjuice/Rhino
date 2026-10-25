@@ -226,6 +226,11 @@ juce::Result Session::showTrackAutomation(DeviceTarget target, bool ownLane)
     edit->getUndoManager().beginNewTransaction("Show automation");
     if (!ensureTrackAutomationState(target, ownLane, false).isValid())
         return juce::Result::fail("That track is no longer available.");
+    // A lane asked for on a row of its own, under a track whose lane rows are
+    // folded away, would land out of sight. Outside the undo step, as the
+    // fold itself is.
+    if (ownLane)
+        automationOwnerState(target.track).removeProperty(trackAutomationFoldedID, nullptr);
     markModified(target.track, ModelChange::curves);
     edit->getUndoManager().beginNewTransaction();
     sendSynchronousChangeMessage();

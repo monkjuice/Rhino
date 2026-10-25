@@ -32,7 +32,7 @@ Not in it: view settings (tab, the bank on show, envelope zoom, FX scroll), MIDI
 
 On a `.forgepreset` load, the file's name is the preset's name, so renaming the file renames the patch. The wrapper's `author`, `style` and `notes` outrank the tree's, because the wrapper is what the browser listed.
 
-A load is also what one click in the browser's list costs. On 2026-10-25 `--profile-browser` measured a factory preset at 98 ms median ([Forge preset browser and bank](forge-preset-browser.md#what-it-costs)), and a temporary timing of `applySavedState` split it into three nearly equal parts, each fixed the same day (uncommitted at the time of writing):
+A load is also what one click in the browser's list costs. On 2026-10-25 `--profile-browser` measured a factory preset at 98 ms median ([Forge preset browser and bank](forge-preset-browser.md#what-it-costs)), and a temporary timing of `applySavedState` split it into three nearly equal parts, each fixed the same day (commit `ad945e1`):
 
 - `applyTables` reset every oscillator's built-in table on every load, so the band-limited copies the voice already read were rebuilt (about 37 ms). It now leaves an oscillator alone when `tables.edit(osc).isUntouched()`. A test in `tests/ForgeTestsPresets.cpp` requires a load with no `TABLE` node not to bump `tableStore().revision(0)` for an oscillator already on the built-in table.
 - `migrated` called `parameterEntry` once per parameter, each call a walk of the whole tree (about 38 ms). It now gathers the ids present in one pass into a `std::set`.

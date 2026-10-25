@@ -11,7 +11,7 @@ updated: 2026-10-25
 
 `Editor::timerCallback` (`src/ForgeEditorInput.cpp`) runs on a timer started with `startTimerHz(24)` in `src/ForgeEditor.cpp`. Until 2026-10-25 it ended with an unconditional `repaint()`: every knob, button and label was redrawn 24 times a second whether it moved or not, about half of every frame, and on 2026-09-19 a restyle of the metal took idle CPU from 31.8% to 84% of one core before anyone noticed. Frame pacing is a core requirement (`AGENTS.md`).
 
-Since 2026-10-25 (uncommitted at the time of writing) it ends with `repaintLive()`:
+Since commit `ad945e1` (2026-10-25) it ends with `repaintLive()`:
 
 - It repaints `Editor::liveRegions()` (public, `src/ForgeEditorPaint.cpp`): what `paint()` draws over the cached chassis that moves without a gesture. That is the ARP plate, every shown module's header band (`ui::liveHeaderHeight`, 40 px in `ui/ForgeModule.h`, covering the second line GLOBAL and MACROS print on) and its `displayBounds`, the matrix and the rack modules whole, and the table panel when visible. The drag line a source handle trails is not there, because a drag repaints the panel on every move of its own.
 - When `Editor::liveKey()`, which is `chromeKey(1.0f)`, differs from `liveKeyShown` (a module switched off by a preset, a colour from the host), it repaints the whole panel once instead.

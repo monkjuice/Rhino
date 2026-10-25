@@ -119,7 +119,7 @@ ctest --test-dir instruments/rhino-forge/build -C Release -j 8 --output-on-failu
 - `--snapshot`, `--profile`, `--profile-browser`, `--profile-audio` and `--render` are development tools in the same binary, not test cases
   ([Proving a Forge change changed nothing](proving-a-forge-change-changed-nothing.md)).
 - `--profile-browser [width height]` (`tests/ForgeTestTools.cpp`, dispatched in `tests/ForgeTestMain.cpp`; since 2026-10-25,
-  uncommitted at the time of writing) is the preset path's profile. It reads the real bank in Documents and the machine's
+  commit `ad945e1`) is the preset path's profile. It reads the real bank in Documents and the machine's
   Serum 2 and Vital folders, writes nothing, and prints each library listed cold and warm, every factory preset loaded
   through the call a click in the list makes (median and max, with the editor open), five converted Serum 2 and Vital
   loads, the browser opened and each library chosen, and the browser's frames. The same day `--profile` gained

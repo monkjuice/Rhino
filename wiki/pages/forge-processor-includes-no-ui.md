@@ -9,7 +9,7 @@ updated: 2026-10-25
 
 # Forge's Processor includes nothing under ui/
 
-Decided on 2026-10-25 by session rhino-62, in the same change that made the preset browser fast ([Forge preset browser and bank](forge-preset-browser.md)). Uncommitted at the time of writing. Paths are under `instruments/rhino-forge/`.
+Decided on 2026-10-25 by session rhino-62, in the same change that made the preset browser fast ([Forge preset browser and bank](forge-preset-browser.md)), commit `ad945e1`. Paths are under `instruments/rhino-forge/`.
 
 ## Context
 

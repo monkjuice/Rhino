@@ -4,9 +4,10 @@
         // still move.
         {
             StepGrid transposeGrid(session);
-            // The open clip is a drum clip on the bank from 48: tall enough for
-            // its rows to reach the high note, now that rows keep their height.
-            transposeGrid.setSize(1000, 300);
+            // The open clip is a drum clip on the bank from 48: at the opening
+            // height its sixteen rows reach the high note, now that rows keep
+            // their height.
+            transposeGrid.setSize(1000, StepGrid::openingHeight);
             transposeGrid.changeListenerCallback(nullptr);
 
             std::vector<juce::ValueTree> existingNotes;

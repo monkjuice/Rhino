@@ -33,8 +33,9 @@
 
             // Sideways. Sixty-four steps open four times deeper than the view,
             // so there is somewhere to go either way from the middle.
-            require(grid.horizontalScroll.isVisible(), "Sixty-four steps are wider than the view");
-            grid.scrollBarMoved(&grid.horizontalScroll, 16.0);
+            require(grid.visibleStepSpan() < 64.0, "Sixty-four steps are wider than the view");
+            grid.stepScroll = 16.0;
+            grid.syncHorizontalScroll();
             const auto startedAt = grid.stepScroll;
             const auto pixelsPerStep = static_cast<double>(grid.cellWidth());
             const auto from = juce::Point<float>(StepGrid::labelWidth + grid.gridWidth() * 0.5f,
@@ -42,8 +43,6 @@
             pan(from, from.translated(-120.0f, 0.0f));
             require(close(grid.stepScroll, startedAt + 120.0 / pixelsPerStep),
                     "Dragging left with the middle button moves the steps right by the distance travelled");
-            require(close(grid.horizontalScroll.getCurrentRangeStart(), grid.stepScroll),
-                    "The scrollbar follows a pan");
             pan(from, from.translated(120.0f, 0.0f));
             require(close(grid.stepScroll, startedAt), "Dragging the same distance back returns to where it started");
             pan(from, from.translated(4000.0f, 0.0f));

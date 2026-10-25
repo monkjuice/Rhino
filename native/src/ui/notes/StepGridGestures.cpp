@@ -561,7 +561,6 @@ void StepGrid::autoScrollDrag()
     }
     if (changed)
     {
-        horizontalScroll.setCurrentRange(stepScroll, visibleStepSpan(), juce::dontSendNotification);
         updatePlayhead();
         repaint();
     }
@@ -574,7 +573,6 @@ void StepGrid::panView(juce::Point<float> pointer)
 {
     const auto maximumStart = std::max(0.0, static_cast<double>(session.editorStepCount()) - visibleStepSpan());
     stepScroll = std::clamp(panStartStep - (pointer.x - panAnchor.x) / cellWidth(), 0.0, maximumStart);
-    horizontalScroll.setCurrentRange(stepScroll, visibleStepSpan(), juce::dontSendNotification);
     // Dragging down carries the notes down and brings the pitches above them
     // into view, so the lowest row on show climbs by the rows travelled.
     const auto next = juce::jlimit(0, 128 - visiblePitchRows(),

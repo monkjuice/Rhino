@@ -8,7 +8,7 @@
 namespace rhino
 {
 class StepGrid final : public juce::Component, public juce::TooltipClient, private juce::ChangeListener,
-                       private juce::ScrollBar::Listener, private juce::Timer
+                       private juce::Timer
 {
 public:
     explicit StepGrid(Session&);
@@ -84,11 +84,12 @@ private:
     // clip and a drum clip alike. The height is baseRowHeight, made thinner or
     // thicker only by the user's own zoom - the keys dragged sideways, Shift
     // and the wheel over them - between the two bounds. Until 2026-10-25 the
-    // rows stretched to fill the panel, sixteen of them at the default zoom.
-    // maxPitchRows is the whole MIDI range: the most rows a panel can show,
-    // and the stride of the row-addressed caches below.
+    // rows stretched to fill the panel, sixteen of them at the default zoom;
+    // they were 11 px when they stopped, and 13 since the user asked for 2 px
+    // more. maxPitchRows is the whole MIDI range: the most rows a panel can
+    // show, and the stride of the row-addressed caches below.
     static constexpr int maxPitchRows = 128;
-    static constexpr float minimumRowHeight = 7.0f, baseRowHeight = 11.0f, maximumRowHeight = 33.0f;
+    static constexpr float minimumRowHeight = 7.0f, baseRowHeight = 13.0f, maximumRowHeight = 33.0f;
     // The row height below which the keyboard stops naming octaves. Sixteen
     // rows of it are also the least room the velocity lane leaves the rows: a
     // pane too short for both folds the lane away.
@@ -138,7 +139,7 @@ private:
         bool operator==(const LaneNote&) const = default;
     };
     juce::Rectangle<float> cell(int step, int row) const;
-    // From the header to the scrollbar: the rows, and the lane under them.
+    // From the header to the footer: the rows, and the lane under them.
     float timeAreaHeight() const;
     float timeAreaBottom() const;
     float rowAreaHeight() const;
@@ -174,6 +175,10 @@ private:
     float gridRight() const;
     float gridWidth() const;
     double visibleStepSpan() const;
+    // Holds stepScroll inside the clip. There is no scrollbar to keep in step
+    // with it: the editor never shows one, at the user's request, so the
+    // rows' area never changes height with the zoom. The steps travel by a
+    // sideways wheel, the middle button, a drag's autoscroll and the zoom.
     void syncHorizontalScroll();
     void zoomAt(double factor, float pointerX);
     // A drag that reaches the edge of the grid pulls the view after it, so a
@@ -283,7 +288,6 @@ private:
     float playheadXForTime(double seconds) const;
     void changeListenerCallback(juce::ChangeBroadcaster*) override;
     void visibilityChanged() override;
-    void scrollBarMoved(juce::ScrollBar*, double) override;
     void timerCallback() override;
     void updatePlayhead();
     // The velocity lane, StepGridVelocity*.cpp.
@@ -464,13 +468,12 @@ private:
     double loopAnchorStep = 0.0, loopPreviewStartStep = 0.0, loopPreviewEndStep = 0.0;
     juce::TextButton loopButton, drawButton, velocityButton;
     PreviewButton previewButton;
-    juce::ScrollBar horizontalScroll {false};
     juce::VBlankAttachment vblank;
-    static constexpr float labelWidth = 54.0f, headerHeight = 26.0f, scrollHeight = 14.0f, footerHeight = 24.0f;
+    static constexpr float labelWidth = 54.0f, headerHeight = 26.0f, footerHeight = 24.0f;
 public:
-    // Sixteen rows, the velocity lane at its default height and a scrollbar:
-    // the shell opens the editor this tall.
+    // Sixteen rows and the velocity lane at its default height: the shell
+    // opens the editor this tall.
     static constexpr int openingHeight = static_cast<int>(headerHeight + Session::pitches * baseRowHeight
-        + velocitylane::dividerHeight + velocitylane::defaultHeight + scrollHeight + footerHeight);
+        + velocitylane::dividerHeight + velocitylane::defaultHeight + footerHeight);
 };
 }

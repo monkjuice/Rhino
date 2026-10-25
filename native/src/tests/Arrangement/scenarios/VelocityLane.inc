@@ -83,13 +83,12 @@
                 grid.changeListenerCallback(nullptr);
             };
 
-            // Under the rows and over the scrollbar's place, on the same time
-            // axis, and nothing in the grid reaches into it.
-            require(!grid.horizontalScroll.isVisible() && grid.velocityLaneHeight() == 64.0f
-                        && grid.rowAreaHeight() == 181.0f && grid.visiblePitchRows() == 17
+            // Under the rows and over the footer, on the same time axis, and
+            // nothing in the grid reaches into it.
+            require(grid.velocityLaneHeight() == 64.0f && grid.rowAreaHeight() == 181.0f && grid.visiblePitchRows() == 14
                         && grid.rowHeight() == StepGrid::baseRowHeight,
-                    "The lane takes its default height from under the rows, which keep theirs: sixteen whole and one cut short");
-            require(grid.lowestVisiblePitch == 52, "The fixture's pitch window is 52 to 67, and 68 cut short above it");
+                    "The lane takes its default height from under the rows, which keep theirs: thirteen whole and one cut short");
+            require(grid.lowestVisiblePitch == 55, "The fixture's pitch window is 55 to 67, and 68 cut short above it");
             require(grid.laneDividerBounds().getY() == 207.0f && grid.velocityLaneBounds().getY() == 212.0f
                         && grid.velocityLaneBounds().getBottom() == grid.footerBounds().getY(),
                     "The divider sits under the rows and the lane runs down to the footer");
@@ -259,7 +258,7 @@
             press(pressE, left);
             dragBy(pressE, -4.0f, left);
             dragBy(pressE, -13.0f, left);
-            require(velocityOf(e) == 111 && selectionIs({e}) && grid.selectedVelocity() == 111 && grid.lowestVisiblePitch == 52,
+            require(velocityOf(e) == 111 && selectionIs({e}) && grid.selectedVelocity() == 111 && grid.lowestVisiblePitch == 55,
                     "A note below the pitch window is selected and edited from its marker");
             releaseAt(pressE, -13.0f);
             undoOnce();

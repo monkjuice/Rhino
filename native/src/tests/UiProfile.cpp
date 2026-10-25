@@ -314,8 +314,7 @@ int runUiProfile()
         }));
         const auto gridSweep = grid->getLocalBounds()
             .withTrimmedTop(static_cast<int>(StepGrid::headerHeight))
-            .withTrimmedBottom(static_cast<int>(StepGrid::footerHeight)
-                               + (grid->horizontalScroll.isVisible() ? static_cast<int>(StepGrid::scrollHeight) : 0));
+            .withTrimmedBottom(static_cast<int>(StepGrid::footerHeight));
         report("note editor playhead strip", medianMicroseconds(60, [&] (int i)
         {
             const auto x = 600.0f + static_cast<float>(i % 8) * 3.0f;

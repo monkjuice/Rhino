@@ -201,8 +201,6 @@ void StepGrid::showTimeSpan(double startSeconds, double endSeconds)
     stepZoom = std::clamp(steps / (last - first), 1.0, std::max(8.0, steps / Session::defaultSteps));
     stepScroll = first - (visibleStepSpan() - (last - first)) * 0.5;
     syncHorizontalScroll();
-    if (computePitchRowCount() != pitchRowCount)
-        changeListenerCallback(nullptr);
     // Last, because a rebuild reads the region off the notes again.
     std::vector<juce::ValueTree> caught;
     for (const auto& note : session.editorNotes())

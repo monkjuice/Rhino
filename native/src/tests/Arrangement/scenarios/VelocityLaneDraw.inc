@@ -73,8 +73,8 @@
                 stack.undo();
                 grid.changeListenerCallback(nullptr);
             };
-            require(grid.lowestVisiblePitch == 49 && grid.laneNoteFor(s) != nullptr && !grid.laneNoteFor(s)->inWindow,
-                    "The drawing fixture's window is 49 to 64, with one note below it");
+            require(grid.lowestVisiblePitch == 52 && grid.laneNoteFor(s) != nullptr && !grid.laneNoteFor(s)->inWindow,
+                    "The drawing fixture's window is 52 to 64, with one note below it");
 
             // A pencil sets the notes in each step it crosses, at the height it
             // crosses it, and a fast stroke skips no step on the way.
@@ -204,8 +204,8 @@
             // never scrolls pitch. Last, because it changes the resolution.
             stack.setEditorStepCount(32);
             grid.changeListenerCallback(nullptr);
-            require(grid.horizontalScroll.isVisible() && grid.velocityLaneHeight() == 64.0f,
-                    "A clip wider than the view keeps its lane over the scrollbar");
+            require(grid.visibleStepSpan() < 32.0 && grid.velocityLaneHeight() == 64.0f && grid.rowAreaHeight() == 181.0f,
+                    "A clip wider than the view keeps its lane and its rows, with no scrollbar to make room for");
             juce::ValueTree w;
             require(stack.addNote(20.0, 63, 1.0, &w, 100).wasOk(), "A note beyond the view");
             grid.changeListenerCallback(nullptr);

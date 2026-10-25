@@ -147,8 +147,11 @@
             grid.setSize(1000, 300);
             require(grid.velocityLaneHeight() == 64.0f && grid.velocityButton.getAlpha() == 1.0f,
                     "and with room it is its own height again");
-            require(StepGrid::openingHeight == 309,
+            require(StepGrid::openingHeight == 327,
                     "The shell opens the editor tall enough for the lane and sixteen rows of their own height");
+            // Zoomed in, a clip wider than the view used to bring a scrollbar
+            // over the footer, which took its height from the lane and the
+            // rows. The editor shows none now, so the zoom changes nothing here.
             for (const auto zoom : {1.0, 2.0})
             {
                 grid.stepZoom = zoom;
@@ -157,13 +160,11 @@
                 {
                     grid.setSize(1000, height);
                     const auto lane = grid.velocityLaneHeight();
-                    const auto scroll = grid.horizontalScroll.isVisible() ? StepGrid::scrollHeight : 0.0f;
                     require(lane == 0.0f
                                 || (lane >= velocitylane::minimumHeight && lane <= velocitylane::maximumHeight
                                     && lane == std::floor(lane) && grid.rowHeight() >= StepGrid::octaveLabelRowHeight
-                                    && grid.velocityLaneBounds().getBottom()
-                                           == static_cast<float>(height) - StepGrid::footerHeight - scroll),
-                            "At every height the lane is whole pixels in range, ends at the scrollbar and leaves the rows their names");
+                                    && grid.velocityLaneBounds().getBottom() == static_cast<float>(height) - StepGrid::footerHeight),
+                            "At every height and zoom the lane is whole pixels in range, ends at the footer and leaves the rows their names");
                     // The rows stand on the lane, so only the top one is cut
                     // short, by the header's edge.
                     const auto rowsTop = grid.rowsTop();

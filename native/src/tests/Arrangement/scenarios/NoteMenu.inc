@@ -16,7 +16,8 @@
             stack.endNoteGesture();
             auto owned = std::make_unique<StepGrid>(stack);
             auto& grid = *owned;
-            grid.setSize(1000, 300);
+            // Sixteen whole rows, so the pitch window reaches down to 50.
+            grid.setSize(1000, StepGrid::openingHeight);
             grid.changeListenerCallback(nullptr);
 
             juce::PopupMenu shown;

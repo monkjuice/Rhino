@@ -1,13 +1,13 @@
         StepGrid selectionGrid(session);
-        // Tall enough for sixteen whole rows over the velocity lane: the rows
-        // keep their height, so a shorter editor shows fewer pitches.
-        selectionGrid.setSize(1000, 300);
+        // The editor's opening height, sixteen whole rows over the velocity
+        // lane: the rows keep their height, so a shorter editor shows fewer
+        // pitches.
+        selectionGrid.setSize(1000, StepGrid::openingHeight);
         selectionGrid.changeListenerCallback(nullptr);
         const auto defaultCellWidth = selectionGrid.cell(1, 0).getWidth();
         session.setEditorStepCount(32);
         selectionGrid.changeListenerCallback(nullptr);
-        require(selectionGrid.horizontalScroll.isVisible()
-                && close(selectionGrid.visibleStepSpan(), static_cast<double>(Session::defaultSteps))
+        require(close(selectionGrid.visibleStepSpan(), static_cast<double>(Session::defaultSteps))
                 && std::abs(selectionGrid.cell(1, 0).getWidth() - defaultCellWidth) < 0.1f,
                 "Fine editor grids zoom horizontally instead of shrinking cells");
         session.setEditorStepCount(Session::defaultSteps);

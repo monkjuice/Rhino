@@ -35,8 +35,9 @@
                         if (a.getPixelAt(x, y) != b.getPixelAt(x, y)) ++differing;
                 return differing;
             };
-            require(grid.horizontalScroll.isVisible(), "The keys fixture is wider than the view");
-            grid.scrollBarMoved(&grid.horizontalScroll, 8.0);
+            require(grid.visibleStepSpan() < static_cast<double>(stack.editorStepCount()), "The keys fixture is wider than the view");
+            grid.stepScroll = 8.0;
+            grid.syncHorizontalScroll();
             const auto atWholeStep = picture();
             // Zoomed in until one step is wider than the keys, and scrolled half
             // a step along, so the step at the left edge starts left of them.

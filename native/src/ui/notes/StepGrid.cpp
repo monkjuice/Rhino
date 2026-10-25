@@ -56,8 +56,6 @@ StepGrid::StepGrid(Session& s) : session(s), vblank(this, [this] { updatePlayhea
     };
     addAndMakeVisible(previewButton);
     setUpVelocityLane();
-    horizontalScroll.addListener(this);
-    addAndMakeVisible(horizontalScroll);
     session.addChangeListener(this);
     changeListenerCallback(nullptr);
 }
@@ -71,7 +69,6 @@ StepGrid::~StepGrid()
     else if (gesture != Gesture::none && gesture != Gesture::keyboard && gesture != Gesture::pan
              && gesture != Gesture::chop && !isVelocityLaneGesture(gesture))
         session.endNoteGesture();
-    horizontalScroll.removeListener(this);
     session.removeChangeListener(this);
 }
 
@@ -203,10 +200,6 @@ void StepGrid::zoomAt(double factor, float pointerX)
     stepZoom = std::clamp(stepZoom * factor, 1.0, 8.0);
     stepScroll = anchorStep - static_cast<double>(anchor) * visibleStepSpan();
     syncHorizontalScroll();
-    // The scrollbar coming or going can fold the velocity lane or bring it
-    // back, which moves the rows by more than the scrollbar's own height.
-    if (computePitchRowCount() != pitchRowCount)
-        changeListenerCallback(nullptr);
     updatePlayhead();
     repaint();
 }
@@ -281,8 +274,7 @@ void StepGrid::setScaleHighlight(int selection)
 
 float StepGrid::timeAreaHeight() const
 {
-    return std::max(1.0f, getHeight() - headerHeight - footerHeight
-                              - (horizontalScroll.isVisible() ? scrollHeight : 0.0f));
+    return std::max(1.0f, getHeight() - headerHeight - footerHeight);
 }
 
 float StepGrid::timeAreaBottom() const
@@ -598,10 +590,8 @@ void StepGrid::changeListenerCallback(juce::ChangeBroadcaster*)
 
 void StepGrid::rebuildVisibleNotes()
 {
-    // The scrollbar decides how tall the row area is, and the row area decides
-    // how many rows fit, so both settle before any note is placed on one -
-    // the clip's length first, because it decides the zoom and so the
-    // scrollbar, and the scrollbar can fold the velocity lane.
+    // The clip's length decides the zoom, and so where the view may start,
+    // before any note is placed in it.
     const auto steps = session.editorStepCount();
     const auto stepCountChanged = steps != visibleStepCount;
     if (stepCountChanged)
@@ -702,8 +692,7 @@ void StepGrid::updatePlayhead()
     next = playheadXForTime(session.playheadSeconds());
     movePlayhead(*this, playhead, next,
                  getLocalBounds().withTrimmedTop(static_cast<int>(headerHeight))
-                                 .withTrimmedBottom(static_cast<int>(footerHeight)
-                                     + (horizontalScroll.isVisible() ? static_cast<int>(scrollHeight) : 0)));
+                                 .withTrimmedBottom(static_cast<int>(footerHeight)));
 }
 
 float StepGrid::playheadXForTime(double seconds) const
@@ -730,25 +719,8 @@ float StepGrid::playheadXForTime(double seconds) const
 
 void StepGrid::syncHorizontalScroll()
 {
-    const auto steps = session.editorStepCount();
-    const auto visible = visibleStepSpan();
-    const auto maximumStart = std::max(0.0, static_cast<double>(steps) - visible);
-    stepScroll = std::clamp(stepScroll, 0.0, maximumStart);
-    horizontalScroll.setVisible(maximumStart > 0.001);
-    horizontalScroll.setRangeLimits(0.0, static_cast<double>(steps), juce::dontSendNotification);
-    horizontalScroll.setCurrentRange(stepScroll, visible, juce::dontSendNotification);
-    // A scrollbar that comes or goes can fold the lane or bring it back.
-    updateVelocityButton();
-}
-
-void StepGrid::scrollBarMoved(juce::ScrollBar* bar, double start)
-{
-    if (bar != &horizontalScroll)
-        return;
     const auto maximumStart = std::max(0.0, static_cast<double>(session.editorStepCount()) - visibleStepSpan());
-    stepScroll = std::clamp(start, 0.0, maximumStart);
-    updatePlayhead();
-    repaint();
+    stepScroll = std::clamp(stepScroll, 0.0, maximumStart);
 }
 
 void StepGrid::resized()
@@ -764,10 +736,8 @@ void StepGrid::resized()
                          56, static_cast<int>(footerHeight) - 6);
     velocityButton.setBounds(66, getHeight() - static_cast<int>(footerHeight) + 3,
                              60, static_cast<int>(footerHeight) - 6);
-    syncHorizontalScroll();
-    horizontalScroll.setBounds(static_cast<int>(labelWidth),
-                               getHeight() - static_cast<int>(footerHeight + scrollHeight),
-                               std::max(1, static_cast<int>(gridRight() - labelWidth)), static_cast<int>(scrollHeight));
+    // A new height can fold the lane or bring it back, which the button shows.
+    updateVelocityButton();
     // A new height shows more rows or fewer, which changes which pitches are
     // on screen and so where every note sits.
     if (computePitchRowCount() != pitchRowCount)

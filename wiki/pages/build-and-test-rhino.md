@@ -4,7 +4,7 @@ type: guide
 summary: Fetch the pinned engine, build with Visual Studio 2022, and run the six CTest cases without being fooled by a stale or locked build.
 tags: [rhino, build, testing, windows]
 sources: []
-updated: 2026-10-23
+updated: 2026-10-25
 ---
 
 # Build and test Rhino
@@ -90,7 +90,9 @@ audio device ([The native device standard](native-device-standard.md)).
 - A check that fails only under `ctest -j 3` is not necessarily load: the device SDK's undo race failed in every
   parallel run and passed every sequential one ([A CachedValue can lag its own ValueTree](cachedvalue-lags-its-tree.md)).
 - A failure that reads only "Moved render timeout" is a 15 s wall-clock budget tripping on a busy machine. Re-run that
-  case on an idle machine before investigating.
+  case on an idle machine before investigating. "project files: the export gives up on a sample it cannot read"
+  (`ProjectFileMedia.inc`) is the same kind: it requires the export to give up within 10 s, took 11.3 s once under
+  load on 2026-10-25 and passed on the re-run.
 - `native_device_correctness` runs close to its limit: on 2026-10-23 it took 21 s alone and 29 s run straight after a
   profile, against 30 s. Run the suite on an idle machine.
 - `native_arrangement_geometry` also runs the layer lint (`tests/LayerLintTest.cpp`, 2026-10-23): it reads every

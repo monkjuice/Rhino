@@ -1202,3 +1202,11 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/writing-rhino-tests.md (rule 2: the `StepGrid`'s float caches on the heap; rule 19: log a component's repaints through a stand-in `CachedComponentImage`, clearing the log after installing it because installing repaints everything, and the negative control; rule 20: press only whole rows, since the top one may be a sliver inside the ruler, and why the scenario editors are 300 px, or 320 px in NoteGestures.inc)
 - updated: pages/stack-overflow-reports-as-segfault.md (a `StepGrid` no longer holds its float caches inline and is tens of kilobytes, as tests/README.md now says)
 - updated: index.md (Note editor's summary)
+
+## [2026-10-25] update | Note editor: no horizontal scrollbar, rows 2 px taller at 13 px (c257d42)
+- source: the coordinator's brief and hash, checked against native/src/ui/notes/StepGrid.h (`baseRowHeight`, `openingHeight`, the comment on `syncHorizontalScroll`), StepGrid.cpp (`timeAreaHeight`, `zoomAt`, `rebuildVisibleNotes`, `syncHorizontalScroll`, `resized`, the playhead's strip), StepGridEditing.cpp (`showTimeSpan`), StepGridGestures.cpp (`mouseWheelMove`), tests/UiProfile.cpp and scenarios NoteEditor.inc, NoteGestures.inc, NoteMenu.inc, NoteSelection.inc, VelocityLaneLayout.inc and ProjectFileMedia.inc; commit c257d42
+- updated: pages/note-editor.md (opening height 327 px; how the steps travel with no scrollbar; Drawing: rows 13 px, `openingHeight` exactly sixteen whole rows, the lane checked to end at the footer, a new bullet on the scrollbar's removal and why the rows' area no longer moves with the zoom; the swept span's order note)
+- updated: pages/note-velocity-lane.md (the layout without a scrollbar; the lane folds by the pane's height alone and `resized()` updates the button; `openingHeight` 327 px)
+- updated: pages/app-shell.md (the note editor's opening height, 327 px, with no scrollbar)
+- updated: pages/writing-rhino-tests.md (rule 20: editors that need sixteen whole rows take `StepGrid::openingHeight`; a 300 px editor now shows 13 whole rows; the fixed heights that broke)
+- updated: pages/build-and-test-rhino.md (the unreadable-sample export check's 10 s budget is a load flake too)

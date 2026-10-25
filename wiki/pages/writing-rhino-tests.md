@@ -179,12 +179,14 @@ every scenario of `DjLiveChain.inc`).
 20. **Size a note editor for the rows a scenario presses, and press only whole rows.** Since commit `d872f0b` rows keep
     their height, so the editor's height decides which pitches have rows, and the top row may be cut short with its
     centre inside the ruler (y < `headerHeight`), where a press seeks the transport and starts a loop drag instead of
-    a marquee or a note
-    ([Note editor](note-editor.md#drawing)). By `NoteSelection.inc` the shared `Session`'s open clip is a drum clip on
-    the bank from 48: a 250 px editor shows only pads 48..59, so that scenario's editor, like `NoteEditor.inc`'s, is
-    300 px. In `NoteGestures.inc` the clip is 48 steps long, so the scrollbar shows and a 300 px editor's rows ran
-    48..63 with 63 the sliver; it is 320 px, where 48..64 are all whole. A press aimed at `cell(step, row).getCentre()`
-    needs a row whose top is at or below `headerHeight`.
+    a marquee or a note ([Note editor](note-editor.md#drawing)). A scenario that needs sixteen whole rows sets its
+    editor to `StepGrid::openingHeight`, exactly sixteen whole rows with none cut short, so it follows the row height
+    if that changes again: `NoteEditor.inc`, `NoteSelection.inc`, `NoteGestures.inc` and `NoteMenu.inc`, since commit
+    `c257d42`. Fixed pixel heights broke twice in one day. With 11 px rows, the shared `Session`'s open clip, by
+    `NoteSelection.inc` a drum clip on the bank from 48, showed only pads 48..59 in a 250 px editor, and
+    `NoteGestures.inc`'s 48-step clip brought in the scrollbar, which left pad 63 a sliver at 300 px (it moved to
+    320 px). With 13 px rows a 300 px editor shows 13 whole rows and a top row 1 px short (a 181 px area), not 16. A
+    press aimed at `cell(step, row).getCentre()` needs a row whose top is at or below `headerHeight`.
 
 ## Timing, not checking
 

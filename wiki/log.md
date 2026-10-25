@@ -1132,3 +1132,7 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/region-editing.md (the region clipboard survives an open and leaves its beats at another tempo; open)
 - updated: pages/writing-rhino-tests.md (rule 1: why an unwritten document names an import one folder too high, and to write the document before any check of where a source resolves)
 - updated: index.md (Track clipboard's summary)
+
+## [2026-10-24] update | Keep clips off the track cards when scrolled (137ccb5)
+- source: the change's brief, checked against native/src/ui/arrangement/ArrangementClipPainter.cpp (`paintClipPiece`) and tests/Arrangement/scenarios/Rendering.inc; commit 137ccb5
+- updated: pages/arrangement-view.md (new rule: anything painted on the lanes clips at `headerWidth`, because `xFor` runs left of the lanes and the cards are painted first; the clip painter's x-0 clip region and what it spilled; the row dividers the one deliberate exception; the `Rendering.inc` pixel check)

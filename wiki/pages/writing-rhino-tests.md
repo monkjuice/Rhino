@@ -182,11 +182,18 @@ every scenario of `DjLiveChain.inc`).
     a marquee or a note ([Note editor](note-editor.md#drawing)). A scenario that needs sixteen whole rows sets its
     editor to `StepGrid::openingHeight`, exactly sixteen whole rows with none cut short, so it follows the row height
     if that changes again: `NoteEditor.inc`, `NoteSelection.inc`, `NoteGestures.inc` and `NoteMenu.inc`, since commit
-    `c257d42`. Fixed pixel heights broke twice in one day. With 11 px rows, the shared `Session`'s open clip, by
-    `NoteSelection.inc` a drum clip on the bank from 48, showed only pads 48..59 in a 250 px editor, and
+    `c257d42`. Fixed pixel heights broke twice in one day. With 11 px rows, the shared `Session`'s open clip when
+    `NoteSelection.inc` began, a drum clip on the bank from 48, showed only pads 48..59 in a 250 px editor, and
     `NoteGestures.inc`'s 48-step clip brought in the scrollbar, which left pad 63 a sliver at 300 px (it moved to
     320 px). With 13 px rows a 300 px editor shows 13 whole rows and a top row 1 px short (a 181 px area), not 16. A
     press aimed at `cell(step, row).getCentre()` needs a row whose top is at or below `headerHeight`.
+21. **Know which kind of clip the shared note editor is on.** Since commit `3418c1b` a drum clip's rows are only its
+    rack's assigned keys and the keys its notes use ([Note editor drum rows](note-editor-drum-rows.md)), so a
+    scenario about the piano roll must not run on one. By `NoteSelection.inc` the shared `Session`'s open clip is on
+    the lane `DrumKitDrops.inc` dropped a kit on, a drum clip. `NoteSelection.inc` therefore opens a piano clip on a
+    MIDI lane of its own (`addTrack(TrackType::midi, -1, &lane)`, `createClip`, `selectPatternClip`), and the
+    clipboard and gesture scenarios after it go on using that clip. Rows no longer go below 8 px
+    (`minimumRowHeight`), so `NoteKeys.inc`'s thin-rows check now expects that floor.
 
 ## Timing, not checking
 

@@ -21,7 +21,7 @@ Rhino's drum instrument since 2026-10-06 (branch `feat/drum-rack`). It replaced 
 ## A pad on every note
 
 - **128 pads** (`DrumRackEngine::padCount`), one per MIDI note, as in Live. A pad is addressed by its note everywhere: engine, device, kit files and every `Session` call that takes a pad. Messages name it with `padNoteName` (`core/content/DrumKitFile.h`), where middle C is C3, so 48 is C2.
-- **A bank of sixteen on the face**: four rows of four, lowest note bottom left, from `firstShownNote()`, a multiple of 4, default 48. It and the selected pad are view state on the device (`firstNote`, `selPad`, both default 48), written without undo. The note editor's drum rows open on the bank, its first pad on the bottom row, and follow it as it pages; since commit `d872f0b` (2026-10-25) they keep the editor's fixed row height and scroll, so the pane's height decides how many pads show, and a scroll holds until the bank changes ([Note editor (StepGrid)](note-editor.md#drum-rows)).
+- **A bank of sixteen on the face**: four rows of four, lowest note bottom left, from `firstShownNote()`, a multiple of 4, default 48. It and the selected pad are view state on the device (`firstNote`, `selPad`, both default 48), written without undo. The note editor's rows on a drum clip are the rack's assigned keys, the pads holding a sound, plus the keys the clip's notes are on (commit `3418c1b`, 2026-10-25). They open at the first of them from the bank up and follow the bank as it pages, keep the editor's row height and scroll, a scroll holding until the bank changes ([Note editor drum rows](note-editor-drum-rows.md)).
 - **Kits still sit on C2 up**, where the drum patterns are written, not at Live's C1. A controller sending notes 36-51 therefore plays below the default bank, and the map shows the keys arriving there.
 - **A sample or a synth.** The synths (`DrumModel`) are small 808-style models: Kick, Snare, Tom, ClosedHat, OpenHat, Clap, Rim and Cowbell. `DrumModelInfo` gives each a file `id` (never renamed), a name, the browser drum kind it files under, and its starting Decay and Tone.
 - **Six controls.** Tune (±24 semitones); Decay (seconds to fall 60 dB; at its 10 s top it reads "Full" and a sample plays to its end); Tone (a low-pass from 120 Hz to 20 kHz on a sample, off at the top; brightness on a synth); Velocity (how much quieter a soft note is); Level (dB, the -48 bottom is silence); Pan (a balance, unity on both sides at centre).
@@ -46,7 +46,7 @@ What a pad holds (`sample` or `synth`, `name`, `choke`, `mute`, `solo`, and a sa
 - **For the face**, the engine counts every note-on per note, even for an empty pad (`notesReceived`, how the map flashes a key), reports the newest voice's place in its file (`playhead`, -1 when silent), and takes pad strikes from the face as a 128-bit mask (`previews`) at its next render. `prepare` clears the mask, so a pad played while nothing rendered does not sound late.
 - **What a pad keeps.** A sample dropped on a pad that held a sample keeps all six controls and its playback, so auditioning one snare after another keeps the pad's tuning. A sample on a synth or empty pad starts at the defaults but keeps level, pan, velocity and choke. A switch to a synth keeps the same four and takes the model's Decay and Tone. A kit replaces every pad and clears mute and solo.
 - `padPicture` and `samplePicture` keep the selected pad's pictures by sound, settings and width, two widths of each, the older redrawn first (`keptPicture`): the rack's face and the Drum Rack window draw one pad at two widths, and with one kept they took turns redrawing it every frame a voice played. A reference returned lasts until a third width is asked for. A synth's strike renders at 16 kHz.
-- `hasNameForMidiNoteNumber` names each filled pad; `Session::patternNoteName` passes the name to the note editor's rows.
+- `hasNameForMidiNoteNumber` names each filled pad; `Session::patternNoteName` passes the name to the note editor's rows, and `Session::patternNamedNotes` lists every named pad in one pass, which is how the editor picks a drum clip's rows (commit `3418c1b`).
 
 ## Kits and drum presets
 
@@ -138,6 +138,7 @@ Since commit `94d4d9f` (2026-10-07) a rack opens in a window of its own, the pad
 - [Device presets (.rnd)](device-presets.md)
 - [Pattern presets](pattern-presets.md)
 - [Note editor (StepGrid)](note-editor.md)
+- [Note editor drum rows](note-editor-drum-rows.md)
 - [Real-time audio rules](real-time-audio-rules.md)
 - [What a change costs the interface](ui-cost-of-a-change.md)
 - [Track automation](automation.md)

@@ -1141,3 +1141,9 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - source: the change's brief, checked against native/src/model/SessionNotes.cpp (`shownStartStep`, `editorNotes`, `resizeNote`, `fillNoteToClipEnd`, `redistributeNotes`); commit 1818c5b
 - updated: pages/note-editor.md (new section "A note that began before the window": Tracktion plays it from the clip's start, the grid and lane skipped it, `editorNotes` shows it from step 0, how resize, fill, divide and moves treat the hidden part, a note wholly before the window stays off the grid, show-what-plays chosen over silencing it, `ClipWindow.inc`)
 - updated: pages/clip-placement.md (a note crossing a MIDI clip's window start still plays and is shown from step 0)
+
+## [2026-10-24] update | Drop the empty-lane and empty-clip placeholders (c462431)
+- source: the change's brief, checked against native/src/ui/arrangement/Arrangement.h (`TrackFacts`) and a search of native/src for the removed texts; commit c462431
+- updated: pages/arrangement-view.md (new rule: empty lanes and empty MIDI clips are blank at the user's request; both wordings of the empty-lane hint and "Edit notes below" gone; `TrackFacts::holdsInstrument` and the sync's `trackHasInstrument` call removed with them)
+- updated: pages/track-kinds.md (the empty-lane hint dropped from "What reads the kind")
+- updated: pages/playhead.md (the empty-lane hint dropped from what the arrangement paints only where the repaint reaches)

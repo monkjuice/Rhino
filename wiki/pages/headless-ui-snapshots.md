@@ -100,8 +100,10 @@ binary before blaming the change; that is how the source move of 2026-10-13 was 
 The Forge test binary renders the real editor, controls and cached layers included, in about a second:
 
 ```
-RhinoForgeTests --snapshot out.png [width height [OSC|TABLE|MATRIX|MIX|FX|ARP|ARPHELD|PRESETS|SAVE|PRESETS:<LIBRARY> [scale [preset.forgepreset|- [forge|merli]]]]]
+RhinoForgeTests --snapshot out.png [width height [OSC|TABLE|MATRIX|MIX|FX|ARP|ARPHELD|GUIDE|PRESETS|SAVE|PRESETS:<LIBRARY> [scale [preset.forgepreset|- [forge|merli]]]]]
 ```
+
+`GUIDE` (2026-10-25) sets the note guide to A minor over A natural minor on the state tree before the editor is built, then presses the door on the shelf, so the keys, the guide's octave and its readout all show a root, chord tones and scale tones ([Forge note guide](forge-note-guide.md)).
 
 `PRESETS` and `SAVE` press LOAD or SAVE and so open the preset browser ([Forge preset browser and bank](forge-preset-browser.md)). `PRESETS:<LIBRARY>`, for example `"PRESETS:SERUM 2"` or `PRESETS:VITAL`, opens that library's folder and prints how long the listing took. The bank these pages show is a scratch one, `snapshot-bank`, made from the factory set in the **working directory**, so run them from a scratch folder rather than the repository root. The Serum 2 and Vital libraries are the machine's own and are only read. Since commit `ad945e1` (2026-10-25) the browser lists on a thread, so these pages wait for the listing to land before they paint: `settleListing` in `tests/ForgeTestTools.cpp` sleeps and calls `PresetBrowser::takeListings()` until `listing` clears, with no message loop (this JUCE build has `JUCE_MODAL_LOOPS_PERMITTED` off, so there is none to pump), as `--profile-browser` does; a test that opens the browser itself must wait the same way, through `waitForListing` in `tests/ForgeTestsBrowser.cpp`, or it reads and paints an empty list ([Forge preset browser and bank](forge-preset-browser.md#listing-on-a-thread)).
 

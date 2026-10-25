@@ -4,7 +4,7 @@ type: component
 summary: The painted plate between Forge's keys and note guide - a lamp, four slot buttons that swap the five pattern panes' 25 parameters through ARPSLOT nodes on the state tree, a door to the overlay, and a well where every note the voices play falls through the floor, a held one leaving a trace that hangs and brightens.
 tags: [forge, arpeggiator, ui, state, real-time]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-25
 ---
 
 # Forge ARP plate, slots and waterfall
@@ -13,7 +13,7 @@ The plate on the keyboard shelf that fronts the [Forge arpeggiator](forge-arpegg
 
 ## Where it stands
 
-`keyboardBounds` starts at the shelf's left edge against the wheels, `arpPlateBounds` follows the keys and `noteGuidePlateBounds` follows the plate. Until 2026-10-13 the plate stood at the keys' left end, where Serum puts its switch; it moved, at the same width, so the lamp, the slot buttons and the chord helper are found at one end. Inside the housing is a chamfered face (`arpPlateFace`, the plate reduced 7 x 9, cut `arpPlateFaceCut` = 5) holding, left to right: the lamp and the name, a 72 px column that is the door (`arpPlateNameBounds`); four buttons two by two (`arpSlotGridBounds`, `arpSlotButtonBounds`, `arpSlotAt`); and the well, whatever the face has left (`arpWaterfallBounds`), which gives up width first. The lamp switches the arp on, a button chooses a slot, anything else toggles the overlay. The plate is taken before anything a tab owns, since it is reachable from every tab.
+Since 2026-10-25 the shelf is laid out from its right-hand end: `noteGuidePlateBounds` takes `noteGuidePlateWidth` at the strip's right end, `arpPlateBounds` stands left of it at its own width, and `keyboardBounds` is whatever the shelf has left from the wheels to the plate ([Forge note guide](forge-note-guide.md)); before, the keys were sized first and the guide took the remainder. Until 2026-10-13 the plate stood at the keys' left end, where Serum puts its switch; it moved, at the same width, so the lamp, the slot buttons and the chord helper are found at one end. Inside the housing is a chamfered face (`arpPlateFace`, the plate reduced 7 x 9, cut `arpPlateFaceCut` = 5) holding, left to right: the lamp and the name, a 72 px column that is the door (`arpPlateNameBounds`); four buttons two by two (`arpSlotGridBounds`, `arpSlotButtonBounds`, `arpSlotAt`); and the well, whatever the face has left (`arpWaterfallBounds`), which gives up width first. The lamp switches the arp on, a button chooses a slot, anything else toggles the overlay. The plate is taken before anything a tab owns, since it is reachable from every tab.
 
 The lamp says the arp runs; the lit outline, drawn to the face's own chamfer (`chamferedPath`, the well's cut) at fill 0.05 and stroke 0.32, only says the door is open. The two are kept distinct because an arp running with its panes put away and an arp on screen but switched off are both ordinary.
 
@@ -60,6 +60,7 @@ Redesigned on 2026-10-13 at the user's request and committed as `90246e1` on `ma
 ## Related
 
 - [Forge arpeggiator](forge-arpeggiator.md)
+- [Forge note guide](forge-note-guide.md)
 - [Forge editor (panel)](forge-editor.md)
 - [Forge presets and state](forge-presets-and-state.md)
 - [Forge's panel repaints whole at 24 Hz](forge-panel-repaint-cost.md)

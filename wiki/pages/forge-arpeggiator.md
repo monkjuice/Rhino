@@ -4,7 +4,7 @@ type: component
 summary: Stands in front of the voices, hands notes back through two callbacks, keeps four pattern slots, and opens as an overlay from a plate between the keys and the note guide.
 tags: [forge, arpeggiator, midi]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-25
 ---
 
 # Forge arpeggiator
@@ -27,7 +27,7 @@ Since 2026-10-13 the five pattern panes' 25 parameters are one of four slots; th
 
 ## On the panel
 
-The ARP plate stands on the keyboard shelf between the keys and the note guide (at the keys' left end until 2026-10-13). Its lamp switches the arp on, its four buttons choose the slot, its well shows the notes the voices play falling, and the rest of it opens an **overlay on ENV and LFO**, not a tab, leaving the macros, oscillators and filter in view ([Forge ARP plate, slots and waterfall](forge-arp-plate.md)). The overlay is still declared as a page, `Page::arp`, that no tab is ever set to; `everyPage` means every *tab*, so nothing shares a page with the arp and the layout test's no-overlap check holds. `coveredByArp` derives what it covers from its panes' grid cells. The overlay and the expanded FX rack close each other.
+The ARP plate stands on the keyboard shelf between the keys and the note guide (at the keys' left end until 2026-10-13). Its lamp switches the arp on, its four buttons choose the slot, its well shows the notes the voices play falling, and the rest of it opens an **overlay on ENV and LFO**, not a tab, leaving the macros, oscillators and filter in view ([Forge ARP plate, slots and waterfall](forge-arp-plate.md)). The overlay is still declared as a page, `Page::arp`, that no tab is ever set to; `everyPage` means every *tab*, so nothing shares a page with the arp and the layout test's no-overlap check holds. `coveredBy(module, Page::arp)` derives what it covers from its panes' grid cells. The overlay, the expanded FX rack and the [note guide](forge-note-guide.md), a second overlay on the same cells since 2026-10-25, close one another.
 
 ## Behaviour worth knowing
 

@@ -86,9 +86,8 @@ from 24 sites, all in Forge's own code and none in JUCE).
 
 ## Test
 
-One binary, one file per area, one CTest case per area: 22 areas as of 2026-10-19, `import` and `browser` the newest
-(`forge_test_areas` in `CMakeLists.txt`; [Forge preset import](forge-preset-import.md),
-[Forge preset browser and bank](forge-preset-browser.md)). `-R` is an unanchored regex, so `-R forge_fx` runs `forge_fxModulation`
+One binary, one file per area, one CTest case per area: 23 areas as of 2026-10-25, `guide` the newest
+(`forge_test_areas` in `CMakeLists.txt`; [Forge note guide](forge-note-guide.md)). `-R` is an unanchored regex, so `-R forge_fx` runs `forge_fxModulation`
 too; `-R '^forge_fx$'` runs the one.
 
 ```powershell

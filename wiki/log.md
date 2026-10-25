@@ -1258,3 +1258,14 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/headless-ui-snapshots.md (`RHINO_RETURN_TRACKS_SNAPSHOT` now shows the pinned block and Main's card)
 - updated: pages/writing-rhino-tests.md (rule 15: the shared view is 354 px; rule 23: panels grow by the pinned block, a lane under it is covered, AutomationLanes.inc's panel, the stale index in TrackManagement.inc)
 - updated: index.md (summaries of Return tracks and sends, the return decision, Arrangement view, The main track, Track and clip colours)
+
+## [2026-10-25] update | Forge's note guide opens from a door on the shelf; taller, wider keys with every C named (049dc53)
+- source: the user's request and commit 049dc53, checked against instruments/rhino-forge/ui/ForgeNoteGuide.h, ui/ForgeNoteGuidePanel.h, ui/ForgePlacement.h, ui/ForgeModule.h, ui/ForgeModules.h, src/ForgeEditorNoteGuide.cpp, src/ForgeEditorLayout.cpp, src/ForgeEditorPages.cpp, tests/ForgeTestsGuide.cpp and tests/ForgeTestsDisplays.cpp
+- created: pages/forge-note-guide.md (the door, `Page::guide` on the arp's cells, the panel's pure layout and presses, the spelling of chords and degrees, the C labels, the 88 px keys and why not more, `forge_guide`, the GUIDE snapshot)
+- updated: pages/forge-editor.md (the note guide section now points at the new page; `Page::guide` beside `Page::arp`)
+- updated: pages/forge-arp-plate.md (the shelf is laid out from its right-hand end)
+- updated: pages/forge-arpeggiator.md (`coveredBy`; the arp, the guide and the expanded rack close one another)
+- updated: pages/build-and-test-forge.md (23 areas, `guide` the newest)
+- updated: pages/headless-ui-snapshots.md (the GUIDE page)
+- updated: pages/buffered-child-breaks-pixel-stability.md (summary; the two pixels follow the layout onto the LFO curve, a software canvas removes them, `chromeCacheSuite` paints on software)
+- updated: index.md (the new page; the gotcha's summary)

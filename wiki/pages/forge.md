@@ -15,8 +15,8 @@ Forge is the polyphonic synth under `instruments/rhino-forge/`. One JUCE `AudioP
 
 - **Signal row:** SUB and NOISE share one housing, then OSC A, OSC B, OSC C and FILTER (two filters, one shown at a time).
 - **Lower row:** GLOBAL, ENV (four envelopes, one shown at a time), LFO (six, one shown at a time) and eight MACROS.
-- **Keyboard:** A1 to C7 (`keyboardLowestNote` 33 to `keyboardHighestNote` 96, 38 white keys), starting against the wheels. The ARP plate stands between the keys and the note guide since 2026-10-13 ([Forge ARP plate, slots and waterfall](forge-arp-plate.md)).
-- **Tabs:** OSC, TABLE and MATRIX swap only the oscillator columns. MIX and FX take over the whole signal row. The arp's settings are an overlay (`Page::arp`), not a tab.
+- **Keyboard:** A0 to C6 as the keys are labelled, middle C (MIDI 60) being C3 (`keyboardLowestNote` 33 to `keyboardHighestNote` 96, 38 white keys, 88 px tall since 2026-10-25), starting against the wheels. The ARP plate stands between the keys and the note guide since 2026-10-13 ([Forge ARP plate, slots and waterfall](forge-arp-plate.md)); the note guide, at the shelf's right-hand end, is a door since 2026-10-25 ([Forge note guide](forge-note-guide.md)).
+- **Tabs:** OSC, TABLE and MATRIX swap only the oscillator columns. MIX and FX take over the whole signal row. The arp's settings (`Page::arp`) and the note guide (`Page::guide`) are overlays on ENV and LFO, not tabs.
 - **Themes:** Forge's gunmetal or Merli's fur, over the same layout, chosen per machine from a menu on the title plate (or a right-click on bare chassis) and applied at the next start ([Forge themes and Merli](forge-themes.md)).
 - **Presets:** the title plate names the loaded preset. LOAD and SAVE open a preset browser over the modules that lists the player's bank, factory set included, beside the machine's Serum 2 and Vital libraries ([Forge preset browser and bank](forge-preset-browser.md)). Serum 2 and Vital presets are converted as they open ([Forge preset import](forge-preset-import.md)).
 
@@ -44,7 +44,7 @@ Forge follows Serum 2's manual for structure: layout, routing and drag-to-modula
 | `core/` | The engine, header-only ([Forge engine (Core)](forge-engine.md)) |
 | `ui/` | The declarative layout and the visuals, all headers |
 | `src/` | The translation units for the Processor and the Editor |
-| `tests/` | One file per area, 22 areas (`forge_test_areas` in `CMakeLists.txt`) |
+| `tests/` | One file per area, 23 areas as of 2026-10-25 (`forge_test_areas` in `CMakeLists.txt`) |
 | `tables/` | Ten factory wavetables, `make-tables.py` that writes them, and the git-ignored `user/` where the panel's NEW and SAVE write ([Forge oscillators and wavetables](forge-oscillators.md)) |
 | `presets/` | `Factory/`, the 29 factory presets (18 at its root, eleven in `Factory/Drum n Bass/`), and `make-presets.py`, which writes them ([Forge presets and state](forge-presets-and-state.md), [Writing Forge factory presets](writing-forge-factory-presets.md)); also `aLiLBitDark.forgepreset`, a format 1 file that the current build refuses |
 

@@ -1269,3 +1269,11 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/headless-ui-snapshots.md (the GUIDE page)
 - updated: pages/buffered-child-breaks-pixel-stability.md (summary; the two pixels follow the layout onto the LFO curve, a software canvas removes them, `chromeCacheSuite` paints on software)
 - updated: index.md (the new page; the gotcha's summary)
+
+## [2026-10-25] update | Note guide pages checked against 049dc53
+- source: the main session's brief, checked against instruments/rhino-forge/ui/ForgeNoteGuide.h, ui/ForgeNoteGuidePanel.h, ui/ForgePlacement.h, ui/ForgeModules.h, src/ForgeEditorNoteGuide.cpp, src/ForgeEditorLayout.cpp, src/ForgeEditorPages.cpp, tests/ForgeTestsGuide.cpp, tests/ForgeTestTools.cpp, tests/ForgeTestsDisplays.cpp and CMakeLists.txt
+- updated: pages/forge-note-guide.md (the module is column 3, 18 wide; the door's `NO SCALE`; ROOT's OFF keeps the chord and scale)
+- updated: pages/forge-editor.md (the arp opens from the painted plate, the guide from its door, a real button; tabs close neither)
+- updated: pages/forge.md (keys labelled A0 to C6 with middle C as C3, not A1 to C7; 88 px; the guide's door and `Page::guide`; 23 test areas)
+- updated: pages/build-and-test-forge.md (MSB8029 under `Temp` is not harmless: an edited header went uncompiled until `--clean-first`)
+- updated: pages/proving-a-forge-change-changed-nothing.md (a control with only the suspect edit isolates a failure; `--clean-first` after editing a scratch tree)

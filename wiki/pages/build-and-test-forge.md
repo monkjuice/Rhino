@@ -69,8 +69,10 @@ from 24 sites, all in Forge's own code and none in JUCE).
   so one warning in a ui header prints about 40 times.
 - An up-to-date build prints nothing, and MSBuild leaves no per-project log here. To list every warning without
   touching the working tree or a running `Rhino Forge.exe`, run a full build of `HEAD` in a scratch worktree, as
-  [Proving a Forge change changed nothing](proving-a-forge-change-changed-nothing.md) describes. It takes a few minutes,
-  and the MSB8029 it reports only means the tree is under `Temp`.
+  [Proving a Forge change changed nothing](proving-a-forge-change-changed-nothing.md) describes. It takes a few minutes.
+  The MSB8029 it reports (intermediate or output directory under `Temp`) is harmless for a first build but not for an
+  edit afterwards: on 2026-10-25 a control build in a `Temp` worktree did not recompile after a header was edited there,
+  and only `--clean-first` picked the change up. Rebuild such a tree with `--clean-first` after any edit.
 - The causes found so far:
   - C4459: `rhino::forge::ui` declares colour tokens named `text`, `panel` and `line` (`ui/ForgeTheme.h` since
     2026-10-16), so a local or parameter with one of those names hides it. Name them `textArea`, `label`,

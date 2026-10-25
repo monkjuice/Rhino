@@ -20,7 +20,7 @@ and presets without being parameters. Redesigned on 2026-10-25 at the user's req
 `ui::NoteGuideDoor` (`ui/ForgeNoteGuidePanel.h`) is a button over the well of the plate at the right-hand end of the
 keyboard strip (`ui::noteGuideFace`, the plate reduced by 6, chamfer `noteGuideFaceCut`). It reads `GUIDE` with
 `SETTINGS` or `CLOSE` stamped beside it, then the chord symbol in the chord colour (or the root alone in the root
-colour, or `OFF`) and the scale under it in the scale colour (`CHORDS & SCALES` while it is off). A click runs `Editor::toggleGuideOpen`. Open, its face
+colour, or `OFF`) and the scale under it in the scale colour (`NO SCALE` without one, `CHORDS & SCALES` while the guide is off). A click runs `Editor::toggleGuideOpen`. Open, its face
 takes the ARP plate's faint lit outline in electric blue; under the pointer, a fainter one. `Editor::applyPage` sets
 `setOpen(guideOpen)`, so every toggle path leaves the door telling the truth.
 
@@ -33,7 +33,7 @@ the most it can take: at 1180 x 820 the signal row must still hold the FX rack's
 
 ## The overlay
 
-A module declared with no rows, `noteGuide` ("NOTE GUIDE", row 1, columns 3 to 21, `only(Page::guide)`), on exactly
+A module declared with no rows, `noteGuide` ("NOTE GUIDE", row 1, column 3, 18 wide, `only(Page::guide)`), on exactly
 the cells the arp's panes take. `Page::guide` is the second page that is never a tab: `moduleShown` shows it while
 `guideOpen` and hides whatever `ui::coveredBy(module, Page::guide)` finds under it, the same rule the arp uses. The
 arp, the guide and the expanded FX rack close one another (`toggleArpOpen`, `toggleGuideOpen`, `toggleFxExpanded`).
@@ -52,7 +52,8 @@ The panel paints itself and hit-tests one pure layout, `ui::noteGuideLayout(area
   wears on the keys.
 
 A press goes through `applyNoteGuideHit`, which refuses a chord or scale with no root and the switch for a chord
-without a quality (both drawn greyed), as the old fields did. The panel then calls `onChange`, which saves and
+without a quality (both drawn greyed), as the old fields did. ROOT's `OFF` clears only the root: the chord and scale
+are kept for the next one (`guidePressSuite`). The panel then calls `onChange`, which saves and
 repaints the door, the panel and the keys. Nothing on it moves on its own, so it is not in `liveRegions()`.
 
 ## Spelling

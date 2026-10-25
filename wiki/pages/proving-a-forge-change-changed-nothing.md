@@ -4,7 +4,7 @@ type: guide
 summary: Hash --render audio and --snapshot PNGs against a worktree build of the old revision, and time intended changes by --profile medians.
 tags: [forge, testing, refactoring, performance]
 sources: []
-updated: 2026-10-22
+updated: 2026-10-25
 ---
 
 # Proving a Forge change changed nothing
@@ -38,6 +38,13 @@ bytes and identical PNGs of all five tabs ([Forge's engine splits into headers o
    each binary, then compare hashes (`Get-FileHash`). Any differing byte is a finding, not noise. First check the
    control: a build of the unchanged revision should reproduce the baseline byte for byte.
 4. Remove the worktree with `git worktree remove` when done.
+
+**To tell a failure of yours from one the change merely moved**, apply only the suspect edit to the control worktree and
+run the failing area there. On 2026-10-25 the committed tree with only `keyboardHeight` set to 88 failed `forge_theme`
+and the `chromeCacheSuite` check as the whole note-guide change did, which put the fault in Direct2D rather than in the
+change ([A buffered child broke Forge's byte-identical paint](buffered-child-breaks-pixel-stability.md)). A scratch tree
+under `Temp` draws MSB8029, and there MSBuild did not recompile after a header was edited in the worktree: rebuild with
+`cmake --build ... --clean-first` after any edit to it.
 
 **Run both binaries from the same kind of location**: both in build trees, or both copied aside. Forge finds its
 `tables/` folder by walking up from the executable, so a `RhinoForgeTests.exe` copied out of its build tree finds none
@@ -78,3 +85,4 @@ an editor walked around the panel and requires it to match a fresh editor's rend
 - [Forge's panel repaints whole at 24 Hz](forge-panel-repaint-cost.md)
 - [Seeing the UI without taking the screen](headless-ui-snapshots.md)
 - [Forge engine (Core)](forge-engine.md)
+- [A buffered child broke Forge's byte-identical paint](buffered-child-breaks-pixel-stability.md)

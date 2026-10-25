@@ -58,6 +58,9 @@ extern const juce::Identifier trackGroupCollapsedID;
 // A return track, and the engine's aux bus it returns: the bus every track's
 // send to it names. Absent on every other track. SessionReturns.cpp.
 extern const juce::Identifier trackReturnBusID;
+// The main row's card colour, on the edit, since the main row is no track.
+// Absent on a document written before it had a card, which opening fills.
+extern const juce::Identifier mainColourID;
 // Only the migration reads these: they describe the group table written before
 // a group was a bus track of its own.
 extern const juce::Identifier legacyTrackGroupID;

@@ -106,7 +106,7 @@
                 const auto drawnTrack = 1;
                 require(drawn.setTrackLaneHeight(drawnTrack, 150.0f).wasOk(), "Its row is given room for two lanes");
                 Arrangement drawnView(drawn);
-                drawnView.setSize(1200, 400);
+                drawnView.setSize(1200, 508);
                 drawnView.sync();
                 drawnView.resized();
                 // The thumbnail is filled in on a worker, so the picture is

@@ -56,6 +56,8 @@ Arrangement::Arrangement(Session& s)
         addAndMakeVisible(control);
     laneHeaders.setInterceptsMouseClicks(false, true);
     addAndMakeVisible(laneHeaders);
+    returnHeaders.setInterceptsMouseClicks(false, true);
+    addAndMakeVisible(returnHeaders);
     configureNameEditor();
     sync();
 }
@@ -109,9 +111,6 @@ void Arrangement::resized()
     snap.setBounds(86, 5, 34, 26);
     automationButton.setBounds(124, 5, 34, 26);
     toolbarGrid.setBounds(164, 5, 92, 26);
-    // Above the main row rather than inside it.
-    gridControl.setBounds(getWidth() - 104, static_cast<int>(masterLane().getY()) - 26, 76, 20);
-    updateGridControl();
     syncTrackControls();
     // Lane height follows the component height, so the row stack has to reflow
     // before anything is positioned against it. A track added since the last
@@ -120,18 +119,40 @@ void Arrangement::resized()
         buildRows();
     else
         layoutRows();
-    const auto lanesBottom = masterLane().getY();
+    // Above the lanes' foot rather than over the returns or the main row.
+    gridControl.setBounds(getWidth() - 104, static_cast<int>(returnsTop()) - 26, 76, 20);
+    updateGridControl();
+    // Two containers, one for the cards that scroll and one for the returns'
+    // pinned over the main row, each cropping what leaves it.
+    const auto pinnedTop = static_cast<int>(returnsTop());
     laneHeaders.setBounds(0, static_cast<int>(lanesTop), static_cast<int>(headerWidth),
-                          std::max(1, static_cast<int>(lanesBottom - lanesTop)));
+                          std::max(1, pinnedTop - static_cast<int>(lanesTop)));
+    returnHeaders.setBounds(0, pinnedTop, static_cast<int>(headerWidth),
+                            std::max(1, static_cast<int>(masterLane().getY()) - pinnedTop));
     for (int i = 0; i < session.trackCount() && i < static_cast<int>(mute.size()); ++i)
     {
         const auto row = lane(i);
         const auto index = static_cast<size_t>(i);
+        // A track's controls go in the container its row is drawn in, moved
+        // there when a track becomes a return or stops being one.
+        auto& container = headerFor(i);
+        for (auto* control : std::initializer_list<juce::Component*> {mute[index].get(), solo[index].get(),
+                                                                         arm[index].get(), trackInput[index].get(),
+                                                                         monitor[index].get(), volume[index].get(),
+                                                                         pan[index].get(), meters[index].get()})
+            if (control->getParentComponent() != &container)
+                container.addChildComponent(control);
+        if (index < sends.size())
+            for (auto& knob : sends[index])
+                if (knob->getParentComponent() != &container)
+                    container.addChildComponent(knob.get());
+        const auto areaTop = static_cast<float>(container.getY());
+        const auto areaBottom = static_cast<float>(container.getBottom());
         // Mute and solo sit on the name's line; the two faders share the line
         // under them at matching widths. A row dragged to its shortest gives up
         // the faders and keeps the buttons. Positions are inside the header
         // container, which crops whatever leaves the lanes.
-        const auto top = static_cast<int>(row.getY() - lanesTop) + cardControlsTop;
+        const auto top = static_cast<int>(row.getY() - areaTop) + cardControlsTop;
         // A card inside a group is pushed right, controls and all, so the step
         // in the left edge is unbroken down the whole group.
         const auto left = cardControlLeft + static_cast<int>(trackIndent(i));
@@ -148,7 +169,7 @@ void Arrangement::resized()
         const auto monitorVisible = row.getHeight() >= monitorLaneHeight && takesInput;
         // A row folded into a collapsed group is laid out at no height, so its
         // controls go with it rather than piling up under the band above.
-        const auto visible = row.getHeight() > 1.0f && row.getBottom() > lanesTop && row.getY() < lanesBottom;
+        const auto visible = row.getHeight() > 1.0f && row.getBottom() > areaTop && row.getY() < areaBottom;
         mute[index]->setVisible(visible);
         solo[index]->setVisible(visible);
         // A group bus records nothing of its own, so it is given no dot to
@@ -196,13 +217,13 @@ void Arrangement::resized()
         }
     }
     {
-        // Everything the main row carries sits on its single line: the meter
-        // where every card's starts, the MAIN label where their controls do,
-        // and its two faders after it.
+        // The main row is a card too, on its single line: the meter where
+        // every card's starts and its two faders over a track's two, with its
+        // name on its colour in the card's other column.
         const auto master = masterLane();
         const auto controlsY = static_cast<int>(master.getY()) + 5;
-        masterVolume.setBounds(cardControlLeft + 46, controlsY, 62, 16);
-        masterPan.setBounds(cardControlLeft + 112, controlsY, 62, 16);
+        masterVolume.setBounds(cardControlLeft, controlsY, cardControlWidth, 16);
+        masterPan.setBounds(cardControlLeft + cardControlWidth + cardControlGap, controlsY, cardControlWidth, 16);
         masterMeter.setBounds(cardMeterInset, controlsY, LevelMeter::width,
                               std::max(0, static_cast<int>(master.getBottom()) - 5 - controlsY));
     }
@@ -215,10 +236,16 @@ void Arrangement::resized()
     scroll.setBounds(static_cast<int>(headerWidth),
                      foot - static_cast<int>(scrollBarHeight + trackDividerThickness),
                      getWidth() - static_cast<int>(headerWidth) - 14, static_cast<int>(scrollBarHeight));
+    // The vertical one scrolls the lanes, so it stops where the returns start.
     trackScrollBar.setBounds(getWidth() - 12, static_cast<int>(lanesTop), 12,
-                             std::max(1, foot - static_cast<int>(lanesTop + footHeight)));
+                             std::max(1, pinnedTop - static_cast<int>(lanesTop)));
     updateScroll();
     updatePlayhead();
+}
+
+juce::Component& Arrangement::headerFor(int track)
+{
+    return isPinnedTrack(track) ? returnHeaders : laneHeaders;
 }
 
 void Arrangement::fit()

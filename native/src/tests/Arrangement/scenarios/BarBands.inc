@@ -5,7 +5,7 @@
         // four-beat columns in 4/4.
         view.sync();
         {
-            view.setSize(1000, 246);
+            view.setSize(1000, 354);
             // A lane with nothing on it: a clip is drawn over the wash, so
             // sampling a track that carries one measures the clip. The
             // starter stack's second lane is empty and, unlike a track added

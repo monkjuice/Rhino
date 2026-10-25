@@ -33,7 +33,7 @@ void Arrangement::paintClipPiece(juce::Graphics& g, const ClipView& clip, const 
     const auto paintTrack = piece.track;
     const auto position = piece.position;
     const auto box = boundsOf(position, paintTrack);
-    const auto visible = box.getIntersection(lane(paintTrack))
+    const auto visible = box.getIntersection(laneOrSlot(paintTrack))
         .getIntersection({headerWidth, lanesTop, static_cast<float>(getWidth()) - 14.0f - headerWidth, laneContentHeight()});
     if (visible.isEmpty() || !visible.intersects(dirty)) return;
     juce::Graphics::ScopedSaveState scope(g);

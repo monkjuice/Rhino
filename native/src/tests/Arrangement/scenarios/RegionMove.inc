@@ -16,9 +16,13 @@
             // The region scenario's autoscroll test leaves the row stack
             // scrolled up, with the first lane's lower row a pixel above the
             // lanes' top edge, where a press is not a lane press at all. The
-            // view here is 246 px tall, two lanes of 62 px, so the stack
-            // scrolls; it is put back to the top and restored at the end.
+            // stack is put back to the top and restored at the end. The drags
+            // below reach the fourth lane by its own coordinates, so the panel
+            // is made tall enough to show all four over the pinned returns,
+            // which would otherwise answer for a pointer there.
             const auto previousTrackScroll = view.trackScroll;
+            const auto previousHeight = view.getHeight();
+            view.setSize(view.getWidth(), previousHeight + 300);
             view.trackScroll = 0.0;
             view.updateScroll();
             view.resized();
@@ -350,6 +354,7 @@
             view.clearTimeSelection();
             view.viewStart = previousViewStart;
             view.viewSpan = previousViewSpan;
+            view.setSize(view.getWidth(), previousHeight);
             view.trackScroll = previousTrackScroll;
             view.sync();
             view.resized();

@@ -22,9 +22,11 @@ void Arrangement::setTimeSelection(double start, double end, int firstTrack, int
 {
     timeSelection.start = std::max(0.0, std::min(start, end));
     timeSelection.end = std::max(0.0, std::max(start, end));
-    timeSelection.firstTrack = juce::jlimit(0, std::max(0, session.trackCount() - 1), std::min(firstTrack, lastTrack));
-    timeSelection.lastTrack = juce::jlimit(timeSelection.firstTrack, std::max(0, session.trackCount() - 1),
-                                           std::max(firstTrack, lastTrack));
+    // The lanes' rows only: the returns hold no clips, so a span stops at the
+    // last lane above them.
+    const auto lastLane = std::max(0, firstPinnedTrack() - 1);
+    timeSelection.firstTrack = juce::jlimit(0, lastLane, std::min(firstTrack, lastTrack));
+    timeSelection.lastTrack = juce::jlimit(timeSelection.firstTrack, lastLane, std::max(firstTrack, lastTrack));
     timeSelection.active = true;
 }
 
@@ -122,7 +124,7 @@ bool Arrangement::previewRowRefused(int row) const
 
 bool Arrangement::beginRegionGesture(const juce::MouseEvent& event)
 {
-    if (event.position.x < headerWidth || event.position.y < lanesTop || event.position.y >= masterLane().getY())
+    if (event.position.x < headerWidth || event.position.y < lanesTop || event.position.y >= returnsTop())
         return false;
     const auto track = trackAt(event.position.y);
     if (track < 0)
@@ -175,7 +177,7 @@ void Arrangement::dragRegionGesture(const juce::MouseEvent& event)
     const auto time = std::max(0.0, timeAt(event.position.x));
     auto track = trackAt(event.position.y);
     if (track < 0)
-        track = event.position.y < lanesTop ? 0 : std::max(0, session.trackCount() - 1);
+        track = event.position.y < lanesTop ? 0 : std::max(0, firstPinnedTrack() - 1);
     const auto bypass = event.mods.isAltDown();
     // Until the pointer has actually travelled, the gesture is still the click
     // that started it and leaves a line rather than a one-cell span - unless
@@ -298,7 +300,8 @@ void Arrangement::paintTimeSelection(juce::Graphics& g)
     auto measured = false;
     for (int track = shown.firstTrack; track <= shown.lastTrack; ++track)
     {
-        const auto row = lane(track);
+        // Carried past the last lane, a row is drawn where its lane will be.
+        const auto row = laneOrSlot(track);
         if (row.getHeight() <= 0.0f) continue;
         top = measured ? std::min(top, row.getY()) : row.getY();
         bottom = measured ? std::max(bottom, row.getBottom()) : row.getBottom();

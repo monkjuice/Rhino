@@ -248,104 +248,111 @@ void Arrangement::paintTrackCards(juce::Graphics& g)
     // the cards are only worth drawing when the repaint reaches them.
     const auto dirty = repaintArea(g);
     const auto reachesCards = dirty.getX() < headerWidth;
-    juce::Graphics::ScopedSaveState scope(g);
-    g.reduceClipRegion(juce::Rectangle<int>(0, static_cast<int>(lanesTop), getWidth() - 14,
-                                            std::max(1, static_cast<int>(laneContentHeight()))));
-    for (int index = 0; index < static_cast<int>(rows.size()); ++index)
+    // The lanes that scroll, then the returns pinned over the main row, each
+    // clipped to its own area so a row cannot draw across the other.
+    for (const auto pinned : {false, true})
     {
-        const auto row = rowBounds(index);
-        // A row folded into a collapsed group is laid out at no height, so it
-        // draws nothing here and the band above it speaks for it.
-        if (row.getHeight() <= 0.0f) continue;
-        if (row.getBottom() < lanesTop || row.getY() > lanesTop + laneContentHeight()) continue;
-        if (row.getBottom() < dirty.getY() || row.getY() > dirty.getBottom()) continue;
-        if (rows[static_cast<size_t>(index)].automation >= 0)
+        const auto area = rowArea(pinned);
+        if (area.isEmpty()) continue;
+        juce::Graphics::ScopedSaveState scope(g);
+        g.reduceClipRegion(area.getSmallestIntegerContainer());
+        for (int index = 0; index < static_cast<int>(rows.size()); ++index)
         {
-            paintGhostRow(g, index);
-            continue;
-        }
-        const auto track = rows[static_cast<size_t>(index)].track;
-        // Two grounds, not one: the card keeps the chrome's own shade and the
-        // lane is the light surface the grid is ruled into. They were a single
-        // fill while they were a single colour, and a card lit to the lane's
-        // new shade would have been the brightest block in the window.
-        // A selected track is lit along its whole row, its lane under the bar
-        // bands, the grid and the clips, which are drawn over it, and its card
-        // below. Every track in the selection is, whatever the last click was.
-        const auto selected = isTrackSelected(track);
-        const auto laneGround = row.withX(headerWidth)
-                                   .withWidth(std::max(0.0f, static_cast<float>(getWidth()) - 14.0f - headerWidth));
-        g.setColour(palette::arrangement);
-        g.fillRect(laneGround);
-        if (selected)
-        {
-            g.setColour(palette::selectedRowWash);
+            if (rows[static_cast<size_t>(index)].pinned != pinned) continue;
+            const auto row = rowBounds(index);
+            // A row folded into a collapsed group is laid out at no height, so it
+            // draws nothing here and the band above it speaks for it.
+            if (row.getHeight() <= 0.0f) continue;
+            if (row.getBottom() < area.getY() || row.getY() > area.getBottom()) continue;
+            if (row.getBottom() < dirty.getY() || row.getY() > dirty.getBottom()) continue;
+            if (rows[static_cast<size_t>(index)].automation >= 0)
+            {
+                paintGhostRow(g, index);
+                continue;
+            }
+            const auto track = rows[static_cast<size_t>(index)].track;
+            // Two grounds, not one: the card keeps the chrome's own shade and the
+            // lane is the light surface the grid is ruled into. They were a single
+            // fill while they were a single colour, and a card lit to the lane's
+            // new shade would have been the brightest block in the window.
+            // A selected track is lit along its whole row, its lane under the bar
+            // bands, the grid and the clips, which are drawn over it, and its card
+            // below. Every track in the selection is, whatever the last click was.
+            const auto selected = isTrackSelected(track);
+            const auto laneGround = row.withX(headerWidth)
+                                       .withWidth(std::max(0.0f, static_cast<float>(getWidth()) - 14.0f - headerWidth));
+            g.setColour(palette::arrangement);
             g.fillRect(laneGround);
-        }
-        if (!reachesCards)
-            continue;
-        g.setColour(palette::trackCard);
-        g.fillRect(row.withX(0.0f).withWidth(headerWidth));
-        // The card is two columns with the panel grey between them: the
-        // controls keep the panel background, and the name sits on the track
-        // colour. The clips on the track keep whatever colours they were given.
-        // A card inside a group starts at its indent instead of at the edge.
-        const auto indent = trackIndent(track);
-        const auto nameColumn = juce::Rectangle<float>(indent + cardControlsWidth + cardDividerWidth, row.getY(),
-                                                       headerWidth - indent - cardControlsWidth - cardDividerWidth,
-                                                       row.getHeight());
-        const auto colour = factsFor(track).colour;
-        const auto cardColour = colour.isTransparent() ? palette::control.brighter(0.18f) : colour;
-        g.setColour(cardColour);
-        g.fillRect(nameColumn);
-        g.setColour(palette::border);
-        g.fillRect(indent + cardControlsWidth, row.getY(), cardDividerWidth, row.getHeight());
-        paintGroupGutter(g, track, row);
-        if (isTrackArmed(track))
-        {
-            // A card too short to show its buttons still has to say it is
-            // armed, so the edge of the header carries it too.
-            g.setColour(palette::recordAccent.darker(0.2f));
-            g.fillRect(row.withX(headerWidth - 3.0f).withWidth(3.0f));
-        }
-        if (selected)
-        {
-            g.setColour(palette::selectedRowWash);
+            if (selected)
+            {
+                g.setColour(palette::selectedRowWash);
+                g.fillRect(laneGround);
+            }
+            if (!reachesCards)
+                continue;
+            g.setColour(palette::trackCard);
             g.fillRect(row.withX(0.0f).withWidth(headerWidth));
+            // The card is two columns with the panel grey between them: the
+            // controls keep the panel background, and the name sits on the track
+            // colour. The clips on the track keep whatever colours they were given.
+            // A card inside a group starts at its indent instead of at the edge.
+            const auto indent = trackIndent(track);
+            const auto nameColumn = juce::Rectangle<float>(indent + cardControlsWidth + cardDividerWidth, row.getY(),
+                                                           headerWidth - indent - cardControlsWidth - cardDividerWidth,
+                                                           row.getHeight());
+            const auto colour = factsFor(track).colour;
+            const auto cardColour = colour.isTransparent() ? palette::control.brighter(0.18f) : colour;
+            g.setColour(cardColour);
+            g.fillRect(nameColumn);
+            g.setColour(palette::border);
+            g.fillRect(indent + cardControlsWidth, row.getY(), cardDividerWidth, row.getHeight());
+            paintGroupGutter(g, track, row);
+            if (isTrackArmed(track))
+            {
+                // A card too short to show its buttons still has to say it is
+                // armed, so the edge of the header carries it too.
+                g.setColour(palette::recordAccent.darker(0.2f));
+                g.fillRect(row.withX(headerWidth - 3.0f).withWidth(3.0f));
+            }
+            if (selected)
+            {
+                g.setColour(palette::selectedRowWash);
+                g.fillRect(row.withX(0.0f).withWidth(headerWidth));
+            }
+            // The name holds the top line of the card whatever height the row is
+            // dragged to, level with the two buttons beside it. Dark text on a
+            // light card, light on a dark one, so every colour stays readable. A
+            // card being renamed gives that line to the editor instead.
+            paintDisclosure(g, track, cardColour.contrasting(0.8f));
+            paintAutomationFold(g, track, cardColour.contrasting(0.8f));
+            g.setColour(cardColour.contrasting(0.8f));
+            g.setFont(uiFontBold(11.0f));
+            if (renamingTrack != track)
+            {
+                // One pass of the SemiBold cut, exactly as every other label in the
+                // app is drawn. It used to be struck twice to make the name heavier
+                // than the card's other text, and that is what made it the one
+                // string in the interface that looked soft: a second composite over
+                // the same glyphs takes a half-covered edge pixel from 50% to 75%,
+                // so the antialiasing fringe darkens into the stem and the whole
+                // line reads as blurred rather than bold. Weight, if the name needs
+                // more of it, comes from the em size - which is why the name is set
+                // an em above the card's other text rather than struck harder. Whole
+                // pixels per em only: a half step lands the stems between pixel
+                // columns, which is the same blur by another route.
+                // Elided rather than shrunk to fit: a scaled-down line lands on a
+                // fractional em again, which is the blur this is avoiding.
+                const auto nameArea = trackNameBounds(track);
+                // A return is called by its letter, the way its knobs on the
+                // other cards are; every other track by its place in the stack.
+                const auto& facts = factsFor(track);
+                drawSnappedText(g, (facts.returnLetter.isNotEmpty() ? facts.returnLetter
+                                                                     : juce::String(track + 1).paddedLeft('0', 2))
+                                       + "  " + facts.name,
+                                nameArea, juce::Justification::centredLeft, true);
+            }
+            g.setFont(uiFont(10.0f));
         }
-        // The name holds the top line of the card whatever height the row is
-        // dragged to, level with the two buttons beside it. Dark text on a
-        // light card, light on a dark one, so every colour stays readable. A
-        // card being renamed gives that line to the editor instead.
-        paintDisclosure(g, track, cardColour.contrasting(0.8f));
-        paintAutomationFold(g, track, cardColour.contrasting(0.8f));
-        g.setColour(cardColour.contrasting(0.8f));
-        g.setFont(uiFontBold(11.0f));
-        if (renamingTrack != track)
-        {
-            // One pass of the SemiBold cut, exactly as every other label in the
-            // app is drawn. It used to be struck twice to make the name heavier
-            // than the card's other text, and that is what made it the one
-            // string in the interface that looked soft: a second composite over
-            // the same glyphs takes a half-covered edge pixel from 50% to 75%,
-            // so the antialiasing fringe darkens into the stem and the whole
-            // line reads as blurred rather than bold. Weight, if the name needs
-            // more of it, comes from the em size - which is why the name is set
-            // an em above the card's other text rather than struck harder. Whole
-            // pixels per em only: a half step lands the stems between pixel
-            // columns, which is the same blur by another route.
-            // Elided rather than shrunk to fit: a scaled-down line lands on a
-            // fractional em again, which is the blur this is avoiding.
-            const auto nameArea = trackNameBounds(track);
-            // A return is called by its letter, the way its knobs on the
-            // other cards are; every other track by its place in the stack.
-            const auto& facts = factsFor(track);
-            drawSnappedText(g, (facts.returnLetter.isNotEmpty() ? facts.returnLetter
-                                                                 : juce::String(track + 1).paddedLeft('0', 2))
-                                   + "  " + facts.name,
-                            nameArea, juce::Justification::centredLeft, true);
-        }
-        g.setFont(uiFont(10.0f));
     }
 }
 
@@ -376,16 +383,21 @@ void Arrangement::paint(juce::Graphics& g)
 
     // Every row is bounded, header and timeline alike, so a track reads as one
     // band across the whole panel rather than as a card beside loose lanes.
+    for (const auto pinned : {false, true})
     {
-        const auto laneBottom = masterLane().getY();
+        const auto area = rowArea(pinned);
+        if (area.isEmpty()) continue;
         juce::Graphics::ScopedSaveState scope(g);
-        g.reduceClipRegion(juce::Rectangle<int>(0, static_cast<int>(lanesTop), getWidth() - 14,
-                                                std::max(1, static_cast<int>(laneContentHeight()))));
+        g.reduceClipRegion(area.getSmallestIntegerContainer());
         for (int index = 0; index < static_cast<int>(rows.size()); ++index)
         {
+            if (rows[static_cast<size_t>(index)].pinned != pinned) continue;
             const auto row = rowBounds(index);
             if (row.getHeight() <= 0.0f) continue;
-            if (row.getBottom() < lanesTop || row.getY() > laneBottom) continue;
+            if (row.getBottom() < area.getY() || row.getY() > area.getBottom()) continue;
+            // The pinned block's last row is closed off by the main row's own
+            // rule, which a second one on top of it would double.
+            if (pinned && row.getBottom() >= area.getBottom() - 0.5f) continue;
             const auto ownRow = rows[static_cast<size_t>(index)].automation < 0;
             g.setColour(ownRow ? palette::barGrid : palette::beatGrid);
             // Two pixels rather than one: at a single pixel the divisions read
@@ -394,9 +406,9 @@ void Arrangement::paint(juce::Graphics& g)
             g.fillRect(0.0f, row.getBottom() - trackDividerThickness,
                        static_cast<float>(getWidth()) - 14.0f, trackDividerThickness);
         }
-        g.setColour(palette::barGrid);
-        g.fillRect(headerWidth - trackDividerThickness, lanesTop, trackDividerThickness, laneBottom - lanesTop);
     }
+    g.setColour(palette::barGrid);
+    g.fillRect(headerWidth - trackDividerThickness, lanesTop, trackDividerThickness, masterLane().getY() - lanesTop);
 
     // The master row is pinned below the lanes. It takes no clips, so its lane
     // is empty; only its header carries anything.
@@ -420,8 +432,17 @@ void Arrangement::paint(juce::Graphics& g)
                                                band.getHeight()};
         g.setColour(palette::arrangement);
         g.fillRect(mainLane);
-        g.setColour(palette::sideSurface);
+        // A card as a track's is: the controls on the card's own ground, then
+        // the name on the main row's colour.
+        g.setColour(palette::trackCard);
         g.fillRect(band.withWidth(headerWidth));
+        const auto cardColour = mainColour.isTransparent() ? palette::control.brighter(0.18f) : mainColour;
+        const auto nameColumn = band.withX(cardControlsWidth + cardDividerWidth)
+                                    .withWidth(headerWidth - cardControlsWidth - cardDividerWidth);
+        g.setColour(cardColour);
+        g.fillRect(nameColumn);
+        g.setColour(palette::border);
+        g.fillRect(cardControlsWidth, band.getY(), cardDividerWidth, band.getHeight());
         // Selected, it is lit along its row as a track is.
         if (isMasterSelected())
         {
@@ -435,10 +456,22 @@ void Arrangement::paint(juce::Graphics& g)
         // foot and is drawn with it.
         g.setColour(palette::barGrid);
         g.fillRect(band.withHeight(trackDividerThickness));
-        g.setColour(palette::text);
-        g.setFont(uiFontBold(9.0f));
-        drawSnappedText(g, "MAIN", {cardControlLeft, static_cast<int>(master.getY()) + 5, 44, 16});
+        // The rule between card and lane, as every row above has.
+        g.fillRect(headerWidth - trackDividerThickness, band.getY(), trackDividerThickness, band.getHeight());
+        // Where a track's name starts, past the room its fold arrow takes.
+        const auto nameLeft = nameColumn.getX() + disclosureLeft + disclosureSize + disclosureGap;
+        g.setColour(cardColour.contrasting(0.8f));
+        g.setFont(uiFontBold(11.0f));
+        drawSnappedText(g, "Main",
+                        juce::Rectangle<float>(nameLeft, band.getY() + 5.0f, headerWidth - 6.0f - nameLeft, 18.0f)
+                            .toNearestInt(),
+                        juce::Justification::centredLeft, true);
     }
+    // The pinned block opens with a heavier rule than the rows' - over the
+    // first return, or over the main row when there is none - so where the
+    // lanes that scroll stop reads at a glance.
+    g.setColour(palette::barGrid);
+    g.fillRect(0.0f, returnsTop(), static_cast<float>(getWidth()), pinnedRuleThickness);
 
     const auto firstBeat = session.secondsToBeats(viewStart);
     const auto lastBeat = session.secondsToBeats(viewStart + viewSpan);
@@ -511,16 +544,18 @@ void Arrangement::paint(juce::Graphics& g)
     paintClips(g);
     // Curves sit on top of the clips they modulate, and are clipped to the
     // scrolling lane area so a scrolled-off row cannot draw into the ruler.
+    for (const auto pinned : {false, true})
     {
+        const auto area = rowArea(pinned).withLeft(headerWidth);
+        if (area.isEmpty()) continue;
         juce::Graphics::ScopedSaveState scope(g);
-        g.reduceClipRegion(juce::Rectangle<int>(static_cast<int>(headerWidth), static_cast<int>(lanesTop),
-                                                std::max(1, getWidth() - static_cast<int>(headerWidth) - 14),
-                                                std::max(1, static_cast<int>(laneContentHeight()))));
+        g.reduceClipRegion(area.getSmallestIntegerContainer());
         for (int index = 0; index < static_cast<int>(rows.size()); ++index)
         {
+            if (rows[static_cast<size_t>(index)].pinned != pinned) continue;
             const auto row = rowBounds(index);
             if (row.getHeight() <= 0.0f) continue;
-            if (row.getBottom() < lanesTop || row.getY() > lanesTop + laneContentHeight()) continue;
+            if (row.getBottom() < area.getY() || row.getY() > area.getBottom()) continue;
             if (row.getBottom() < dirty.getY() || row.getY() > dirty.getBottom()) continue;
             paintAutomationRow(g, index);
         }

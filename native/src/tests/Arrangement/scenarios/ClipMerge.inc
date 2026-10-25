@@ -138,7 +138,7 @@
             require(keyed.importAudioAt(source.getFile(), keyedTrack, 1.0).wasOk(), "A clip flush against it");
             const auto rightID = lane->getClips().getLast()->itemID;
             Arrangement keyedView(keyed);
-            keyedView.setSize(1200, 400);
+            keyedView.setSize(1200, 508);
             keyedView.sync();
             keyedView.fit();
             keyedView.setSelection({leftID, rightID}, leftID);

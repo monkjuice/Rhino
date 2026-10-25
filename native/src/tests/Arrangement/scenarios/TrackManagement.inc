@@ -32,7 +32,8 @@
         // row, its body carries the track, and a right-click colours it. The
         // panel is given a workable height first, because every one of these
         // reads a lane position back.
-        view.setSize(1000, 620);
+        // 108 px of it are the starter's two returns, pinned over the main row.
+        view.setSize(1000, 728);
         view.sync();
         const auto cardEvent = [&view](juce::Point<float> down, juce::Point<float> point, bool dragged,
                                        juce::ModifierKeys mods = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier))
@@ -159,8 +160,14 @@
         require(session.trackColour(0) != colour, "and the one this check picks is not the one it was given");
         require(session.setTrackColour(0, colour).wasOk(), "A card takes a colour from the palette");
         require(session.trackColour(0) == colour, "The card keeps the colour it was given");
-        require(session.setTrackColour(session.masterTrackIndex(), colour).failed(),
-                "The main row takes no colour");
+        {
+            // The main row is a card too, with a colour of its own.
+            const auto mainBefore = session.trackColour(session.masterTrackIndex());
+            require(session.setTrackColour(session.masterTrackIndex(), colour).wasOk()
+                        && session.trackColour(session.masterTrackIndex()) == colour,
+                    "The main row takes a colour");
+            require(session.setTrackColour(session.masterTrackIndex(), mainBefore).wasOk(), "and gives it back");
+        }
         {
             // Both settings live on the track, so a saved document carries them
             // without the edit being swapped out from under the rest of the run.
@@ -216,7 +223,9 @@
                         && view.mute[card]->getY() == view.solo[card]->getY()
                         && view.solo[card]->getY() == view.arm[card]->getY(),
                     "and all three share the line above the faders");
-            require(session.removeAudioTrack(before).wasOk(), "The added card can be removed again");
+            require(session.removeAudioTrack(static_cast<int>(card)).wasOk() && session.trackCount() == before
+                        && session.returnTracks().size() == 2,
+                    "The added card can be removed again");
             view.sync();
         }
 
@@ -238,7 +247,9 @@
                     && view.masterVolume.getBottom() <= view.masterLane().getBottom()
                     && view.masterPan.getBottom() <= view.masterLane().getBottom(),
                 "The main level and pan sit on that line beside its name");
-        require(view.masterVolume.getX() >= 50, "The main controls start clear of the MAIN label");
+        require(view.masterVolume.getX() == Arrangement::cardControlLeft
+                    && view.masterPan.getRight() <= static_cast<int>(Arrangement::cardControlsWidth),
+                "The main row is a card: its faders over a track's, its name in the card's other column");
 
         // The main row is pinned at the bottom, so it is dragged from the top
         // edge rather than the bottom one every other row uses.
@@ -304,9 +315,10 @@
                     "The main row is ruled off from the time ruler under it");
             require(shot.getPixelAt(160, rule + 6) == palette::appBackground,
                     "And under that rule is the foot, not the lane that ran past the stack");
-            // Clear of the MAIN label and both of its faders, which is the only
-            // part of the row's header column that is bare fill.
-            require(shot.getPixelAt(210, static_cast<int>(view.masterLane().getY()) + 10) == palette::sideSurface,
+            // Past the name on the main row's card, which wears its colour.
+            require(shot.getPixelAt(static_cast<int>(Arrangement::headerWidth) - 5,
+                                    static_cast<int>(view.masterLane().getY()) + 10)
+                        == session.trackColour(session.masterTrackIndex()),
                     "And so is the row itself");
             require(shot.getPixelAt(160, view.getHeight() - 90) == palette::appBackground,
                     "Below the main row the panel leaves the covered strip to the shell");
@@ -441,10 +453,10 @@
             view.setSize(view.getWidth(), 960);
             view.sync();
             view.resized();
-            const auto lastLaneBottom = view.lane(tracksBeforeDrop - 1).getBottom();
-            require(lastLaneBottom < view.masterLane().getY(),
-                    "There is bare lane strip under the last track to drop into");
-            const auto belowLanes = (lastLaneBottom + view.masterLane().getY()) * 0.5f;
+            // Under the last lane and above the returns pinned over the main row.
+            const auto lastLaneBottom = view.lane(newLane - 1).getBottom();
+            require(lastLaneBottom < view.returnsTop(), "There is bare lane strip under the last track to drop into");
+            const auto belowLanes = (lastLaneBottom + view.returnsTop()) * 0.5f;
             drag({view.xFor(0.2), clipRowY(1)}, {view.xFor(0.5), belowLanes});
             require(session.trackCount() == tracksBeforeDrop + 1,
                     "Dragging an audio clip below the last lane creates a new track");

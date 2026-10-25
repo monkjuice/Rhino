@@ -211,6 +211,8 @@ void Session::buildStarterEdit()
     // either until it is turned up.
     addStarterReturns();
     returnSoloHeard = false;
+    // The main row's card, coloured as a new track is.
+    edit->state.setProperty(mainColourID, pickTrackColour().toString(), nullptr);
     refreshLoop();
     edit->getUndoManager().clearUndoHistory();
     edit->resetChangedStatus();
@@ -500,6 +502,10 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
     // The returns' isolation follows a solo saved on one of them.
     returnSoloHeard = false;
     followReturnSolo(false);
+    // A document from before the main row had a card is given a colour for
+    // it, as a new one is; written outside the history it is opened with.
+    if (!edit->state.hasProperty(mainColourID))
+        edit->state.setProperty(mainColourID, pickTrackColour().toString(), nullptr);
     // The decks the document saved come back empty and stale; the poll
     // loads them again.
     readDjState();

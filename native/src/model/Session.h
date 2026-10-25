@@ -581,7 +581,8 @@ public:
     juce::Result setTrackAutomationFolded(int track, bool folded);
     juce::Result setTrackName(int track, const juce::String& name);
     // The card's own colour, and the colour its clips take unless one of them
-    // has been given a colour of its own.
+    // has been given a colour of its own. The main row has a card too, and
+    // a colour of its own on the document, picked as a track's is.
     juce::Colour trackColour(int track) const;
     juce::Result setTrackColour(int track, juce::Colour);
     static const std::vector<juce::Colour>& trackColourPalette();

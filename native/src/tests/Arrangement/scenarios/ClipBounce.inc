@@ -161,7 +161,7 @@
             require(keyed.importAudio(source.getFile()).wasOk(), "A file imports for the shortcut fixture");
             const auto clipID = te::getAudioTracks(*keyed.edit)[1]->getClips().getFirst()->itemID;
             Arrangement keyedView(keyed);
-            keyedView.setSize(1200, 400);
+            keyedView.setSize(1200, 508);
             keyedView.sync();
             keyedView.fit();
             keyedView.setSelection({clipID}, clipID);
@@ -254,7 +254,7 @@
             // Through the arrangement: a span dragged out over the lanes, with
             // no clip picked by its header, is what Ctrl+B bounces.
             Arrangement spanView(spanned);
-            spanView.setSize(1200, 400);
+            spanView.setSize(1200, 508);
             spanView.sync();
             spanView.fit();
             spanView.setTimeSelection(0.25, 0.75, lane, lane);

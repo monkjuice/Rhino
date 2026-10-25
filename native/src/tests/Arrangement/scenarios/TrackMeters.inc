@@ -138,7 +138,9 @@
                             "at the start of the card, pushed in with the rest of it by a group");
                     require(meter.getRight() < panel->mute[index]->getX() && meter.getRight() < panel->volume[index]->getX(),
                             "and ahead of the buttons and the faders");
-                    const auto top = static_cast<float>(meter.getY()) + Arrangement::lanesTop;
+                    // In whichever container the card's controls are, the
+                    // lanes' or the returns' pinned over the main row.
+                    const auto top = static_cast<float>(meter.getY() + meter.getParentComponent()->getY());
                     require(top >= row.getY() && top + static_cast<float>(meter.getHeight()) <= row.getBottom() - Arrangement::trackDividerThickness,
                             "and inside its row, above the rule under it");
                 }

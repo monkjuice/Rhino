@@ -169,7 +169,7 @@ void Arrangement::paintAutomationReadout(juce::Graphics& g)
     g.setFont(uiFont(10.0f));
     const auto width = static_cast<float>(juce::GlyphArrangement::getStringWidthInt(g.getCurrentFont(), text)) + 14.0f;
     constexpr auto height = 18.0f;
-    const auto laneBottom = lanesTop + laneContentHeight();
+    const auto laneBottom = masterLane().getY();
     // Up and to the right of the pointer, and inside the lanes wherever the
     // pointer is: against the right edge or the top row it folds back rather
     // than being cropped to a stub.

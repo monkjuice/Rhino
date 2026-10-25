@@ -59,8 +59,8 @@ bool Arrangement::isRenaming() const
     return renamingTrack >= 0;
 }
 
-// Positions are inside laneHeaders, which starts at the lanes rather than at
-// the top of the panel.
+// Positions are inside the header container the card is in - the lanes' or
+// the returns' - which starts at its rows rather than at the top of the panel.
 void Arrangement::layoutNameEditor()
 {
     if (!isRenaming())
@@ -71,7 +71,10 @@ void Arrangement::layoutNameEditor()
         endRename(false);
         return;
     }
-    nameEditor.setBounds(area.translated(0, -static_cast<int>(lanesTop)));
+    auto& container = headerFor(renamingTrack);
+    if (nameEditor.getParentComponent() != &container)
+        container.addChildComponent(nameEditor);
+    nameEditor.setBounds(area.translated(0, -container.getY()));
 }
 
 void Arrangement::startRename(int track, const juce::String& current)

@@ -2,7 +2,9 @@
         Arrangement view(session);
         require(std::abs(session.beatsPerBar() - 4.0) < 0.0001, "Default meter is four quarter-note beats per bar");
         view.setLookAndFeel(&theme);
-        view.setSize(1000, 246);
+        // Two lanes of 62 px over the two starter returns pinned at 54 px each
+        // above the main row: 246 px of lanes and foot, and 108 of returns.
+        view.setSize(1000, 354);
         // The panel opens on two minutes in one-bar cells, on a lane as wide as
         // a 1920 or a 2560 screen leaves beside the browser, and the first step
         // out from there has to widen it rather than snap back in: the limit on
@@ -11,7 +13,7 @@
             const auto openingSpan = view.viewSpan;
             for (const auto width : {1673, 2313})
             {
-                view.setSize(width, 246);
+                view.setSize(width, 354);
                 require(view.resolvedGridDivision() == GridDivision::bar, "The arrangement opens on a one-bar grid");
             }
             view.zoom(2.0, view.viewStart);
@@ -63,7 +65,7 @@
                 view.viewStart = 0.0;
                 view.viewSpan = deepestSpan;
             }
-            view.setSize(1000, 246);
+            view.setSize(1000, 354);
         }
         view.fit();
         view.sync();

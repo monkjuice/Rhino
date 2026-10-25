@@ -3,18 +3,61 @@
 
 namespace rhino
 {
+// The lanes that scroll: what is left between the ruler and the pinned block
+// of returns over the main row.
 float Arrangement::laneContentHeight() const
 {
-    return std::max(1.0f, getHeight() - bottomInset - lanesTop - footHeight - masterLaneHeight);
+    return std::max(1.0f, getHeight() - bottomInset - lanesTop - footHeight - masterLaneHeight - pinnedRowsHeight);
+}
+
+float Arrangement::returnsTop() const
+{
+    return lanesTop + laneContentHeight();
+}
+
+juce::Rectangle<float> Arrangement::rowArea(bool pinned) const
+{
+    const auto width = std::max(1.0f, static_cast<float>(getWidth()) - 14.0f);
+    return pinned ? juce::Rectangle<float>(0.0f, returnsTop(), width, pinnedRowsHeight)
+                  : juce::Rectangle<float>(0.0f, lanesTop, width, laneContentHeight());
+}
+
+int Arrangement::firstPinnedTrack() const
+{
+    return returns.empty() ? session.trackCount() : returns.front().track;
+}
+
+bool Arrangement::isPinnedTrack(int track) const
+{
+    return !returns.empty() && track >= returns.front().track && track < session.trackCount();
+}
+
+float Arrangement::lastLaneBottom() const
+{
+    return lanesTop + rowsHeight - static_cast<float>(trackScroll);
+}
+
+// A clip carried onto the returns, or under them, lands on a lane made for it
+// above them, so its preview is drawn where that lane will appear rather than
+// over a return's row.
+juce::Rectangle<float> Arrangement::laneOrSlot(int track) const
+{
+    const auto first = firstPinnedTrack();
+    if (track < first)
+        return lane(track);
+    const auto height = laneHeight();
+    return {headerWidth, lastLaneBottom() + static_cast<float>(track - first) * height,
+            std::max(1.0f, getWidth() - headerWidth - 14.0f), height};
 }
 
 // Measured against the default main row and the whole panel, so neither the
 // pane floating over the foot of the arrangement nor a dragged main row can
 // change it. A lane that resized as the pane was dragged made every clip on
-// the timeline grow and shrink under the pointer.
+// the timeline grow and shrink under the pointer. The returns pinned over the
+// main row are taken out first: the lanes fit the room they actually have.
 float Arrangement::fullLaneContentHeight() const
 {
-    return std::max(1.0f, getHeight() - lanesTop - footHeight - defaultMasterLaneHeight);
+    return std::max(1.0f, getHeight() - lanesTop - footHeight - defaultMasterLaneHeight - pinnedRowsHeight);
 }
 
 void Arrangement::setBottomInset(float inset)
@@ -28,7 +71,7 @@ void Arrangement::setBottomInset(float inset)
 
 juce::Rectangle<float> Arrangement::masterLane() const
 {
-    return {0.0f, lanesTop + laneContentHeight(), std::max(1.0f, getWidth() - 14.0f), masterLaneHeight};
+    return {0.0f, returnsTop() + pinnedRowsHeight, std::max(1.0f, getWidth() - 14.0f), masterLaneHeight};
 }
 
 bool Arrangement::isMasterSelected() const
@@ -49,7 +92,9 @@ float Arrangement::laneHeightFor(int track) const
     if (session.isTrackFolded(track))
         return minimumLaneHeight;
     const auto chosen = session.trackLaneHeight(track);
-    return chosen > 0.0f ? juce::jlimit(minimumLaneHeight, maximumLaneHeight, chosen) : laneHeight();
+    if (chosen > 0.0f)
+        return juce::jlimit(minimumLaneHeight, maximumLaneHeight, chosen);
+    return isPinnedTrack(track) ? defaultReturnLaneHeight : laneHeight();
 }
 
 // Rows are variable height once automation lanes are revealed, so a track's
@@ -136,8 +181,8 @@ juce::Rectangle<float> Arrangement::bounds(const ClipView& clip) const
 
 juce::Rectangle<float> Arrangement::boundsOf(ClipGeometry p, int track) const
 {
-    return {xFor(p.start), lane(track).getY() + 5.0f,
-            std::max(1.0f, xFor(p.end) - xFor(p.start)), lane(track).getHeight() - 10.0f};
+    const auto row = laneOrSlot(track);
+    return {xFor(p.start), row.getY() + 5.0f, std::max(1.0f, xFor(p.end) - xFor(p.start)), row.getHeight() - 10.0f};
 }
 
 double Arrangement::snapped(double seconds, bool bypass) const

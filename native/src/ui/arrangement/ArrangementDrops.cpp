@@ -43,7 +43,8 @@ bool Arrangement::isInterestedInFileDrag(const juce::StringArray& files)
 void Arrangement::filesDropped(const juce::StringArray& files, int x, int y)
 {
     auto targetTrack = trackAt(static_cast<float>(y));
-    if (targetTrack < 0 && session.trackCount() > 0 && static_cast<float>(y) > lane(session.trackCount() - 1).getBottom())
+    // Under the last lane: a return's row answers for itself above.
+    if (targetTrack < 0 && static_cast<float>(y) > lastLaneBottom())
     {
         // Made at the foot of the stack, which is above the returns.
         const auto result = session.addTrack(Session::TrackType::audio, -1, &targetTrack);
@@ -152,9 +153,7 @@ void Arrangement::itemDropped(const juce::DragAndDropTarget::SourceDetails& deta
                 + juce::String(session.clipPluginCount(clip.id)));
             return;
         }
-    if (targetTrack < 0
-        && session.trackCount() > 0
-        && static_cast<float>(details.localPosition.y) > lane(session.trackCount() - 1).getBottom())
+    if (targetTrack < 0 && static_cast<float>(details.localPosition.y) > lastLaneBottom())
     {
         // A preset needs the lane its device would.
         const auto* presetDevice = deviceForPresetDrop(description);

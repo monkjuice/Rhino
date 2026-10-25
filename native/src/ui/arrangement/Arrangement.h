@@ -236,6 +236,9 @@ private:
         int automation = -1; // -1 is the track's own row
         float top = 0.0f;
         float height = 0.0f;
+        // A return's rows sit in the block pinned over the main row rather
+        // than in the lanes that scroll, and their top is measured from it.
+        bool pinned = false;
     };
     // What the pointer is over inside an automation lane, worked out once per
     // move and read by everything that reacts to it: the curve lightens, the
@@ -269,6 +272,26 @@ private:
     // The return a card's knob feeds, by the knob's place in the row: its
     // track, or -1 once there is no such return.
     int returnTrackAt(int knob) const;
+    // The returns are drawn in a block pinned between the lanes that scroll
+    // and the main row, as Live keeps them: the first of them, or the track
+    // count with none, and whether a track is one.
+    int firstPinnedTrack() const;
+    bool isPinnedTrack(int track) const;
+    // The top of that block, which is where the scrolling lanes end.
+    float returnsTop() const;
+    // The scrolling lanes' area or the pinned block's, across the panel short
+    // of the scrollbar: each set of rows is painted clipped to its own.
+    juce::Rectangle<float> rowArea(bool pinned) const;
+    // Where the bottom of the last scrolling lane is, scrolled or not.
+    float lastLaneBottom() const;
+    // Where a clip is drawn on its way to a track: the track's lane, or, for
+    // a track at or past the returns, the slot under the last lane where the
+    // lane made for it will appear.
+    juce::Rectangle<float> laneOrSlot(int track) const;
+    // The header container a track's controls belong in, pinned or not.
+    juce::Component& headerFor(int track);
+    // The main row's card menu: its colour.
+    void showMainMenu();
     void configureMasterControls();
     void updateScroll();
     void zoom(double factor, double anchor);
@@ -590,6 +613,11 @@ private:
     std::map<juce::String, float> clipNameWidths;
     std::vector<int> trackRowIndex;
     float rowsHeight = 0.0f;
+    // The pinned block's height: the returns' rows, held to a share of the
+    // panel so the lanes always keep room.
+    float pinnedRowsHeight = 0.0f;
+    // The main row's card colour, read once per sync as the facts are.
+    juce::Colour mainColour;
     // Two faces of one setting, never two settings: gridControl is Live's
     // readout in the corner of the view, toolbarGrid is the same value and the
     // same menu up beside the snap toggle. updateGridControl writes both.
@@ -601,6 +629,9 @@ private:
     // transparent to the mouse, so a click on empty header space still reaches
     // the arrangement and selects the track.
     juce::Component laneHeaders;
+    // The same for the returns' cards, over the pinned block: their controls
+    // never scroll, and the lanes' container crops at the block's top.
+    juce::Component returnHeaders;
     // Renaming happens in place, on the line the name is painted on. The editor
     // is a child of laneHeaders so a row scrolled half out of view crops it.
     juce::TextEditor nameEditor;
@@ -730,6 +761,9 @@ private:
     // of the card carries the track to a new place in the stack. Only one of
     // them can be running, and both preview before they touch the session.
     int resizingTrack = -1, movingTrack = -1, moveDestination = -1;
+    // A pinned row is resized from its top edge, as the main row is, since the
+    // block is anchored at the bottom: dragging up makes it taller.
+    bool resizingFromTop = false;
     float resizePreview = 0.0f, resizeAnchor = 0.0f, resizeStartHeight = 0.0f, moveAnchor = 0.0f;
     bool moveStarted = false;
     // The main row's own resize, which is the same gesture read from the other
@@ -819,5 +853,13 @@ private:
     // The send knobs' first line, from the top of the controls: level with
     // the faders, across the name column, under the name.
     static constexpr int sendLineTop = 21;
+    // A return's row until it is resized: the mixer line and no more, so the
+    // pinned block takes little from the lanes. The block gives up its rows'
+    // height in proportion past half the room above the main row.
+    static constexpr float defaultReturnLaneHeight = mixerLaneHeight, maximumReturnsShare = 0.5f;
+    // The rule across the top of the pinned block - over the first return, or
+    // over the main row when there is none - a little heavier than the rules
+    // between rows, so where the lanes stop reads at a glance.
+    static constexpr float pinnedRuleThickness = 4.0f;
 };
 }

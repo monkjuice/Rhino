@@ -109,7 +109,7 @@
         // across the whole of a clip stretched to twice its length, and silence
         // after it - so this is checked where the timeline gets its answer.
         Arrangement warpView(warp);
-        warpView.setSize(1000, 246);
+        warpView.setSize(1000, 354);
         warpView.sync();
         warpView.fit();
         require(warpView.clips.size() == 1, "The stretched clip is in the arrangement");

@@ -82,6 +82,16 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
         showGridMenu();
         return;
     }
+    // The main row's card offers its colour, as a track's card does.
+    if (event.mods.isRightButtonDown() && event.position.x < headerWidth && masterLane().contains(event.position))
+    {
+        selectTrack(session.masterTrackIndex());
+        setSelection({});
+        focusTrack();
+        repaint();
+        showMainMenu();
+        return;
+    }
     // A right-click on a card offers what belongs to the track itself, so it is
     // answered before the grid menu that empty space opens.
     if (event.mods.isRightButtonDown())
@@ -132,12 +142,8 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
             repaint();
             return;
         }
-    for (int track = 0; track < session.trackCount(); ++track)
-        if (lane(track).withX(0.0f).contains(event.position))
-        {
-            selectTrack(track);
-            break;
-        }
+    if (const auto row = rowAt(event.position.y); row >= 0 && rows[static_cast<size_t>(row)].automation < 0)
+        selectTrack(rows[static_cast<size_t>(row)].track);
     // A card is the only place a track can be resized or carried from, and it
     // has already taken the selection a plain click on it would have made.
     // Grabbing its bottom edge is a resize and nothing else: it takes the focus
@@ -412,7 +418,7 @@ void Arrangement::mouseDrag(const juce::MouseEvent& event)
     {
         if (const auto target = trackAt(event.position.y); target >= 0)
             targetTrack = target;
-        else if (session.trackCount() > 0 && event.position.y > lane(session.trackCount() - 1).getBottom())
+        else if (event.position.y > lastLaneBottom())
             targetTrack = session.trackCount();
         else
             targetTrack = originalTrack;
@@ -603,7 +609,7 @@ void Arrangement::autoScrollDrag()
     // The loop gesture and an automation drag live on rows that do not scroll
     // under them, so only the gestures that span tracks travel vertically.
     if (dragging || regionSelecting || movingTrack >= 0)
-        if (const auto push = autoScrollPush(dragPointer.y, lanesTop, masterLane().getY()); push != 0.0f)
+        if (const auto push = autoScrollPush(dragPointer.y, lanesTop, returnsTop()); push != 0.0f)
         {
             const auto before = trackScroll;
             trackScroll += push * laneHeight() * 0.1;
@@ -696,19 +702,24 @@ bool Arrangement::masterResizeEdgeAt(juce::Point<float> point) const
 
 // A card bottom edge is a resize handle; the rest of the card carries the
 // track. Only a track's own row answers, because an automation lane is sized
-// by what it draws rather than by the user.
+// by what it draws rather than by the user. A return's row is pinned at the
+// bottom, as the main row is, so its handle is its top edge instead.
 int Arrangement::cardResizeEdgeAt(juce::Point<float> point) const
 {
     if (point.x >= headerWidth || point.y < lanesTop || point.y >= masterLane().getY())
         return -1;
     constexpr auto grab = 4.0f;
+    const auto pinnedTop = returnsTop();
     for (int index = 0; index < static_cast<int>(rows.size()); ++index)
     {
         const auto& entry = rows[static_cast<size_t>(index)];
         if (entry.automation >= 0 || entry.height <= 0.0f) continue;
         const auto row = rowBounds(index);
-        if (std::abs(point.y - row.getBottom()) <= grab)
-            return rows[static_cast<size_t>(index)].track;
+        const auto edge = entry.pinned ? row.getY() : row.getBottom();
+        // A lane's edge counts only where it can be seen, above the block.
+        if (!entry.pinned && edge > pinnedTop - grab) continue;
+        if (std::abs(point.y - edge) <= grab)
+            return entry.track;
     }
     return -1;
 }
@@ -732,6 +743,7 @@ bool Arrangement::beginCardGesture(const juce::MouseEvent& event)
         resizeStartHeight = laneHeightFor(track);
         resizePreview = resizeStartHeight;
         resizeAnchor = event.position.y;
+        resizingFromTop = isPinnedTrack(track);
         resizingTrack = track;
         return true;
     }
@@ -753,8 +765,9 @@ void Arrangement::dragCardGesture(const juce::MouseEvent& event)
         // Dragging down grows the row and pushes the stack below it along;
         // dragging up gives height back until the card is down to its name and
         // its two buttons, which is as small as a track goes.
+        const auto travel = event.position.y - resizeAnchor;
         resizePreview = juce::jlimit(minimumLaneHeight, maximumLaneHeight,
-                                     resizeStartHeight + event.position.y - resizeAnchor);
+                                     resizeStartHeight + (resizingFromTop ? -travel : travel));
         layoutRows();
         resized();
         repaint();
@@ -766,13 +779,16 @@ void Arrangement::dragCardGesture(const juce::MouseEvent& event)
     // The pointer picks the destination, not the dragged card: the card would
     // answer differently depending on where along it the drag started, while
     // the row under the pointer is what the drop indicator is drawn on.
-    auto destination = session.trackCount() - 1;
+    const auto pinned = isPinnedTrack(movingTrack);
+    auto destination = movingTrack;
     for (int track = 0; track < session.trackCount(); ++track)
+    {
+        if (isPinnedTrack(track) != pinned)
+            continue;
+        destination = track;
         if (event.position.y < lane(track).getBottom())
-        {
-            destination = track;
             break;
-        }
+    }
     // The returns keep the foot of the stack: a track stops above them, and
     // a return moves only among them, as the model holds it.
     const auto firstReturn = session.firstReturnTrack();
@@ -938,6 +954,29 @@ void Arrangement::showTrackMenu(int track)
                 if (safe->status)
                     safe->status(done.failed() ? done.getErrorMessage() : subject + " joined " + group.name);
             }
+        });
+}
+
+// The main row's card: its colour, picked from the tracks' palette.
+void Arrangement::showMainMenu()
+{
+    const auto main = session.masterTrackIndex();
+    juce::PopupMenu menu;
+    menu.addSectionHeader("Main");
+    menu.addCustomItem(1, std::make_unique<TrackSwatches>(session.trackColour(main),
+        [safe = juce::Component::SafePointer<Arrangement>(this)](juce::Colour chosen)
+        {
+            if (safe != nullptr)
+                safe->session.setTrackColour(safe->session.masterTrackIndex(), chosen);
+        }), nullptr);
+    menu.addItem(2, "No colour", !session.trackColour(main).isTransparent());
+    const auto anchor = localPointToGlobal(masterLane().getTopLeft().toInt());
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this)
+                           .withTargetScreenArea({anchor.x, anchor.y, 1, 1}),
+        [safe = juce::Component::SafePointer<Arrangement>(this)](int choice)
+        {
+            if (safe != nullptr && choice == 2)
+                safe->session.setTrackColour(safe->session.masterTrackIndex(), {});
         });
 }
 

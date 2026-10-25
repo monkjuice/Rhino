@@ -79,7 +79,7 @@
             // once, and two more panels on it overflowed the stack.
             auto arrangementPanel = std::make_unique<Arrangement>(stack);
             auto& paintedView = *arrangementPanel;
-            paintedView.setSize(1100, 520);
+            paintedView.setSize(1100, 628);
             paintedView.sync();
             paintedView.resized();
             paintedView.selectedTrack = 3;

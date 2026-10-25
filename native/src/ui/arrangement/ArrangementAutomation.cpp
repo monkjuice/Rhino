@@ -37,13 +37,14 @@ void Arrangement::buildRows()
     trackLanes.assign(static_cast<size_t>(std::max(0, session.trackCount())), {});
     for (int track = 0; track < session.trackCount(); ++track)
     {
+        const auto pinned = isPinnedTrack(track);
         trackLanes[static_cast<size_t>(track)] = session.trackAutomations(track);
         trackRowIndex[static_cast<size_t>(track)] = static_cast<int>(rows.size());
-        rows.push_back({track, -1, 0.0f, 0.0f});
+        rows.push_back({track, -1, 0.0f, 0.0f, pinned});
         const auto& lanes = trackLanes[static_cast<size_t>(track)];
         for (int i = 0; i < static_cast<int>(lanes.size()); ++i)
             if (lanes[static_cast<size_t>(i)].ownLane)
-                rows.push_back({track, i, 0.0f, 0.0f});
+                rows.push_back({track, i, 0.0f, 0.0f, pinned});
     }
     layoutRows();
 }
@@ -53,17 +54,54 @@ void Arrangement::buildRows()
 // header controls - then answers with an empty rectangle and draws nothing,
 // which is one rule instead of a hidden case in each of them. A lane row whose
 // track has folded its lanes away takes the same rule.
+//
+// The returns' rows stack on their own, from the top of the pinned block, and
+// are laid out first: the lanes are fitted to the room the block leaves them.
+// The block is held to a share of the panel, so a song with many returns, or a
+// short window, still has lanes to work in: past it every pinned row gives up
+// height in proportion, a return's own row no further than its one line. The
+// share is of the whole panel, as the lanes' fitted height is, so dragging the
+// pane over the foot never resizes a row.
 void Arrangement::layoutRows()
 {
-    auto top = 0.0f;
-    for (auto& row : rows)
+    const auto heightOf = [this](const LaneRow& row)
     {
-        row.top = top;
-        row.height = isTrackHidden(row.track) ? 0.0f
+        return isTrackHidden(row.track) ? 0.0f
             : row.automation < 0 ? laneHeightFor(row.track)
             : factsFor(row.track).automationFolded ? 0.0f : automationRowHeight;
-        top += row.height;
+    };
+    auto pinnedTop = 0.0f;
+    for (auto& row : rows)
+        if (row.pinned)
+        {
+            row.height = heightOf(row);
+            row.top = pinnedTop;
+            pinnedTop += row.height;
+        }
+    const auto room = std::max(0.0f, static_cast<float>(getHeight()) - lanesTop - footHeight - defaultMasterLaneHeight);
+    if (const auto share = room * maximumReturnsShare; pinnedTop > share && share > 0.0f)
+    {
+        const auto scale = share / pinnedTop;
+        pinnedTop = 0.0f;
+        for (auto& row : rows)
+        {
+            if (!row.pinned)
+                continue;
+            if (row.height > 0.0f)
+                row.height = std::max(row.automation < 0 ? minimumLaneHeight : 0.0f, row.height * scale);
+            row.top = pinnedTop;
+            pinnedTop += row.height;
+        }
     }
+    pinnedRowsHeight = pinnedTop;
+    auto top = 0.0f;
+    for (auto& row : rows)
+        if (!row.pinned)
+        {
+            row.height = heightOf(row);
+            row.top = top;
+            top += row.height;
+        }
     rowsHeight = top;
 }
 
@@ -72,19 +110,25 @@ juce::Rectangle<float> Arrangement::rowBounds(int row) const
     if (!juce::isPositiveAndBelow(row, static_cast<int>(rows.size())))
         return {};
     const auto& entry = rows[static_cast<size_t>(row)];
-    return {headerWidth, lanesTop + entry.top - static_cast<float>(trackScroll),
+    return {headerWidth, entry.pinned ? returnsTop() + entry.top : lanesTop + entry.top - static_cast<float>(trackScroll),
             std::max(1.0f, getWidth() - headerWidth - 14.0f), entry.height};
 }
 
 // Deliberately unclamped: a clip can be dragged onto a lane that is scrolled
 // out of view, so this answers for the whole stack. Callers that need the row
 // to be on screen, such as the curve hit test, check that themselves.
+//
+// The pinned block answers for itself: a lane scrolled down behind it is never
+// what a pointer over a return means.
 int Arrangement::rowAt(float y) const
 {
     if (y < lanesTop)
         return -1;
+    const auto overPinned = y >= returnsTop() && y < masterLane().getY();
     for (int row = 0; row < static_cast<int>(rows.size()); ++row)
     {
+        if (rows[static_cast<size_t>(row)].pinned != overPinned)
+            continue;
         const auto bounds = rowBounds(row);
         if (y >= bounds.getY() && y < bounds.getBottom())
             return row;
@@ -144,7 +188,7 @@ Arrangement::AutomationHover Arrangement::automationHoverAt(juce::Point<float> p
 {
     AutomationHover hover;
     if (point.x < headerWidth || point.x > static_cast<float>(getWidth()) - 14.0f
-        || point.y < lanesTop || point.y >= lanesTop + laneContentHeight())
+        || point.y < lanesTop || point.y >= masterLane().getY())
         return hover;
     const auto row = rowAt(point.y);
     if (row < 0)

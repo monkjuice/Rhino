@@ -23,6 +23,7 @@ const juce::Identifier trackGroupBusID {"rhinoGroupBus"};
 const juce::Identifier trackGroupMemberID {"rhinoGroup"};
 const juce::Identifier trackGroupCollapsedID {"rhinoGroupCollapsed"};
 const juce::Identifier trackReturnBusID {"rhinoReturnBus"};
+const juce::Identifier mainColourID {"rhinoMainColour"};
 const juce::Identifier legacyTrackGroupID {"rhinoTrackGroup"};
 const juce::Identifier legacyTrackGroupIdID {"id"};
 const juce::Identifier legacyTrackGroupNameID {"name"};

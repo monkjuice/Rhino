@@ -6,7 +6,7 @@
         const auto tracksBeforeGroups = session.trackCount();
         while (session.firstReturnTrack() < 4)
             require(session.addAudioTrack().wasOk(), "Groups need four tracks to work with");
-        view.setSize(1000, 620);
+        view.setSize(1000, 728);
         view.sync();
         view.resized();
         const auto clickAt = [&view](juce::Point<float> point)

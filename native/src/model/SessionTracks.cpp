@@ -261,6 +261,8 @@ juce::Result Session::setTrackName(int track, const juce::String& name)
 
 juce::Colour Session::trackColour(int track) const
 {
+    if (isMasterTrack(track))
+        return juce::Colour::fromString(edit->state.getProperty(mainColourID).toString());
     auto* audio = audioTrack(track);
     return audio != nullptr ? audio->getColour() : juce::Colour();
 }
@@ -269,7 +271,14 @@ juce::Result Session::setTrackColour(int track, juce::Colour colour)
 {
     const auto tracks = audioTracks();
     if (isMasterTrack(track))
-        return juce::Result::fail("The main row takes no colour.");
+    {
+        edit->getUndoManager().beginNewTransaction("Colour main");
+        edit->state.setProperty(mainColourID, colour.toString(), &edit->getUndoManager());
+        edit->getUndoManager().beginNewTransaction();
+        markModified(track, ModelChange::none);
+        sendSynchronousChangeMessage();
+        return juce::Result::ok();
+    }
     if (!juce::isPositiveAndBelow(track, tracks.size()))
         return juce::Result::fail("Select a track to colour.");
     edit->getUndoManager().beginNewTransaction("Colour track");
@@ -302,11 +311,10 @@ juce::Colour Session::pickTrackColour() const
 {
     const auto& palette = trackColourPalette();
     std::vector<juce::Colour> unused = palette;
+    const auto wear = [&unused](juce::Colour worn) { unused.erase(std::remove(unused.begin(), unused.end(), worn), unused.end()); };
     for (auto* track : audioTracks())
-    {
-        const auto worn = track->getColour();
-        unused.erase(std::remove(unused.begin(), unused.end(), worn), unused.end());
-    }
+        wear(track->getColour());
+    wear(trackColour(masterTrackIndex()));
     // Once every entry is on screen the palette starts again, which is what
     // keeps a stack of twenty tracks coloured rather than half coloured.
     const auto& choices = unused.empty() ? palette : unused;

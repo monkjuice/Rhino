@@ -28,12 +28,16 @@
             require(view.laneHeaders.getY() == static_cast<int>(view.lanesTop)
                         && view.laneHeaders.getBottom() <= static_cast<int>(view.masterLane().getY()),
                     "The header container spans the lanes and stops at the main row");
+            // A return's controls are pinned with it, in a container of their own.
             for (size_t track = 0; track < view.mute.size(); ++track)
-                require(view.mute[track]->getParentComponent() == &view.laneHeaders
-                            && view.volume[track]->getParentComponent() == &view.laneHeaders,
+            {
+                const auto* container = view.isPinnedTrack(static_cast<int>(track)) ? &view.returnHeaders : &view.laneHeaders;
+                require(view.mute[track]->getParentComponent() == container
+                            && view.volume[track]->getParentComponent() == container,
                         "Track header controls are cropped to the lane viewport");
+            }
             if (view.rowsHeight > static_cast<float>(view.laneHeaders.getHeight()))
-                require(view.mute.back()->getBottom() > view.laneHeaders.getHeight(),
+                require(view.mute[static_cast<size_t>(view.firstPinnedTrack() - 1)]->getBottom() > view.laneHeaders.getHeight(),
                         "A row hanging past the lanes keeps its controls, cropped, rather than losing them");
             view.setSize(view.getWidth(), tallHeight);
             view.sync();
@@ -227,7 +231,10 @@
             // because the foot takes its slice of the height before any lane
             // gets one and the figure would otherwise need revisiting every
             // time the foot changes.
-            view.setSize(view.getWidth(), 682 + static_cast<int>(view.footHeight));
+            // The returns pinned over the main row take their slice too, and
+            // a lane under them is covered, so the stack is given all the room
+            // it needs to be clicked on.
+            view.setSize(view.getWidth(), 900 + static_cast<int>(view.footHeight + view.pinnedRowsHeight));
             require(session.setTrackAutomationPoints(laneTarget, {{0.0, laneParameters.front().minimum},
                                                                   {4.0, laneParameters.front().maximum}}).wasOk(),
                     "Redraw a curve for the delete-routing checks");

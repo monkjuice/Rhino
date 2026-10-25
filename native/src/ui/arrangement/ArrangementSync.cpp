@@ -172,6 +172,7 @@ void Arrangement::sync()
     }
     // The views of tracks that have gone.
     std::erase_if(trackClipCaches, [this](const auto& entry) { return entry.second.pass != syncPass; });
+    mainColour = session.trackColour(session.masterTrackIndex());
     if (!masterVolume.isMouseButtonDown())
         masterVolume.setValue(session.masterVolumeDb(), juce::dontSendNotification);
     if (!masterPan.isMouseButtonDown())

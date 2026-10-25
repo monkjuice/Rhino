@@ -226,8 +226,10 @@
             };
             require(song.setTrackSendDb(1, 4, -9.0f).wasOk() && song.setTrackSendDb(2, 5, -3.0f).wasOk(),
                     "Two sends turned up");
+            const auto mainColour = song.trackColour(song.masterTrackIndex());
             juce::TemporaryFile saved(".rhinoedit");
             require(song.restoreProject(song.projectSnapshot(), saved.getFile()).wasOk(), "The song reopens");
+            require(song.trackColour(song.masterTrackIndex()) == mainColour, "with the main row's colour");
             require(song.returnTracks().size() == 2 && song.isReturnTrack(4) && song.trackName(4) == "Delay"
                         && song.trackName(5) == "Reverb" && te::getAudioTracks(*song.edit)[4]->isSoloIsolate(false),
                     "with its returns");
@@ -386,6 +388,110 @@
             require(song.setTrackSendDb(1, first, Session::minimumSendDb).wasOk(), "The send set from elsewhere");
             cards.sync();
             require(knob.getValue() <= Session::minimumSendDb, "and the knob shows it");
+
+            // The returns are pinned with the main row under the lanes that
+            // scroll, the last of them on the main row's top edge.
+            const auto last = song.trackCount() - 1;
+            require(cards.lane(first).getY() >= cards.returnsTop() - 0.5f
+                        && std::abs(cards.lane(last).getBottom() - cards.masterLane().getY()) < 0.5f
+                        && cards.lane(first - 1).getY() < cards.returnsTop(),
+                    "The returns sit in a block over the main row, under the lanes");
+            require(cards.mute[static_cast<size_t>(first)]->getParentComponent() == &cards.returnHeaders
+                        && cards.mute[0]->getParentComponent() == &cards.laneHeaders,
+                    "and their controls are pinned with them");
+            for (int track = 0; track < first; ++track)
+                require(song.setTrackLaneHeight(track, 200.0f).wasOk(), "Lanes tall enough to scroll");
+            cards.sync();
+            cards.resized();
+            const auto pinnedAt = cards.lane(first).getY();
+            cards.trackScroll = 300.0;
+            cards.updateScroll();
+            cards.resized();
+            require(cards.trackScroll > 0.0 && std::abs(cards.lane(first).getY() - pinnedAt) < 0.001f
+                        && cards.trackScrollBar.getBottom() <= static_cast<int>(cards.returnsTop()) + 1,
+                    "Scrolling the lanes leaves the returns where they are");
+            require(cards.trackAt(cards.lane(first).getCentreY()) == first,
+                    "and a pointer over a return finds the return, not a lane scrolled behind it");
+            cards.trackScroll = 0.0;
+            for (int track = 0; track < first; ++track)
+                require(song.setTrackLaneHeight(track, 0.0f).wasOk(), "The lanes back to their fitted height");
+            cards.sync();
+            cards.resized();
+            int added = -1;
+            require(song.addReturnTrack(&added).wasOk(), "A third return");
+            cards.sync();
+            cards.resized();
+            require(added == song.trackCount() - 1
+                        && std::abs(cards.lane(added).getBottom() - cards.masterLane().getY()) < 0.5f,
+                    "lands at the foot of the block, on the main row");
+            song.undo();
+            cards.sync();
+            cards.resized();
+
+            // The block opens with a heavier rule than the rows', and the main
+            // row is a card on its own colour.
+            const auto picture = cards.createComponentSnapshot(cards.getLocalBounds(), true, 1.0f);
+            const auto ruleX = static_cast<int>(Arrangement::headerWidth) + 40;
+            const auto ruleTop = static_cast<int>(std::ceil(cards.returnsTop()));
+            require(picture.getPixelAt(ruleX, ruleTop + 1) == palette::barGrid
+                        && picture.getPixelAt(ruleX, ruleTop + static_cast<int>(Arrangement::pinnedRuleThickness) - 1)
+                               == palette::barGrid,
+                    "The pinned block opens with a rule thicker than a row's");
+            const auto mainColour = song.trackColour(song.masterTrackIndex());
+            require(!mainColour.isTransparent(), "The main row has a colour of its own");
+            const auto mainSwatch = juce::Point<int>(static_cast<int>(Arrangement::headerWidth) - 3,
+                                                     static_cast<int>(cards.masterLane().getBottom()) - 3);
+            require(picture.getPixelAt(mainSwatch.x, mainSwatch.y) == mainColour,
+                    "and its card wears it");
+            const auto chosen = Session::trackColourPalette()[3] != mainColour ? Session::trackColourPalette()[3]
+                                                                             : Session::trackColourPalette()[4];
+            require(song.setTrackColour(song.masterTrackIndex(), chosen).wasOk()
+                        && song.trackColour(song.masterTrackIndex()) == chosen,
+                    "The main row's colour can be chosen");
+            cards.sync();
+            require(cards.createComponentSnapshot(cards.getLocalBounds(), true, 1.0f).getPixelAt(mainSwatch.x, mainSwatch.y)
+                        == chosen,
+                    "and the card shows the colour chosen");
+            song.undo();
+            require(song.trackColour(song.masterTrackIndex()) == mainColour, "and undo puts the colour back");
+            cards.sync();
+
+            // A return's card is carried among the returns, as a track's is
+            // among the lanes.
+            {
+                const auto press = [&cards](juce::Point<float> down, juce::Point<float> at, bool dragged)
+                {
+                    return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), at,
+                        juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier), 1.0f, 0, 0, 0, 0,
+                        &cards, &cards, juce::Time::getCurrentTime(), down, juce::Time::getCurrentTime(), 1, dragged);
+                };
+                const juce::Point<float> grab {230.0f, cards.lane(first + 1).getY() + 30.0f};
+                const juce::Point<float> onto {230.0f, cards.lane(first).getY() + 10.0f};
+                cards.mouseDown(press(grab, grab, false));
+                cards.mouseDrag(press(grab, onto, true));
+                cards.mouseUp(press(grab, onto, true));
+                require(song.trackName(first) == "Reverb" && song.trackName(first + 1) == "Delay"
+                            && song.returnTracks().front().letter == "A",
+                        "Dragging B's card onto A's row puts the reverb first, lettered A");
+                song.undo();
+                cards.sync();
+                require(song.trackName(first) == "Delay", "and undo puts the delay back on top");
+                // Pinned at the bottom, a return's row is sized from its top
+                // edge, as the main row is: dragged up, it grows.
+                const auto before = cards.lane(first + 1).getHeight();
+                const juce::Point<float> edge {100.0f, cards.lane(first + 1).getY()};
+                cards.mouseDown(press(edge, edge, false));
+                cards.mouseDrag(press(edge, edge.translated(0.0f, -20.0f), true));
+                cards.mouseUp(press(edge, edge.translated(0.0f, -20.0f), true));
+                cards.sync();
+                cards.resized();
+                require(std::abs(cards.lane(first + 1).getHeight() - (before + 20.0f)) < 0.5f
+                            && std::abs(cards.lane(last).getBottom() - cards.masterLane().getY()) < 0.5f,
+                        "A return's row grows when its top edge is dragged up, still sitting on the main row");
+                require(song.setTrackLaneHeight(first + 1, 0.0f).wasOk(), "and goes back to its own height");
+                cards.sync();
+                cards.resized();
+            }
 
             // To look at: the cards with their sends, written only when asked.
             if (const auto path = juce::SystemStats::getEnvironmentVariable("RHINO_RETURN_TRACKS_SNAPSHOT", {});

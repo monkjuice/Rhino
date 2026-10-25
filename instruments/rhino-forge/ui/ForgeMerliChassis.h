@@ -414,7 +414,7 @@ inline void drawNoteGuideHousing(juce::Graphics& g, juce::Rectangle<int> compone
 {
     const auto plate = noteGuidePlateBounds(componentBounds).toFloat();
     drawRoundedPlate(g, plate, 7.0f, 1.0f, false);
-    drawRoundedWell(g, plate.reduced(6.0f), plateWellFloor, 1.0f, 5.0f);
+    drawRoundedWell(g, noteGuideFace(componentBounds).toFloat(), plateWellFloor, 1.0f, noteGuideFaceCut);
 }
 
 // The face well is a rounded rectangle on arpPlateFace at arpPlateFaceCut,

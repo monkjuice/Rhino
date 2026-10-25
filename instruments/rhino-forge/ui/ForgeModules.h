@@ -872,6 +872,18 @@ inline const std::vector<Module>& modules()
           {50, {{"arpVelDecay", "DECAY", Style::knob, nullptr, 1, "arpVelEnable"},
                 {"arpVelTarget", "TARGET", Style::knob, nullptr, 1, "arpVelEnable"}}}},
          0, only(Page::arp), 1, 0, 0, 0, 0, "ARPEGGIATOR"},
+
+        // --- The note guide ----------------------------------------------------
+        //
+        // Opened from the plate at the right-hand end of the keyboard shelf,
+        // over exactly the cells the arp's panes take, for the same reason: the
+        // macros and the signal row stay in view while a scale is picked. One
+        // plate with no controls, as WAVETABLE is: nothing on it is a parameter
+        // - which keys light up is the player's view of the keyboard, not part
+        // of the sound - so the editor seats one component in it
+        // (ui/ForgeNoteGuidePanel.h).
+        {"noteGuide", "NOTE GUIDE", "", nullptr, false, Display::none, 1, 3, 18, false, {},
+         0, only(Page::guide)},
     };
     return declared;
 }
@@ -917,15 +929,15 @@ inline bool onPage(const Module& module, Page page)
     return (module.pages & only(page)) != 0;
 }
 
-// The modules the arp overlay stands on: the ones whose grid cells its own
-// panes cover. Worked out from the declarations rather than named, so moving a
-// pane a column moves what it hides with it.
-inline bool coveredByArp(const Module& module)
+// The modules an overlay - the arp or the note guide - stands on: the ones
+// whose grid cells its own plates cover. Worked out from the declarations
+// rather than named, so moving a pane a column moves what it hides with it.
+inline bool coveredBy(const Module& module, Page overlay)
 {
-    if (onPage(module, Page::arp)) return false;
+    if (onPage(module, overlay)) return false;
     for (const auto& other : modules())
     {
-        if (!onPage(other, Page::arp)) continue;
+        if (!onPage(other, overlay)) continue;
         const auto rowsMeet = module.row < other.row + other.rowSpan
                            && other.row < module.row + module.rowSpan;
         const auto columnsMeet = module.column < other.column + other.columnSpan

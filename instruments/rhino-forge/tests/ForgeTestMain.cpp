@@ -44,6 +44,7 @@ constexpr Area areas[] {
     {"theme", themeTests},
     {"import", importTests},
     {"browser", browserTests},
+    {"guide", guideTests},
 };
 
 void listAreas(std::ostream& out)

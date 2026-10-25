@@ -35,13 +35,20 @@ namespace
 // So: render a page on an editor that has been walked around the panel and had
 // its layer swapped back, and require it to match the same page on an editor
 // seeing it for the first time.
+//
+// On a software image. A juce::Image on Windows is a Direct2D bitmap, and the
+// same LFO curve drawn from the same state onto two of them came out a shade
+// apart in two pixels once the keyboard grew to 88 (2026-10-25); the committed
+// tree with only that height changed failed the same way. On software the two
+// paints agree to the pixel, and a stale layer still differs page-wide.
 void chromeCacheSuite()
 {
     const auto render = [] (std::initializer_list<const char*> pages)
     {
         auto processor = std::make_unique<rhino::forge::Processor>();
         std::unique_ptr<juce::AudioProcessorEditor> editor(processor->createEditor());
-        juce::Image canvas(juce::Image::ARGB, editor->getWidth(), editor->getHeight(), true);
+        juce::Image canvas(juce::Image::ARGB, editor->getWidth(), editor->getHeight(), true,
+                           juce::SoftwareImageType());
         for (const auto* page : pages)
         {
             for (auto* child : editor->getChildren())
@@ -84,7 +91,8 @@ void chromeCacheSuite()
         for (auto* child : editor.getChildren())
             if (auto* tab = dynamic_cast<rhino::forge::ui::PageTab*>(child))
                 if (tab->getButtonText() == "OSC" && tab->onClick) tab->onClick();
-        juce::Image canvas(juce::Image::ARGB, editor.getWidth(), editor.getHeight(), true);
+        juce::Image canvas(juce::Image::ARGB, editor.getWidth(), editor.getHeight(), true,
+                           juce::SoftwareImageType());
         juce::Graphics g(canvas);
         editor.paint(g);
         return canvas;

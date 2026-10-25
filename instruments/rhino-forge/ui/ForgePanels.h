@@ -205,7 +205,7 @@ inline void drawNoteGuideHousing(juce::Graphics& g, juce::Rectangle<int> compone
     drawEdgeWear(g, plate, 63);
     drawRivet(g, {plate.getRight() - 12, plate.getY() + 7}, 3.4f, 0.9f);
     drawRivet(g, {plate.getX() + 9, plate.getBottom() - 9}, 2.6f, 0.8f);
-    drawWell(g, plate.reduced(6.0f), plateWellFloor, 1.0f, 5);
+    drawWell(g, noteGuideFace(componentBounds).toFloat(), plateWellFloor, 1.0f, noteGuideFaceCut);
 }
 
 // The sky behind the notes falling through the ARP plate's well: a faint

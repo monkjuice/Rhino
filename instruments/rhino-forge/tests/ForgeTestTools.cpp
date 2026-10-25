@@ -67,8 +67,25 @@ int runSnapshot(int argc, char** argv)
         }
         rhino::forge::ui::selectTheme(rhino::forge::ui::themeFromName(argv[8]));
     }
+    // GUIDE opens the note guide from its door on the shelf, set to A minor
+    // over A natural minor so the keys, the octave and the readout all show
+    // a root, chord tones and scale tones. Set before the editor is built,
+    // which is when it reads them.
+    const auto guide = argc > 5 && juce::String(argv[5]).equalsIgnoreCase("GUIDE");
+    if (guide)
+    {
+        auto& state = processor->state.state;
+        state.setProperty("noteGuideRoot", 9, nullptr);
+        state.setProperty("noteGuideChord", static_cast<int>(rhino::forge::ui::GuideChord::triad), nullptr);
+        state.setProperty("noteGuideMinor", true, nullptr);
+        state.setProperty("noteGuideScale", static_cast<int>(rhino::forge::ui::GuideScale::naturalMinor), nullptr);
+    }
     std::unique_ptr<juce::AudioProcessorEditor> editor(processor->createEditor());
     if (argc > 4) editor->setSize(juce::String(argv[3]).getIntValue(), juce::String(argv[4]).getIntValue());
+    if (guide)
+        for (auto* child : editor->getChildren())
+            if (auto* door = dynamic_cast<rhino::forge::ui::NoteGuideDoor*>(child); door != nullptr && door->onClick)
+                door->onClick();
     // ARP is not one of the tabs — it is the plate beside the keyboard, and it
     // opens over whichever tab is showing. There is no button to reach for, so
     // the review takes the same route a hand does and presses the plate's

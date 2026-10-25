@@ -86,4 +86,8 @@ void importTests();
 // ForgeTestsBrowser.cpp — the preset bank, the browser over it, LOAD, SAVE and
 // the plate that names the patch.
 void browserTests();
+
+// ForgeTestsGuide.cpp — the note guide: key labels, chord and scale names, its
+// panel at every size, and the door on the shelf that opens it.
+void guideTests();
 }

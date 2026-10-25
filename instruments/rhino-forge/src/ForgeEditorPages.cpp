@@ -38,6 +38,9 @@ void Editor::applyPage()
     refreshOscModeFields();
     refreshLoopFields();
     if (tablePanel != nullptr) tablePanel->setVisible(page == ui::Page::table);
+    // Every toggle that opens or closes an overlay ends here, so the door lit
+    // for the guide is always the guide's own state.
+    guideDoor.setOpen(guideOpen);
     // Last, because a macro's handle takes the place of its label and the
     // layout pass is what decides that.
     resized();
@@ -45,13 +48,17 @@ void Editor::applyPage()
 }
 
 // The plate beside the keyboard puts the arp's panes up and takes them away.
-// The expanded rack and the arp both want the lower row, so opening one closes
-// the other: two overlays on one field would leave whichever lost hidden behind
-// the winner with its switch still lit.
+// The expanded rack, the arp and the note guide all want the lower row, so
+// opening one closes the others: two overlays on one field would leave
+// whichever lost hidden behind the winner with its switch still lit.
 void Editor::toggleArpOpen()
 {
     arpOpen = !arpOpen;
-    if (arpOpen) fxExpanded = false;
+    if (arpOpen)
+    {
+        fxExpanded = false;
+        guideOpen = false;
+    }
     applyPage();
 }
 
@@ -383,6 +390,9 @@ void Editor::applyEnableStates()
                                      ui::labelText.withAlpha(on ? 1.0f : 0.4f));
         }
     }
+    // The note guide's panel is a component rather than declared controls, so
+    // it follows its module on and off the panel here.
+    guidePanel.setVisible(guideOpen);
     // A PATH LFO hangs a second card in its header and the bank cards move
     // along for it. Noticed here rather than only on a click, so a type
     // changed by a preset or by the host moves the header the same way.

@@ -5,7 +5,7 @@
 #include "../ui/ForgeTablePanel.h"
 #include "../ui/ForgeVisuals.h"
 #include "../ui/ForgePerformanceWheel.h"
-#include "../ui/ForgeNoteGuide.h"
+#include "../ui/ForgeNoteGuidePanel.h"
 #include "../ui/ForgeFxGestures.h"
 #include "../ui/ForgePresetPlate.h"
 #include "ForgePresetBrowser.h"
@@ -160,9 +160,10 @@ private:
     juce::Point<int> dragPosition;
     ui::NoteGuideState noteGuide;
     ui::NoteGuideKeyboard keyboard;
-    ui::NoteGuideField guideRoot {"Off"}, guideChord {"Off"}, guideScale {"Off"};
-    ui::NoteGuideQuality guideQuality;
-    juce::Label guideRootLabel, guideChordLabel, guideScaleLabel;
+    // The note guide's door on the shelf, and the panel it opens over the
+    // modulators. Both edit `noteGuide`, which the keys are drawn from.
+    ui::NoteGuideDoor guideDoor {noteGuide};
+    ui::NoteGuidePanel guidePanel {noteGuide};
     ui::PerformanceWheel pitchWheel {true};
     ui::PerformanceWheel modulationWheel {false};
     // Which octave the computer keys play. The keyboard's own mapping is 17
@@ -260,7 +261,6 @@ private:
     void buildTabs();
     void buildNoteGuide();
     void refreshNoteGuide();
-    void showNoteGuideMenu(int which);
     void saveNoteGuide();
     void showPage(ui::Page);
     void applyPage();
@@ -517,9 +517,9 @@ private:
     void moveFxSlot(int rack, int from, int to);
     bool moduleShown(const ui::Module&) const;
     // Which page a module is drawn as belonging to, which is the tab for
-    // everything except the arp's panes: those are on a page of their own that
-    // is never the tab showing, and the group plate and part number are worked
-    // out against the page a module is actually on.
+    // everything except the arp's panes and the note guide: those are on pages
+    // of their own that are never the tab showing, and the group plate and part
+    // number are worked out against the page a module is actually on.
     ui::Page pageOf(const ui::Module&) const;
     juce::Rectangle<int> moduleAreaFor(const ui::Module&) const;
     juce::Rectangle<int> fxRackAreaFor(juce::Rectangle<int> moduleArea, int rack, int slot) const;
@@ -568,6 +568,11 @@ private:
     bool arpOpen = false;
     void toggleArpOpen();
     void toggleArpEnabled();
+    // Whether the note guide is standing on the same modulators, opened from
+    // its door at the shelf's end. View state like arpOpen, and the two close
+    // each other: they stand in the same cells.
+    bool guideOpen = false;
+    void toggleGuideOpen();
     // One of the four slot buttons on the same plate. The slot is a parameter,
     // and the Processor moves the pattern's parameters to match.
     void chooseArpSlot(int slot);

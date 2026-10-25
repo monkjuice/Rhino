@@ -24,7 +24,12 @@ inline constexpr int maxPanelHeight = 1180;
 inline constexpr int defaultPanelWidth = 1440;
 inline constexpr int defaultPanelHeight = 900;
 
-inline constexpr int keyboardHeight = 80;
+// Eighty-eight since 2026-10-25, up from eighty: the keys were short for their
+// width and their names had no room to be read. The eight pixels come off the
+// two rows of modules, and eight is all there is: at the smallest window the
+// signal row's 56% of what is left has to hold the FX rack's three 92-pixel
+// strips whole, and at eighty it had four pixels over (forge_layout checks it).
+inline constexpr int keyboardHeight = 88;
 
 // The inset every edge of the panel shares: the wordmark, the preset controls,
 // the modules and the keyboard all start here, so they line up down both sides.
@@ -75,13 +80,13 @@ inline juce::Rectangle<int> keyboardShelf(juce::Rectangle<int> bounds)
 
 // The keyboard was eighty-eight keys and is now seventy-six: the bottom octave
 // came off, and the ARP plate is the width it was. Both counts are kept because
-// the plate is sized as the difference between them — the keys are divided out
-// of the span they always had, so every key is exactly the width it was before
-// the arp existed and the octave is what actually pays for the plate.
-inline constexpr int keyboardWhiteKeys = 38;       // A1 to C7: the guide takes the high octave
-inline constexpr int keyboardWhiteKeysWithoutArp = 52; // A0 to C8, as it was
-inline constexpr int keyboardLowestNote = 33;      // A1
-inline constexpr int keyboardHighestNote = 96;     // C7; MIDI itself remains unrestricted
+// the plate is sized as the difference between them. The keys themselves are
+// divided out of whatever the plates leave, so they grew when the note guide
+// became a door on 2026-10-25 and handed the keys the width its four fields had.
+inline constexpr int keyboardWhiteKeys = 38;       // A0 to C6 as the keys are labelled (middle C is C3)
+inline constexpr int keyboardWhiteKeysWithoutArp = 52;
+inline constexpr int keyboardLowestNote = 33;      // A0
+inline constexpr int keyboardHighestNote = 96;     // C6; MIDI itself remains unrestricted
 inline constexpr int arpPlateGap = 8;
 inline constexpr int noteGuidePlateGap = 8;
 
@@ -92,19 +97,31 @@ inline int arpPlateWidth(juce::Rectangle<int> bounds)
     return juce::jmax(48, octave - arpPlateGap);
 }
 
-// The keys themselves: what the shelf has left once the ARP plate and the note
-// guide have taken theirs. They start at the shelf's left edge, against the
-// wheels.
-inline juce::Rectangle<int> keyboardBounds(juce::Rectangle<int> bounds)
+// The note guide's plate, at the strip's right-hand end where the second deck
+// plate would be. It is a door, as the ARP plate's name is: it says what the
+// guide is set to and opens the guide over the modulators, so it needs only
+// the width of what it says. 168 holds "Cm(maj7)" and "MIXOLYDIAN" at their
+// sizes; the layout test measures them.
+inline int noteGuidePlateWidth(juce::Rectangle<int> bounds)
 {
-    const auto shelf = keyboardShelf(bounds);
-    // Work from the pre-guide key width. The keyboard loses seven white keys
-    // (the twelve high MIDI notes) and the recovered span joins the old right
-    // deck plate, so no surviving key changes size.
-    const auto originalKeys = shelf.getWidth() - arpPlateWidth(bounds) - arpPlateGap;
-    const auto recovered = originalKeys * 7 / keyboardWhiteKeysWithoutArp;
-    return shelf.withTrimmedRight(arpPlateWidth(bounds) + arpPlateGap + recovered + noteGuidePlateGap);
+    return juce::jlimit(168, 210, keyboardShelf(bounds).getWidth() / 6);
 }
+
+inline juce::Rectangle<int> noteGuidePlateBounds(juce::Rectangle<int> bounds)
+{
+    const auto strip = keyboardStrip(bounds);
+    return strip.withLeft(strip.getRight() - noteGuidePlateWidth(bounds));
+}
+
+// The well inside that plate, which is the door itself: the housing lets it in
+// and the lit state is drawn to its outline, so both read this one rectangle
+// and this one cut.
+inline juce::Rectangle<int> noteGuideFace(juce::Rectangle<int> bounds)
+{
+    return noteGuidePlateBounds(bounds).reduced(6);
+}
+
+inline constexpr float noteGuideFaceCut = 5.0f;
 
 // The ARP plate stands between the keys and the note guide. Serum puts its
 // switch at the keyboard's left end and so did this until 2026-10-13; it moved
@@ -112,8 +129,17 @@ inline juce::Rectangle<int> keyboardBounds(juce::Rectangle<int> bounds)
 // together at the same end, and so the keys start where the wheels end.
 inline juce::Rectangle<int> arpPlateBounds(juce::Rectangle<int> bounds)
 {
-    return keyboardShelf(bounds).withX(keyboardBounds(bounds).getRight() + arpPlateGap)
-                                .withWidth(arpPlateWidth(bounds));
+    const auto width = arpPlateWidth(bounds);
+    return keyboardShelf(bounds).withX(noteGuidePlateBounds(bounds).getX() - noteGuidePlateGap - width)
+                                .withWidth(width);
+}
+
+// The keys themselves: whatever the shelf has left once the ARP plate and the
+// note guide have taken theirs. They start at the shelf's left edge, against
+// the wheels.
+inline juce::Rectangle<int> keyboardBounds(juce::Rectangle<int> bounds)
+{
+    return keyboardShelf(bounds).withRight(arpPlateBounds(bounds).getX() - arpPlateGap);
 }
 
 // The face inside the plate's housing: the well everything on the plate stands
@@ -182,11 +208,6 @@ inline juce::Rectangle<int> arpWaterfallBounds(juce::Rectangle<int> bounds)
 {
     const auto face = arpPlateFace(bounds);
     return face.withLeft(arpSlotGridBounds(bounds).getRight() + 10).withTrimmedRight(5).reduced(0, 4);
-}
-
-inline juce::Rectangle<int> noteGuidePlateBounds(juce::Rectangle<int> bounds)
-{
-    return keyboardStrip(bounds).withLeft(arpPlateBounds(bounds).getRight() + noteGuidePlateGap);
 }
 
 // --- The title bar's right-hand end -----------------------------------------

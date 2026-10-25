@@ -157,6 +157,7 @@ set(forge_sources
     ui/ForgeArpPlate.h
     ui/ForgePerformanceWheel.h
     ui/ForgeNoteGuide.h
+    ui/ForgeNoteGuidePanel.h
     ui/ForgePresetPlate.h
     ui/ForgeTablePanel.h
     ui/ForgeTooltips.h
@@ -289,7 +290,8 @@ if (BUILD_TESTING)
         midi
         theme
         import
-        browser)
+        browser
+        guide)
 
     target_sources(RhinoForgeTests PRIVATE
         tests/ForgeTestMain.cpp
@@ -323,6 +325,7 @@ if (BUILD_TESTING)
         tests/ForgeTestsTheme.cpp
         tests/ForgeTestsImport.cpp
         tests/ForgeTestsBrowser.cpp
+        tests/ForgeTestsGuide.cpp
         ${forge_sources})
     forge_use_precompiled_header(RhinoForgeTests)
     target_link_libraries(RhinoForgeTests PRIVATE

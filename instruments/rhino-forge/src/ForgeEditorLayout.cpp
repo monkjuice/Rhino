@@ -12,16 +12,21 @@ bool Editor::moduleShown(const ui::Module& module) const
     // The arp is an overlay rather than a tab. Its panes appear when it is
     // opened, whichever tab is showing, and the modules they stand on step
     // aside for exactly as long as they are there — which is why this is asked
-    // before the page is consulted at all.
+    // before the page is consulted at all. The note guide is the same kind of
+    // overlay, on the same cells.
     if (ui::onPage(module, ui::Page::arp)) return arpOpen;
-    if (arpOpen && ui::coveredByArp(module)) return false;
+    if (ui::onPage(module, ui::Page::guide)) return guideOpen;
+    if (arpOpen && ui::coveredBy(module, ui::Page::arp)) return false;
+    if (guideOpen && ui::coveredBy(module, ui::Page::guide)) return false;
     if (!ui::onPage(module, page)) return false;
     return page != ui::Page::fx || !fxExpanded || isFxModule(module);
 }
 
 ui::Page Editor::pageOf(const ui::Module& module) const
 {
-    return ui::onPage(module, ui::Page::arp) ? ui::Page::arp : page;
+    if (ui::onPage(module, ui::Page::arp)) return ui::Page::arp;
+    if (ui::onPage(module, ui::Page::guide)) return ui::Page::guide;
+    return page;
 }
 
 juce::Rectangle<int> Editor::moduleAreaFor(const ui::Module& module) const
@@ -62,23 +67,12 @@ void Editor::resized()
     keyboard.setKeyWidth(static_cast<float>(keys.getWidth())
                          / static_cast<float>(ui::keyboardWhiteKeys));
     keyboard.setBounds(keys);
-    // With no title line, both rows use the whole inset face. The small extra
-    // clearance also gives the fields a less cramped vertical hit target while
-    // keeping the lower-left rivet visible beside the quality switch.
-    const auto guide = ui::noteGuidePlateBounds(getLocalBounds()).reduced(7, 6);
-    const auto rowHeight = juce::jlimit(24, 29, (guide.getHeight() - 6) / 2);
-    const auto leftWidth = juce::jmin(88, guide.getWidth() * 38 / 100);
-    const auto placeRow = [&] (juce::Rectangle<int> row, juce::Label& label, juce::Component& field)
-    {
-        label.setBounds(row.withWidth(34));
-        field.setBounds(row.withTrimmedLeft(36));
-    };
-    auto first = guide.withHeight(rowHeight);
-    auto second = guide.withTrimmedTop(rowHeight + 6).withHeight(rowHeight);
-    placeRow(first.withWidth(leftWidth), guideRootLabel, guideRoot);
-    placeRow(first.withTrimmedLeft(leftWidth + 7), guideChordLabel, guideChord);
-    guideQuality.setBounds(second.withWidth(leftWidth));
-    placeRow(second.withTrimmedLeft(leftWidth + 7), guideScaleLabel, guideScale);
+    // The door is the well its plate's housing lets in, and the panel it opens
+    // fills its module's body as the table editor fills WAVETABLE's.
+    guideDoor.setBounds(ui::noteGuideFace(getLocalBounds()));
+    for (const auto& descriptor : ui::modules())
+        if (ui::onPage(descriptor, ui::Page::guide))
+            guidePanel.setBounds(ui::controlArea(ui::moduleBounds(getLocalBounds(), descriptor), descriptor));
     const auto plate = ui::deckLeftBounds(getLocalBounds());
     const auto wheelWidth = juce::jlimit(27, 37, (plate.getWidth() - 34) / 2);
     const auto gap = juce::jmax(8, (plate.getWidth() - 2 * wheelWidth) / 4);

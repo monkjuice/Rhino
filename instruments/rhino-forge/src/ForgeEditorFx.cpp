@@ -76,9 +76,9 @@ void Editor::toggleFxExpanded()
 {
     if (page != ui::Page::fx) return;
     fxExpanded = !fxExpanded;
-    // The rack and the arp both want the lower row; whichever was opened last
-    // has it.
-    if (fxExpanded) arpOpen = false;
+    // The rack, the arp and the note guide all want the lower row; whichever
+    // was opened last has it.
+    if (fxExpanded) arpOpen = guideOpen = false;
     fxDragSlot = fxDropSlot = -1;
     clampFxScroll();
     applyPage();

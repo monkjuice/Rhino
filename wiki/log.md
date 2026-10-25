@@ -1171,3 +1171,9 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/transport.md (the note editor's ruler and shading count the signature's beat)
 - updated: pages/keeping-files-small.md (two new `Session` units; `StepGrid.cpp` 760, `StepGridGestures.cpp` 912, `StepGridEditing.cpp` past the line at 699)
 - updated: index.md (the summaries of Note editor and Session)
+
+## [2026-10-25] update | Note editor: narrow keys beside a column of octave names, rows 2 px taller (363af51)
+- source: the change's brief and the coordinator's hash, checked against native/src/ui/notes/StepGrid.h (`openingRowHeight`, `keyLabelWidth`, `openingHeight`), StepGridPainter.cpp (`paintKeyboard`), StepGrid.cpp (`timeAreaHeight`, when the scrollbar shows), StepGridGestures.cpp (`isOverKeyboard`) and scenario NoteGrid.inc; commit 363af51
+- updated: pages/note-editor.md (opening height 293 px; the hovered key lit and named in the names' column; Drawing: the names' column, 24 px keys, only the Cs named and the 15 px every-key rule gone, drum rows unchanged; rows open 2 px taller, and why at about 10.9 px)
+- updated: pages/note-velocity-lane.md (`openingHeight` 293 px, from 10 px rows)
+- updated: pages/app-shell.md (the note editor's opening height, 293 px, from `openingRowHeight`)

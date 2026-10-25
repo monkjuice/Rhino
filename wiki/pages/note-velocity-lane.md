@@ -23,7 +23,7 @@ From top to bottom: header, rows, divider, lane, scrollbar, footer. The lane sit
 
 The lane never squeezes the 16 rows below `StepGrid::octaveLabelRowHeight` (8 px, the height below which the keyboard stops naming octaves). With less than 32 px of room it folds away and the Velocity button dims. Showing or hiding the scrollbar changes that room, so `zoomAt` recomputes the pitch row count when the scrollbar folds or unfolds the lane. `rebuildVisibleNotes` settles the step count, the zoom and the scrollbar before it computes rows.
 
-The default pane is a fifth of the window, about 202 px at 1080p, which folds the lane. So the shell raises the pane to `StepGrid::openingHeight` (261 px) the first time the note editor appears in a run, unless the user has already dragged the pane to a height ([App shell and control bar](app-shell.md)). Dragging the divider resizes the lane, dragging it most of the way down closes it, and a double-click resets it. The lane's visibility and height are not saved.
+The default pane is a fifth of the window, about 202 px at 1080p, which folds the lane. So the shell raises the pane to `StepGrid::openingHeight` (293 px since commit `363af51`, from sixteen 10 px rows; 261 px from 8 px rows before, [Note editor](note-editor.md#drawing)) the first time the note editor appears in a run, unless the user has already dragged the pane to a height ([App shell and control bar](app-shell.md)). Dragging the divider resizes the lane, dragging it most of the way down closes it, and a double-click resets it. The lane's visibility and height are not saved.
 
 ## Units and the model
 

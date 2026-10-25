@@ -4,7 +4,7 @@ type: concept
 summary: The lanes have one selection, a region - a span of time across a run of tracks, made by clicking a clip's header or sweeping the lanes - and copy, cut, paste, duplicate, delete, the arrow nudge and a drag by any clip header inside it all act on that rectangle; on a focused card the keys move whole tracks.
 tags: [rhino, arrangement, editing, clipboard]
 sources: []
-updated: 2026-10-24
+updated: 2026-10-25
 ---
 
 # Region editing
@@ -51,7 +51,7 @@ The clipboard also survives opening another document. Its files are full paths, 
 
 ## In the note editor
 
-`StepGridEditing.cpp` applies the same rule in steps: the marquee's span, the selected notes rounded out to whole steps, or the whole clip after Ctrl+A. One difference: a note paste clears only the pitches and steps it writes, not the whole rectangle.
+`StepGridEditing.cpp` applies the same rule in steps: the marquee's span, the selected notes rounded out to whole steps, or the whole clip after Ctrl+A. Two differences. A note paste clears only the pitches and steps it writes, not the whole rectangle. And since commit `4783232` (2026-10-25) it lands on the editor's insert line, which a copy moves to the end of the copied region, so a copy goes down beside its source and pastes in a row lie end to end. In the lanes a paste lands at the selection's start, which after a copy is the source itself, and a second paste replaces the first. In the note editor that rule wrote a copy of selected notes over its source and removed the source, so nothing showed and dragging the "copy" away left a hole ([Note editor](note-editor.md#the-step-region-and-the-insert-line)). The arrangement was not changed. Ctrl+D leaves the clipboard alone in both.
 
 ## Related
 

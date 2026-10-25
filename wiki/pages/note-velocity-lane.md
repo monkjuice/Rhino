@@ -4,7 +4,7 @@ type: component
 summary: A lane under the note editor's rows, modelled on Live 12's velocity editor, with a marker for every note of the clip in MIDI 1-127, edited by drag, draw-mode stroke, marquee and keys, each gesture one undo step announced once at its end.
 tags: [rhino, ui, notes, velocity]
 sources: []
-updated: 2026-10-16
+updated: 2026-10-25
 ---
 
 # Note editor velocity lane
@@ -42,7 +42,7 @@ The gestures follow `SelectionInput.h` ([Pointer and selection rules](pointer-an
 - A drag arms after 3 px, and arming moves nothing. Holding Shift drags at a quarter of the speed.
 - In draw mode (B) a stroke paints each step column, interpolating along the stroke so a fast stroke misses no column. With Alt it paints per note, and with a selection it paints only the selected notes. The stroke is held to the visible steps, so a pointer parked past the edge paints whatever autoscroll brings in. Without that clamp, the segment lay entirely off screen and nothing was painted.
 - Lane gestures autoscroll horizontally only, never in pitch.
-- The right button, a double-click and a press on the gutter do nothing, because a marker can stand for a note scrolled out of sight.
+- A double-click and a press on the gutter do nothing, because a marker can stand for a note scrolled out of sight. Since commit `4783232` (2026-10-25) the right button opens a menu ([Note editor](note-editor.md#gestures)): on a marker its note's menu, taking the note as a press would; on empty lane the grid's, without Add Note; on the gutter or the divider none. It still erases and drags nothing (`VelocityLaneDraw.inc`).
 - Ctrl+Up/Down changes the selection by 10, and Ctrl+Shift+Up/Down by 1.
 
 ## Holding the bracket safely
@@ -56,7 +56,7 @@ These came out of a multi-agent review on 2026-10-16. Each is fixed and tested.
 
 ## Drawing
 
-Every note of the clip has a marker. Notes scrolled out of the pitch window are dimmed, their colour moved 0.55 of the way towards the lane's. Hovering a note in the grid lights its marker, which is Live's way of finding a marker inside a stack. The gutter shows the hovered or dragged value and its note name, the pad name on a drum clip; in a lane under 44 px it shows only the 127 and 1 labels and the value without the name. Markers are drawn with whole-pixel `fillRect` only: an octagonal dot built from five rectangles, plus a bar for the note's length. That keeps partial repaints identical to full ones ([JUCE's rasteriser is not clip-invariant](juce-rasteriser-not-clip-invariant.md)). The lane's colours are `palette` tokens ([Colours and typography](colours-and-typography.md)).
+Every note of the clip has a marker. Notes scrolled out of the pitch window are dimmed, their colour moved 0.55 of the way towards the lane's. Hovering a note in the grid lights its marker, which is Live's way of finding a marker inside a stack; the other way round, hovering a marker lights and names its note's key on the keyboard (commit `4783232`). The gutter shows the hovered or dragged value and its note name, the pad name on a drum clip; in a lane under 44 px it shows only the 127 and 1 labels and the value without the name. Markers are drawn with whole-pixel `fillRect` only: an octagonal dot built from five rectangles, plus a bar for the note's length. That keeps partial repaints identical to full ones ([JUCE's rasteriser is not clip-invariant](juce-rasteriser-not-clip-invariant.md)). The lane's colours are `palette` tokens ([Colours and typography](colours-and-typography.md)).
 
 ## Not done yet
 

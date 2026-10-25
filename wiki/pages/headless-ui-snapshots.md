@@ -4,7 +4,7 @@ type: guide
 summary: Render a Rhino panel, the whole Rhino shell or Forge's editor to a PNG without a window, then measure it instead of eyeballing it.
 tags: [both, ui, testing, snapshots]
 sources: []
-updated: 2026-10-22
+updated: 2026-10-25
 ---
 
 # Seeing the UI without taking the screen
@@ -26,6 +26,9 @@ knobs and number-less bars until commit `d28a687`.
 
 The Drum Rack face does the same in `runDrumRackFaceTest` (`tests/Pattern/DeviceRackTest.cpp`). Set
 `RHINO_DRUMS_SNAPSHOT` to an absolute path and run `ctest --test-dir native/build -C Release -R native_pattern_workflow`.
+It writes the face at 852 px (`DeviceEditorPanel::drumFaceWidth`) by `standardHeight`, painted with a `Theme`, as the
+test leaves it at its end, showing a sliced roll, and deletes any old file first. A snapshot is what caught the sample
+editor's envelope line drawing nothing ([A juce::Path holding only a start point is empty](juce-path-isempty-ignores-a-lone-point.md)).
 `RHINO_DRUM_WINDOW_SNAPSHOT` writes the Drum Rack's own window, stacked, at 1280 x 800 from `runDrumRackWindowTest`, in
 the same run. `RHINO_DJ_SNAPSHOT` writes the DJ view at 1240 x 720, a track deck and a file deck either side of the
 mixer, from `DjBooth.inc` in `native_arrangement_workflow` ([DJ view and the booth](dj-view.md)).
@@ -38,9 +41,10 @@ file first; it is the way to see the meters without opening the app ([Track leve
 `RHINO_TIME_ROW_SNAPSHOT` writes the arrangement's time row at four zooms, stacked - two minutes, a 1/32 grid, a 1/512
 grid and the deepest zoom - from `BrowserDrops.inc` in the same case, deleting any old file first
 ([Arrangement view](arrangement-view.md#the-time-row)).
-It writes the face at 852 px (`DeviceEditorPanel::drumFaceWidth`) by `standardHeight`, painted with a `Theme`, as the
-test leaves it at its end, showing a sliced roll, and deletes any old file first. A snapshot is what caught the sample
-editor's envelope line drawing nothing ([A juce::Path holding only a start point is empty](juce-path-isempty-ignores-a-lone-point.md)).
+`RHINO_NOTE_KEYS_SNAPSHOT` writes the note editor at 1000 x 300, zoomed until one step is wider than the keys,
+scrolled half a step in, its rows under 8 px and one key named on its tag, from `NoteKeys.inc` in the same case,
+deleting any old file first
+([Note editor](note-editor.md#pitfalls)).
 
 A `juce::TreeView` cannot be seen this way opened: it lays out its rows asynchronously, so a snapshot shows an opened
 folder with no children, even after `setOpen`, `resized()` or a rebuild at a new width. Test the browser's rows and drag

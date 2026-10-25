@@ -1147,3 +1147,15 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/arrangement-view.md (new rule: empty lanes and empty MIDI clips are blank at the user's request; both wordings of the empty-lane hint and "Edit notes below" gone; `TrackFacts::holdsInstrument` and the sync's `trackHasInstrument` call removed with them)
 - updated: pages/track-kinds.md (the empty-lane hint dropped from "What reads the kind")
 - updated: pages/playhead.md (the empty-lane hint dropped from what the arrangement paints only where the repaint reaches)
+
+## [2026-10-25] update | Note editor UX audit: the keys kept clear, a right-button menu, paste beside the source (4783232)
+- source: the change's brief and the coordinator's addendum, checked against native/src/ui/notes/StepGrid.h, StepGrid.cpp (`keyPressed`, `focusLost`, `changeListenerCallback`), StepGridMenu.cpp, StepGridEditing.cpp, StepGridGestures.cpp (`mouseDown`, `mouseWheelMove`, `updateMarqueeSelection`), StepGridPainter.cpp (`paint`, `paintKeyboard`), StepGridVelocityGestures.cpp (`pitchNamedAt`, `setHoveredPitch`, `keyHoverArea`), ui/shared/Theme.h, app/MainComponent.cpp, app/MainComponentCommands.cpp and scenarios NoteKeys.inc, NoteMenu.inc and RegionMove.inc; commit 4783232
+- updated: pages/note-editor.md (summary; eight units with `StepGridMenu.cpp`; `StepGrid::status` to the readout; Gestures: the right button opens `noteMenu`/`gridMenu` and never erases, erasing only by draw mode, Delete or the menu, double-click-to-delete rejected; Ctrl+E always consumed and why it used to split the arrangement's clip; Left/Right nudge; Ctrl+wheel zooms, a sideways wheel scrolls the clip; the hovered key lit and named; no focus frame; "The step region and the insert line": `insertStep`, what sets and clears it, `pasteStep`, Ctrl+D's local clipboard, why a paste wrote over its source; `showTimeSpan` sets the line and `shownClip`; pitfalls: clip the time axis at the keys' edge, the insert line survives a session change; new "Not done yet" from the audit)
+- updated: pages/pointer-and-selection.md (the right button asks and never edits; only draw mode erases; the note editor's wheel and Left/Right; the lane's right button opens the marker's note's menu)
+- updated: pages/note-velocity-lane.md (the right button's menus in the lane; hovering a marker names its key)
+- updated: pages/region-editing.md (in the note editor a paste lands on the insert line, unlike the lanes, and why; the arrangement unchanged)
+- updated: pages/colours-and-typography.md (the `keyHoverText` token)
+- updated: pages/writing-rhino-tests.md (rule 18: catch a context menu through a `presentMenu` seam, as `NoteMenu.inc` does)
+- updated: pages/headless-ui-snapshots.md (`RHINO_NOTE_KEYS_SNAPSHOT`; the Drum Rack face's sentence put back beside its variable)
+- updated: pages/keeping-files-small.md (`StepGrid` at eight units; `StepGrid.cpp` 716, `StepGridGestures.cpp` 826, `StepGridEditing.cpp` 597 lines)
+- updated: index.md (Note editor's summary)

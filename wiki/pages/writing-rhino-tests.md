@@ -4,7 +4,7 @@ type: guide
 summary: Choose between a unit check and a workflow scenario, follow the rules that keep scenarios sharing one Session honest, and time the interface with --profile-ui and --profile-stress.
 tags: [rhino, testing, conventions]
 sources: []
-updated: 2026-10-24
+updated: 2026-10-25
 ---
 
 # Writing Rhino tests
@@ -157,6 +157,13 @@ every scenario of `DjLiveChain.inc`).
     (2026-10-24, commit `4bd0f45`) first read it after `createClip(0, 32.0, &midiID)`, got `midiID`
     back and failed its own precondition, "The note editor shows another clip before the sweep"; the read now comes
     before the fixtures ([Note editor](note-editor.md#showing-a-swept-span)).
+18. **Catch a context menu before it reaches the screen.** A scenario must not open a real `PopupMenu` on the desktop
+    of whoever runs the suite. `StepGrid` shows its right-button menus through a private
+    `std::function<void(juce::PopupMenu, std::function<void(int)>)> presentMenu`; when it is set, a right-click hands it
+    the menu and the chooser instead of calling `showMenuAsync`. `NoteMenu.inc` (commit `4783232`) keeps both, reads
+    the items, submenus and headers included, with `PopupMenu::MenuItemIterator`, chooses by command id, and resets
+    `presentMenu` before its block ends. Give a new panel's menu the same seam to test it
+    ([Note editor](note-editor.md#gestures)).
 
 ## Timing, not checking
 

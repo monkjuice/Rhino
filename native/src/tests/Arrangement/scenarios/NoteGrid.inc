@@ -157,9 +157,10 @@
             grid.changeListenerCallback(nullptr);
 
             // Ctrl+E chops every selected note on the grid, whatever its
-            // pitch. With Ctrl still down, the mouse moving up adds a part to
-            // each note and down takes one away; the wheel never chops, it
-            // zooms and ends the chop. The whole chop is one undo step.
+            // pitch. With Ctrl still down, a press and a drag up adds a part to
+            // each note and down takes one away, while the mouse moving alone
+            // changes nothing; the wheel never chops, it zooms and ends the
+            // chop. The whole chop is one undo step.
             const auto noteCount = [&stack] { return stack.editorNotes().size(); };
             grid.setSelectedStates({loud, quiet});
             require(grid.keyPressed(juce::KeyPress('E', juce::ModifierKeys::commandModifier, 0)) && grid.subdivisionActive,
@@ -173,11 +174,22 @@
                 grid.mouseMove(eventAt(at, at, juce::ModifierKeys(juce::ModifierKeys::commandModifier)));
             };
             hover(150.0f);
-            hover(150.0f - 2.0f * StepGrid::chopPixelsPerPart);
+            hover(150.0f - 3.0f * StepGrid::chopPixelsPerPart);
+            require(grid.selectedStates().size() == 3 && noteCount() == 5 && grid.subdivisionActive,
+                    "The mouse moving with no button down chops nothing further");
+            const auto ctrlLeft = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::commandModifier);
+            const juce::Point<float> chopFrom {grid.xForStep(10.0), 150.0f};
+            grid.mouseDown(eventAt(chopFrom, chopFrom, ctrlLeft));
+            require(grid.subdivisionActive && grid.gesture == StepGrid::Gesture::chop && grid.selectedStates().size() == 3,
+                    "A press with Ctrl down keeps the chop open, and moves and selects nothing");
+            grid.mouseDrag(eventAt(chopFrom, chopFrom.translated(0.0f, -2.0f * StepGrid::chopPixelsPerPart), ctrlLeft));
             require(grid.selectedStates().size() == 7 && noteCount() == 9 && grid.subdivisionCount == 4,
-                    "Moving the mouse up two parts' worth adds two parts to every chopped note");
-            hover(150.0f - StepGrid::chopPixelsPerPart);
-            require(grid.selectedStates().size() == 5 && grid.subdivisionCount == 3, "and moving it down takes one away");
+                    "Dragging up two parts' worth adds two parts to every chopped note");
+            grid.mouseDrag(eventAt(chopFrom, chopFrom.translated(0.0f, -StepGrid::chopPixelsPerPart), ctrlLeft));
+            require(grid.selectedStates().size() == 5 && grid.subdivisionCount == 3, "and dragging back down takes one away");
+            grid.mouseUp(eventAt(chopFrom, chopFrom.translated(0.0f, -StepGrid::chopPixelsPerPart), ctrlLeft));
+            require(grid.subdivisionActive && grid.gesture == StepGrid::Gesture::none,
+                    "Letting go of the button leaves the chop open while Ctrl is down");
             const auto chopZoom = grid.stepZoom;
             juce::MouseWheelDetails chopNotch;
             chopNotch.deltaY = 0.5f;

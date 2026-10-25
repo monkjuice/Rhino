@@ -281,7 +281,7 @@ void MainComponent::showHelpMenu(juce::Component& target)
                     "Click a key of the MIDI editor  Select its notes\n"
                     "Ctrl+X / Ctrl+C / Ctrl+V  Cut, copy and paste the selection, or whole tracks from their cards\n"
                     "Ctrl+D  Duplicate it directly after itself\nCtrl+E  Split the selected clip at the playhead\n"
-                    "Ctrl+E in the MIDI editor  Chop the selected notes on the grid; keep Ctrl down and move the mouse up for more parts\n"
+                    "Ctrl+E in the MIDI editor  Chop the selected notes on the grid; keep Ctrl down and drag up for more parts, down for fewer\n"
                     "Ctrl+J  Merge the selected audio clips into one audio file\n"
                     "Ctrl+B  Bounce the selection, the selected clips, tracks or group to new audio tracks\n"
                     "R  Play the selected audio clips backwards\nDelete  Empty the selection, or delete the selected tracks\n"

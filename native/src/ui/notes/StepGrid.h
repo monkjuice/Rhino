@@ -52,7 +52,7 @@ private:
     friend int runArrangementTest();
     friend int runUiProfile();
     enum class Gesture { none, draw, move, resize, select, keyboard, pan,
-                         velocityDrag, velocityDraw, velocitySelect, laneResize };
+                         velocityDrag, velocityDraw, velocitySelect, laneResize, chop };
     // What the right button's menus offer, StepGridMenu.cpp. A chop into n
     // equal parts is chopCommand + n, and chopCommand alone chops on the grid.
     enum MenuCommand
@@ -190,7 +190,7 @@ private:
     bool isSelected(const juce::ValueTree&) const;
     void setSelectedStates(std::vector<juce::ValueTree>);
     // Ctrl+E, the chop: every selected note cut on the grid, and while Ctrl is
-    // held the mouse moving up adds a part to each and down takes one away,
+    // held a press and a drag up adds a part to each and down takes one away,
     // as Ctrl+Up and Ctrl+Down do. StepGridEditing.cpp.
     void finishSubdivision();
     bool beginSubdivision();
@@ -387,7 +387,7 @@ private:
     std::vector<Session::NoteChop> chopSources;
     std::vector<juce::ValueTree> chopPieces;
     int chopDelta = 0;
-    // Where the mouse was when it last changed the count, -1 until it moves.
+    // Where the drag was when it last changed the count.
     float chopMouseY = -1.0f;
     static constexpr float chopPixelsPerPart = 12.0f;
     bool velocityAdjustActive = false;

@@ -135,6 +135,12 @@ int StepGrid::resizeHit(juce::Point<float> point) const
 
 void StepGrid::updatePointer(juce::Point<float> position, const juce::ModifierKeys& modifiers)
 {
+    // Ctrl+E's chop is open: a drag up or down sets its parts.
+    if (subdivisionActive)
+    {
+        setMouseCursor(juce::MouseCursor::UpDownResizeCursor);
+        return;
+    }
     if (position.y >= 0.0f && position.y < headerHeight && position.x >= labelWidth && position.x < gridRight())
     {
         setMouseCursor(juce::MouseCursor::CrosshairCursor);
@@ -164,7 +170,6 @@ void StepGrid::updatePointer(juce::Point<float> position, const juce::ModifierKe
 
 void StepGrid::mouseMove(const juce::MouseEvent& event)
 {
-    chopByMouse(event.position.y);
     updatePointer(event.position, event.mods);
     updateHover(event.position);
 }
@@ -197,6 +202,15 @@ void StepGrid::mouseDown(const juce::MouseEvent& event)
     // undo bracket it opened cannot be left open.
     if (gesture != Gesture::none)
         mouseUp(event);
+    // Ctrl still down after Ctrl+E: the left button drags the chop's parts up
+    // and down, and the press itself moves and selects nothing. Any other
+    // press ends the chop.
+    if (subdivisionActive && event.mods.isLeftButtonDown() && isShortcutDown(event.mods))
+    {
+        gesture = Gesture::chop;
+        chopMouseY = event.position.y;
+        return;
+    }
     finishSubdivision();
     finishVelocityAdjustment();
     collapseSelectionOnRelease = false;
@@ -668,6 +682,13 @@ void StepGrid::dragGesture(const juce::MouseEvent& event)
         return;
     }
     if (gesture == Gesture::none) return;
+    // Before dragPosition too: a chop's drag counts parts, and nothing about
+    // it may autoscroll.
+    if (gesture == Gesture::chop)
+    {
+        chopByMouse(event.position.y);
+        return;
+    }
     dragPosition = event.position;
     dragTravelled = dragTravelled || event.getDistanceFromDragStart() >= 3;
     if (isVelocityLaneGesture(gesture))
@@ -773,8 +794,11 @@ void StepGrid::mouseUp(const juce::MouseEvent& event)
     const auto laneGesture = isVelocityLaneGesture(gesture);
     if (laneGesture)
         finishVelocityLaneGesture();
-    else if (gesture != Gesture::none && gesture != Gesture::keyboard)
+    // A chop's drag is inside the chop's own undo step, which stays open
+    // until Ctrl comes up.
+    else if (gesture != Gesture::none && gesture != Gesture::keyboard && gesture != Gesture::chop)
         session.endNoteGesture();
+    chopMouseY = -1.0f;
     gesture = Gesture::none;
     collapseSelectionOnRelease = false;
     clickedNoteState = {};
@@ -854,7 +878,7 @@ void StepGrid::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWh
     }
     // Ctrl and the wheel zoom, as they do nearly everywhere else. They used to
     // chop the selected notes, for anyone reaching for the zoom; the wheel
-    // ends a chop now rather than driving it, which the mouse moving does.
+    // ends a chop now rather than driving it, which a drag does.
     finishSubdivision();
     if (event.mods.isShiftDown() || isShortcutDown(event.mods))
     {

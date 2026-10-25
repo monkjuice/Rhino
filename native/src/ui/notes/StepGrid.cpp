@@ -67,7 +67,7 @@ StepGrid::~StepGrid()
     finishVelocityAdjustment();
     if (holdsVelocityGesture(gesture)) session.endNoteVelocityGesture();
     else if (gesture != Gesture::none && gesture != Gesture::keyboard && gesture != Gesture::pan
-             && !isVelocityLaneGesture(gesture))
+             && gesture != Gesture::chop && !isVelocityLaneGesture(gesture))
         session.endNoteGesture();
     horizontalScroll.removeListener(this);
     session.removeChangeListener(this);

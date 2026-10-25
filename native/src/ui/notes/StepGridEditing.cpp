@@ -541,7 +541,6 @@ bool StepGrid::beginSubdivision()
     session.beginNoteGesture("Chop notes");
     subdivisionActive = true;
     chopDelta = 0;
-    chopMouseY = -1.0f;
     std::vector<juce::ValueTree> pieces;
     if (session.chopNotes(originals, chopSources, pieces).failed())
     {
@@ -553,6 +552,9 @@ bool StepGrid::beginSubdivision()
     rebuildVisibleNotes();
     setSelectedStates(std::move(pieces));
     startTimerHz(30);
+    // The pointer turns up-and-down: a drag is what sets the parts now.
+    if (isMouseOver(true))
+        updatePointer(getMouseXYRelative().toFloat(), juce::ModifierKeys::getCurrentModifiers());
     repaint();
     return true;
 }
@@ -595,19 +597,14 @@ bool StepGrid::adjustSubdivision(int delta)
     return true;
 }
 
-// Ctrl+E held and the mouse moving up adds a part to every chopped note, down
-// takes one away, a part every chopPixelsPerPart: Live chops by dragging, and
-// the user asked for it without the button. The first move sets where it
-// counts from.
+// Ctrl still down after Ctrl+E, a press and a drag up adds a part to every
+// chopped note and a drag down takes one away, a part every chopPixelsPerPart,
+// as Live chops by dragging. The press sets where the drag counts from; the
+// mouse moving with no button down changes nothing.
 void StepGrid::chopByMouse(float y)
 {
-    if (!subdivisionActive)
+    if (!subdivisionActive || chopMouseY < 0.0f)
         return;
-    if (chopMouseY < 0.0f)
-    {
-        chopMouseY = y;
-        return;
-    }
     const auto parts = static_cast<int>((chopMouseY - y) / chopPixelsPerPart);
     if (parts == 0)
         return;
@@ -622,6 +619,8 @@ void StepGrid::finishSubdivision()
     chopSources.clear();
     chopPieces.clear();
     session.endNoteGesture();
+    if (isMouseOver(true))
+        updatePointer(getMouseXYRelative().toFloat(), juce::ModifierKeys::getCurrentModifiers());
     // Only with nothing else on the clock: a stroke or a marquee carries on
     // autoscrolling after a modal tool ends.
     if (gesture == Gesture::none && !velocityAdjustActive) stopTimer();

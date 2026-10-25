@@ -561,7 +561,7 @@ private:
     {
         juce::String name;
         juce::Colour colour;
-        bool midi = false, holdsInstrument = false, bus = false, folded = false;
+        bool midi = false, bus = false, folded = false;
     };
     std::vector<TrackFacts> trackFacts;
     const TrackFacts& factsFor(int track) const;

@@ -19,9 +19,8 @@
             view.viewStart = 0.0;
             view.viewSpan = 8.0;
             const auto secondsPerBeat = 60.0 / session.tempo();
-            // Just below the lane's top edge rather than down its middle: an
-            // empty track prints "Drop audio here" across the centre, and an
-            // antialiased glyph pixel is not the lane colour.
+            // Just below the lane's top edge, clear of anything a lane draws
+            // over its ground.
             const auto laneY = static_cast<int>(view.lane(bandTrack).getY()) + 8;
             // Sampled mid-beat, off the grid lines: a line is one pixel wide
             // and the wash is a property of the lane between them.

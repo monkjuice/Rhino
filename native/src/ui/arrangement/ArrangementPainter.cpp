@@ -3,7 +3,6 @@
 #include "ui/shared/Theme.h"
 #include "ui/shared/WallClock.h"
 #include <optional>
-#include <set>
 
 // Arrangement rendering.
 
@@ -503,26 +502,7 @@ void Arrangement::paint(juce::Graphics& g)
         }
     }
     // The clips, piece by piece (ArrangementClipPainter.cpp).
-    std::set<int> tracksWithClips;
-    for (const auto& clip : clips)
-        tracksWithClips.insert(clip.track);
     paintClips(g);
-    // The hint belongs on the first empty track, and says what that track is
-    // for rather than assuming audio: a MIDI track wants an instrument.
-    for (int track = 0; track < static_cast<int>(trackFacts.size()); ++track)
-    {
-        const auto& facts = factsFor(track);
-        if (tracksWithClips.contains(track) || facts.holdsInstrument || isTrackHidden(track) || facts.bus)
-            continue;
-        if (const auto hintArea = lane(track).reduced(16, 0); hintArea.intersects(dirty))
-        {
-            g.setColour(palette::textDim);
-            drawSnappedText(g, facts.midi ? "Double-click to add a clip, or drop an instrument here"
-                                          : "Drop audio here",
-                            hintArea.toNearestInt(), juce::Justification::centredLeft, true);
-        }
-        break;
-    }
     // Curves sit on top of the clips they modulate, and are clipped to the
     // scrolling lane area so a scrolled-off row cannot draw into the ruler.
     {

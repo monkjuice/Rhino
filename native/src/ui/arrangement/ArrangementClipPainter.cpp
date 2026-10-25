@@ -168,12 +168,6 @@ void Arrangement::paintClipPiece(juce::Graphics& g, const ClipView& clip, const 
         g.setColour(ink.brighter(0.3f));
         g.drawRect(noteBox.reduced(0.5f), 1.0f);
     }
-    if (notes.empty())
-    {
-        g.setColour(palette::textDim);
-        drawSnappedText(g, "Edit notes below", noteArea.toNearestInt(),
-                        juce::Justification::centredLeft, true);
-    }
 }
 
 }

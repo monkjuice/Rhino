@@ -1,7 +1,7 @@
 ---
 title: The main track
 type: concept
-summary: The main output row is the edit's master plugin list, addressed as track index trackCount() so track-indexed calls need no sentinel.
+summary: The main output row is the edit's master plugin list, addressed as track index trackCount() so track-indexed calls need no sentinel, pinned last under the returns with a card and a colour of its own.
 tags: [rhino, mixer, tracks]
 sources: []
 updated: 2026-10-25
@@ -19,12 +19,13 @@ Every device, parameter and automation call takes a track index, and `DeviceTarg
 
 - **Audio effects only.** `addDevice` asks the engine's `canBeAddedToMaster()` for an audio effect; instruments and MIDI effects go to calls that accept only real track indices and are refused there, as are clips, audio files and patterns. A browser drop on it says "The main track takes audio effects only."
 - **Level and pan**, from the edit's master volume plugin, shown on the arrangement's main row. No mute, solo, arm or input: `trackRecordInput` answers none.
-- It cannot be renamed, coloured, moved or removed; each attempt returns a message.
+- It cannot be renamed, moved or removed; each attempt returns a message.
+- **A colour** (since commit `5632644`, 2026-10-25). `trackColour` and `setTrackColour` accept `masterTrackIndex()`. The colour is the edit property `rhinoMainColour` (`mainColourID` in `SessionInternal`), and setting it is an undo step ("Colour main"). `buildStarterEdit` picks one with `pickTrackColour` after the returns. `restoreProject` gives a document without one a picked colour, outside the undo history. `pickTrackColour` counts Main's colour as worn.
 - Exported WAVs include its devices and fader because the render sets `useMasterPlugins` ([Project files (.rhinoedit)](project-files.md)).
 
 ## In the arrangement
 
-The row is pinned under the scrolling lanes, so `laneContentHeight` excludes it and the timeline grid carries on through it. Clicking it opens its chain in the Device View. Its height is a view setting held by `Arrangement`, not the document: 28 px by default, dragged from its top edge between 26 and 120 px. Track header controls are children of `laneHeaders`, which crops them so a tall row never draws over the main row. The return tracks, when the song has any, are the last rows of the stack, directly above it (since `b7bd73c`). The main row is not a `te::AudioTrack`, so it carries no sends ([Return tracks and sends](return-tracks.md)).
+The row is pinned under the scrolling lanes, always last, under the returns' pinned block when the song has returns. `laneContentHeight` excludes it, and the timeline grid carries on through it. Clicking it opens its chain in the Device View. Since `5632644` it has a card like a track's: meter, volume and pan at a track's fader widths, the divider, and a name column in its colour with "Main" in bold. Right-clicking the card opens `showMainMenu`, which offers the track swatches and "No colour". Its height is a view setting held by `Arrangement`, not the document: 28 px by default, dragged from its top edge between 26 and 120 px. Track header controls are children of `laneHeaders`, which crops them so a tall row never draws over the main row. The returns' cards have a container of their own, `returnHeaders`. The main row is not a `te::AudioTrack`, so it carries no sends ([Return tracks and sends](return-tracks.md)).
 
 ## Pitfalls
 

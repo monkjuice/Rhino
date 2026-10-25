@@ -1247,3 +1247,14 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/region-editing.md (a return's row counts as past the last track)
 - updated: pages/dj-view.md (a deck refuses a return track)
 - updated: index.md (three new pages; summaries of Mixer, Device chain order and Session, the model)
+
+## [2026-10-25] update | Arrangement: returns pinned with the main row, Main gets a card and a colour (5632644)
+- source: the coordinator's brief and addendum for 5632644, checked against native/src/ui/arrangement/Arrangement.h (`LaneRow::pinned`, `firstPinnedTrack`, `returnsTop`, `rowArea`, `lastLaneBottom`, `laneOrSlot`, `headerFor`, `returnHeaders`, `resizingFromTop`, `defaultReturnLaneHeight`, `maximumReturnsShare`, `pinnedRuleThickness`), ArrangementGeometry.cpp, ArrangementAutomation.cpp (`layoutRows`, `rowBounds`, `rowAt`), Arrangement.cpp (`resized`), ArrangementGestures.cpp (`cardResizeEdgeAt`, `beginCardGesture`, `dragCardGesture`, `showMainMenu`), ArrangementSelection.cpp, ArrangementDrops.cpp, ArrangementPainter.cpp (Main's card, the block's rule), ArrangementSync.cpp, native/src/model/SessionTracks.cpp (`trackColour`, `setTrackColour`, `pickTrackColour`), Session.cpp, SessionInternal.h/.cpp (`mainColourID`), and scenarios ReturnTracks.inc and AutomationLanes.inc
+- updated: pages/return-tracks.md (summary; a new section on the pinned block: layout, size cap, controls, gestures, painting, selections and clips; the cards scenario's new checks)
+- updated: pages/return-track-at-the-foot-of-the-stack.md (summary; the rejected alternative stated precisely as taking returns out of the track list; a 2026-10-25 change section: drawn pinned at the user's request, model unchanged)
+- updated: pages/arrangement-view.md (summary; the pinned block in the intro and in `rows`; Main's card and menu; the selected main row; the return cards bullet; a region stops at the last lane, the carried clip previewed in its slot)
+- updated: pages/main-track.md (summary; Main can be coloured, `rhinoMainColour`; its card and menu; pinned last under the returns)
+- updated: pages/track-and-clip-colours.md (summary; returns and the main row get a picked colour; Main counts as worn)
+- updated: pages/headless-ui-snapshots.md (`RHINO_RETURN_TRACKS_SNAPSHOT` now shows the pinned block and Main's card)
+- updated: pages/writing-rhino-tests.md (rule 15: the shared view is 354 px; rule 23: panels grow by the pinned block, a lane under it is covered, AutomationLanes.inc's panel, the stale index in TrackManagement.inc)
+- updated: index.md (summaries of Return tracks and sends, the return decision, Arrangement view, The main track, Track and clip colours)

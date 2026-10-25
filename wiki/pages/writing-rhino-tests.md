@@ -136,8 +136,8 @@ every scenario of `DjLiveChain.inc`).
     check after it counts lime pixels across the whole lane and still names the clip rather than selecting it
     ([Region editing](region-editing.md#one-selection)).
 15. **Restore `trackScroll` as you restore the zoom, and set the view after the fixtures exist.** The shared `view`
-    of the arrangement workflow is 1000 x 246 px by the time `RegionMove.inc` runs, so its lanes are 62 px, two rows
-    fit and the row stack scrolls. `RegionClipboard.inc`'s autoscroll block holds a drag at `lane(1).getBottom() - 8`,
+    of the arrangement workflow is 1000 x 354 px by the time `RegionMove.inc` runs (246 px before the returns were
+    pinned; rule 23), so its lanes are 62 px, two rows fit and the row stack scrolls. `RegionClipboard.inc`'s autoscroll block holds a drag at `lane(1).getBottom() - 8`,
     inside the 30 px band above the main row, so every `autoScrollDrag()` frame also pushed `trackScroll`; it restored
     `viewStart` and `viewSpan` but not `trackScroll`, leaving the stack about 54 px up. The next scenario's press at
     `lane(0).getBottom() - 8` then landed at y 59, one pixel above `lanesTop` (60), where `beginRegionGesture` refuses
@@ -202,6 +202,15 @@ every scenario of `DjLiveChain.inc`).
     `--profile-ui` and `--profile-stress` add tracks until `firstReturnTrack()` reaches their count, so they keep the
     same number of playing tracks, with the two starter returns and a send per return on every track besides.
     `StressProfile`'s `readLayout` skips returns. After the change both tools were compiled but not run.
+23. **Leave room for the pinned returns.** Since commit `5632644` the arrangement pins the returns between the lanes
+    and the main row, and the lanes fit only the room left (`fullLaneContentHeight` subtracts `pinnedRowsHeight`). To
+    keep a scenario's old lane geometry, make its panel taller by exactly the block: the starter's two returns are
+    108 px, so the 246, 400, 520 and 620 px test panels became 354, 508, 628 and 728. A lane partly under the block is
+    covered, and a click there finds the return. `AutomationLanes.inc` therefore sizes its panel to
+    `900 + footHeight + pinnedRowsHeight` so that the whole stack can be clicked. Do not remove a track by an index
+    read earlier in the shared document, which may now be a return: `TrackManagement.inc`'s "a new card arrives
+    complete" removed a return through a stale `before` and now removes the card it added
+    ([Return tracks and sends](return-tracks.md#in-the-arrangement)).
 
 ## Timing, not checking
 

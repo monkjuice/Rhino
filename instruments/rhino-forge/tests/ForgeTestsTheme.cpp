@@ -1,5 +1,6 @@
 #include "ForgeSuites.h"
 #include "ForgeTestSupport.h"
+#include "../src/ForgeThemeSettings.h"
 #include "../ui/ForgeTheme.h"
 #include "../ui/ForgePlacement.h"
 #include "../ui/ForgeControls.h"
@@ -83,7 +84,7 @@ struct Panel
 };
 
 // An editor built under a theme. selectTheme rather than applyTheme, because
-// createEditor's loadThemeOnce reads the settings file on the first call in
+// the Editor's themeSettings::loadOnce reads the settings file on the first call in
 // the process unless the theme was chosen on purpose, and which area made that
 // first call depends on the command line.
 std::unique_ptr<Panel> openPanel(ThemeId theme, int width, int height)
@@ -261,9 +262,9 @@ void settingsSuite()
     require(Processor::settingsFile() == scratch, "the override is where the settings are read");
 
     scratch.deleteFile();
-    require(Processor::readThemeChoice() == ThemeId::forge, "no settings file means Forge");
+    require(themeSettings::read() == ThemeId::forge, "no settings file means Forge");
 
-    Processor::saveThemeChoice(ThemeId::merli);
+    themeSettings::save(ThemeId::merli);
     require(scratch.existsAsFile(), "saving a choice writes the settings file");
     if (const auto root = juce::parseXML(scratch))
     {
@@ -272,27 +273,27 @@ void settingsSuite()
     }
     else
         require(false, "the settings file parses as XML");
-    require(Processor::readThemeChoice() == ThemeId::merli, "a saved Merli reads back as Merli");
+    require(themeSettings::read() == ThemeId::merli, "a saved Merli reads back as Merli");
 
-    Processor::saveThemeChoice(ThemeId::forge);
+    themeSettings::save(ThemeId::forge);
     if (const auto root = juce::parseXML(scratch))
         requireText(root->getStringAttribute("theme"), "forge", "saving Forge writes forge");
-    require(Processor::readThemeChoice() == ThemeId::forge, "a saved Forge reads back as Forge");
+    require(themeSettings::read() == ThemeId::forge, "a saved Forge reads back as Forge");
 
     // Everything that is not a settings file reads as the default, quietly.
     writeScratch("<RhinoForgeSettings theme=\"nonsense\"/>");
-    require(Processor::readThemeChoice() == ThemeId::forge, "an unknown theme name in the file is Forge");
+    require(themeSettings::read() == ThemeId::forge, "an unknown theme name in the file is Forge");
     writeScratch("not xml at all");
-    require(Processor::readThemeChoice() == ThemeId::forge, "a file that is not XML is Forge");
+    require(themeSettings::read() == ThemeId::forge, "a file that is not XML is Forge");
     writeScratch("<RhinoForgeMidiMap theme=\"merli\"/>");
-    require(Processor::readThemeChoice() == ThemeId::forge, "a file with another root is Forge");
+    require(themeSettings::read() == ThemeId::forge, "a file with another root is Forge");
     writeScratch("<RhinoForgeSettings/>");
-    require(Processor::readThemeChoice() == ThemeId::forge, "a settings file with no theme is Forge");
+    require(themeSettings::read() == ThemeId::forge, "a settings file with no theme is Forge");
 
     // A setting a later build adds has to survive this build saving the theme,
     // which is why the save is read-change-write rather than a rewrite.
     writeScratch("<RhinoForgeSettings theme=\"forge\" later=\"kept\"/>");
-    Processor::saveThemeChoice(ThemeId::merli);
+    themeSettings::save(ThemeId::merli);
     if (const auto root = juce::parseXML(scratch))
     {
         requireText(root->getStringAttribute("later"), "kept", "an attribute this build does not know survives a save");
@@ -309,34 +310,34 @@ void readOnceSuite()
     Processor::setSettingsFile(themeScratchSettings());
 
     // A fresh process whose settings say Merli: the first read applies it.
-    Processor::saveThemeChoice(ThemeId::merli);
+    themeSettings::save(ThemeId::merli);
     ui::applyTheme(ThemeId::forge);
-    Processor::forgetLoadedThemeForTests();
+    themeSettings::forgetLoadedForTests();
     ui::forgetThemeChoiceForTests();
-    require(Processor::loadThemeOnce() == ThemeId::merli, "the first load reads the file");
+    require(themeSettings::loadOnce() == ThemeId::merli, "the first load reads the file");
     require(ui::currentThemeId == ThemeId::merli, "and applies what it read");
     require(ui::electricBlue == ui::merliTheme().electricBlue, "down to the tokens");
 
     // The file changing afterwards changes nothing until the next start.
-    Processor::saveThemeChoice(ThemeId::forge);
-    require(Processor::readThemeChoice() == ThemeId::forge, "the file now says Forge");
-    require(Processor::loadThemeOnce() == ThemeId::merli, "a later load does not read it again");
+    themeSettings::save(ThemeId::forge);
+    require(themeSettings::read() == ThemeId::forge, "the file now says Forge");
+    require(themeSettings::loadOnce() == ThemeId::merli, "a later load does not read it again");
     require(ui::currentThemeId == ThemeId::merli, "so the applied theme stays");
     require(ui::electricBlue == ui::merliTheme().electricBlue, "and so do the tokens");
 
     // A theme chosen on purpose before the first load outranks the file: the
     // snapshot tool renders either look from one machine this way.
-    Processor::saveThemeChoice(ThemeId::merli);
-    Processor::forgetLoadedThemeForTests();
+    themeSettings::save(ThemeId::merli);
+    themeSettings::forgetLoadedForTests();
     ui::forgetThemeChoiceForTests();
     ui::selectTheme(ThemeId::forge);
     require(ui::themeChosen(), "selecting a theme marks it chosen");
-    require(Processor::loadThemeOnce() == ThemeId::forge, "a chosen theme is not overruled by the file");
+    require(themeSettings::loadOnce() == ThemeId::forge, "a chosen theme is not overruled by the file");
     require(ui::currentThemeId == ThemeId::forge, "and stays applied");
     require(ui::electricBlue == ui::forgeTheme().electricBlue, "down to the tokens");
 
     // The hook itself: opening a panel is what performs the first read.
-    Processor::forgetLoadedThemeForTests();
+    themeSettings::forgetLoadedForTests();
     ui::forgetThemeChoiceForTests();
     ui::applyTheme(ThemeId::forge);
     {

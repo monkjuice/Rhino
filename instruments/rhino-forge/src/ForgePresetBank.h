@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_core/juce_core.h>
+#include <functional>
 #include <vector>
 
 // Where presets live, what is in a folder of them, and moving them about.
@@ -58,7 +59,10 @@ struct PresetEntry
 {
     juce::File file;
     juce::String name, author, style;
+    // When the file was last written and how long it is: together, what
+    // says whether an entry read before still describes the file.
     juce::Time modified;
+    juce::int64 size = 0;
     PresetFormat format = PresetFormat::unknown;
 };
 
@@ -104,7 +108,17 @@ std::vector<PresetLibrary> libraries();
 // Every folder under a root, depth first, each level by name.
 juce::Array<juce::File> foldersUnder(const juce::File& root);
 // The presets in a folder, and in every folder under it when asked.
-std::vector<PresetEntry> presetsIn(const juce::File& folder, bool recursive);
+//
+// Given the folder's previous listing, a file whose date and size have not
+// moved keeps its entry rather than being opened again, so a library of six
+// hundred costs one walk the second time rather than six hundred opens; a
+// file added, changed or deleted from outside Forge is still noticed, because
+// the walk itself always happens. `shouldStop`, when given, is asked between
+// files and ends the listing early with what it has: the browser lists on a
+// thread of its own and may want that thread back.
+std::vector<PresetEntry> presetsIn(const juce::File& folder, bool recursive,
+                                   const std::vector<PresetEntry>* previous = nullptr,
+                                   const std::function<bool()>& shouldStop = {});
 
 // A name a file can carry: the characters Windows refuses taken out, trimmed.
 juce::String legalName(const juce::String&);

@@ -4,7 +4,7 @@ type: component
 summary: Presets and host state carry one tree, which also holds the patch's name, author, style, notes and conversion warnings; every arriving patch goes through applySavedState; a preset of another format version is refused, and within a version everything is reconciled.
 tags: [forge, presets, state, compatibility]
 sources: []
-updated: 2026-10-23
+updated: 2026-10-25
 ---
 
 # Forge presets and state
@@ -14,7 +14,7 @@ Persistence is in `src/ForgeProcessorState.cpp`, with the LFO tables in `src/For
 ## What the tree holds
 
 - A `<PARAM id value>` per parameter, as plain values.
-- Properties: each oscillator's plate colour (`panelColour_<module>`) and the macro names (`macroName_<n>`), one property each so one changing shifts nothing else.
+- Properties: each oscillator's plate colour (`panelColour_<module>`, clamped by `core/ForgePanelColours.h`, the one header for the count and the default that both the state and the panel read since 2026-10-25) and the macro names (`macroName_<n>`), one property each so one changing shifts nothing else.
 - Since 2026-10-19, the patch's `PresetInfo` as the properties `presetName`, `presetAuthor`, `presetStyle`, `presetNotes`, `presetSource` and `presetWarnings` (one line per warning). Each is removed when empty, as macro names are. Because the info rides on the tree, a project reopens showing the patch's name. `presetSource` and `presetWarnings` are set only by a conversion ([Forge preset import](forge-preset-import.md)).
 - Child nodes, only when they differ from what every copy of Forge already has: `TABLE` (a drawn or loaded wavetable, deflated then base64), `SAMPLE` (a spectral sample as 16-bit FLAC then base64; the spectrogram is re-analysed on load), `ForgeLfoTable` (a custom LFO shape or grid) and, since 2026-10-13, `ForgeLfoPath` (a drawn PATH route as `Point x y` children, the default diamond never written; [Forge LFOs](forge-lfos.md)). A patch never points at a file on disk.
 - `ARPSLOT` nodes (since 2026-10-13), one per arp slot that has been left at least once: property `slot` (0-3) and one property per id in `arpSlotParameterIds()` holding the plain value ([Forge ARP plate, slots and waterfall](forge-arp-plate.md)). They are read from the parameter state itself, so they ride through `copyState` with no append or apply step, and `migrated` keeps them because they carry no `id`. **A slot's node is written only when the slot is left**, so the live slot's node is stale in a saved file whenever a knob moved since; harmless, because the only read is a switch *to* a slot, preceded by the write of the slot being left. A slot never visited has no node and opens on the defaults, as does a control a node predates. `liveArpSlot` is set from `arpSlot` in `applySavedState`.
@@ -31,6 +31,12 @@ Not in it: view settings (tab, the bank on show, envelope zoom, FX scroll), MIDI
 - The importers: `loadPreset` sends a `.SerumPreset` or `.vital` to them and applies the tree they build. `convertPreset` writes such a tree to a file without touching the patch that is playing.
 
 On a `.forgepreset` load, the file's name is the preset's name, so renaming the file renames the patch. The wrapper's `author`, `style` and `notes` outrank the tree's, because the wrapper is what the browser listed.
+
+A load is also what one click in the browser's list costs. On 2026-10-25 `--profile-browser` measured a factory preset at 98 ms median ([Forge preset browser and bank](forge-preset-browser.md#what-it-costs)), and a temporary timing of `applySavedState` split it into three nearly equal parts, each fixed the same day (uncommitted at the time of writing):
+
+- `applyTables` reset every oscillator's built-in table on every load, so the band-limited copies the voice already read were rebuilt (about 37 ms). It now leaves an oscillator alone when `tables.edit(osc).isUntouched()`. A test in `tests/ForgeTestsPresets.cpp` requires a load with no `TABLE` node not to bump `tableStore().revision(0)` for an oscillator already on the built-in table.
+- `migrated` called `parameterEntry` once per parameter, each call a walk of the whole tree (about 38 ms). It now gathers the ids present in one pass into a `std::set`.
+- `replaceState` (9-35 ms) was mostly the editor laying the rack out once per FX slot whose type moved. `applySavedState` now holds `applyingState` with a `juce::ScopedValueSetter` for the burst of parameter writes, read as `Processor::isApplyingState()`; the editor's per-control reactions stand down while it is set and `Editor::showPresetResult` lays out once afterwards ([Forge editor (panel)](forge-editor.md#rules-that-bite)). `setStateInformation` is not followed by `showPresetResult`; the tick's `fxTypesShown` comparison catches host state.
 
 `presetRevision()` moves on every load, save or info change, so the panel notices on its 24 Hz tick by comparing one number. `presetFileMoved` keeps the loaded file in step when the browser renames or moves it. `wavetableStateNode`, `lfoTableStateNode` and `readWavetableFrames` are free functions, so the importers build nodes exactly as a save does. None of this changed the format version: it is all additive.
 

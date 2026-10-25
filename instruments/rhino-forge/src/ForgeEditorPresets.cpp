@@ -86,8 +86,12 @@ void Editor::showPresetResult(const juce::Result& result, const juce::File&)
             showStatus({}, false);
     }
     refreshPresetPlate();
-    // Loading a preset can switch modules on or off behind the enable LEDs.
-    applyEnableStates();
+    // The slots' labels and the layout, once for the whole patch: while it
+    // was arriving the per-control reactions stood down (isApplyingState),
+    // and resized() runs the enable pass that greys what it switched off
+    // behind the LEDs.
+    refreshFxSlots();
+    resized();
     repaint();
 }
 

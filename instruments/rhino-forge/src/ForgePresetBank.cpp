@@ -2,6 +2,8 @@
 #include "ForgePresetImport.h"
 #include "../core/ForgeTableFiles.h"
 
+#include <map>
+
 namespace rhino::forge
 {
 namespace
@@ -262,6 +264,7 @@ PresetEntry readPresetEntry(const juce::File& file)
     entry.file = file;
     entry.name = file.getFileNameWithoutExtension();
     entry.modified = file.getLastModificationTime();
+    entry.size = file.getSize();
     entry.format = presetFormatOf(file);
     switch (entry.format)
     {
@@ -359,15 +362,37 @@ juce::Array<juce::File> foldersUnder(const juce::File& folder)
     return found;
 }
 
-std::vector<PresetEntry> presetsIn(const juce::File& folder, bool recursive)
+std::vector<PresetEntry> presetsIn(const juce::File& folder, bool recursive,
+                                   const std::vector<PresetEntry>* previous,
+                                   const std::function<bool()>& shouldStop)
 {
+    // What was listed last time, by path. The directory walk hands back each
+    // file's date and size for nothing, and an entry whose file still has
+    // both is kept as it was; only a new or changed file is opened.
+    std::map<juce::String, const PresetEntry*> known;
+    if (previous != nullptr)
+        for (const auto& entry : *previous) known.emplace(entry.file.getFullPathName(), &entry);
+
     std::vector<PresetEntry> found;
     for (const auto& item : juce::RangedDirectoryIterator(folder, recursive, "*",
                                                           juce::File::findFiles))
     {
+        if (shouldStop && shouldStop()) break;
         const auto& file = item.getFile();
         if (!isPresetFile(file) || isHiddenName(file.getFileName())) continue;
-        found.push_back(readPresetEntry(file));
+        if (const auto kept = known.find(file.getFullPathName());
+            kept != known.end() && kept->second->modified == item.getModificationTime()
+            && kept->second->size == item.getFileSize())
+        {
+            found.push_back(*kept->second);
+            continue;
+        }
+        auto entry = readPresetEntry(file);
+        // The walk's own reading of the date and size, so the next listing
+        // compares like with like.
+        entry.modified = item.getModificationTime();
+        entry.size = item.getFileSize();
+        found.push_back(std::move(entry));
     }
     std::sort(found.begin(), found.end(), [] (const PresetEntry& a, const PresetEntry& b)
     {

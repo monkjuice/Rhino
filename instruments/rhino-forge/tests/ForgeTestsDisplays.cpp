@@ -3,10 +3,13 @@
 // the engine runs, so a display cannot claim one thing while the voice does
 // another - these checks are what holds that.
 #include "ForgeTestSupport.h"
+#include "../src/ForgeEditor.h"
 #include "../ui/ForgePlacement.h"
 #include "../ui/ForgeControls.h"
 #include "../ui/ForgeEnvelopeVisuals.h"
 #include "../ui/ForgeFilterVisuals.h"
+
+#include <iostream>
 
 namespace rhino::forge::tests
 {
@@ -1101,11 +1104,84 @@ void lfoFooterSuite()
     require(processor->lfoTable(0).rows == 8 && !processor->lfoTable(0).custom,
             "the wheel adjusts the grid without entering Custom mode");
 }
+
+// The tick repaints only what moves on its own (Editor::liveRegions) and
+// leaves every control to repaint itself. So, between two frames in which
+// only the voices have moved on, nothing outside those regions may change:
+// anything the panel draws live outside them would go stale on screen, and
+// nowhere but here would say so. Both frames are painted whole, because the
+// rasteriser is not clip-invariant and a frame painted through the regions
+// cannot be held to the pixel against one painted without them.
+void liveRegionsSuite()
+{
+    auto processor = std::make_unique<rhino::forge::Processor>();
+    // No routing, so no knob's ring moves between the frames: a ring is the
+    // knob's own repaint, not the tick's.
+    setValue(*processor, "mod1Source", 0.0f);
+    setValue(*processor, "mod1Dest", 0.0f);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor->createEditor());
+    auto* panel = dynamic_cast<rhino::forge::Editor*>(editor.get());
+    require(panel != nullptr, "the editor is the panel");
+    if (panel == nullptr) return;
+
+    processor->prepareToPlay(48000.0, 512);
+    juce::AudioBuffer<float> audio(2, 512);
+    juce::MidiBuffer midi;
+    const auto play = [&]
+    {
+        midi.clear();
+        processor->processBlock(audio, midi);
+    };
+    // The editor's tick, run by hand once it is due, as --snapshot runs it.
+    const auto tick = [&]
+    {
+        juce::Thread::sleep(50);
+        juce::Timer::callPendingTimersSynchronously();
+    };
+    // A chord down before the first frame, so the keys the piano shows pressed
+    // are the same in both: the piano repaints itself when they change.
+    for (const auto note : {48, 52, 55, 60}) processor->keyboardState.noteOn(1, note, 0.8f);
+    play();
+    tick();
+    const auto whole = [&]
+    {
+        juce::Image canvas(juce::Image::ARGB, editor->getWidth(), editor->getHeight(), true);
+        juce::Graphics g(canvas);
+        editor->paintEntireComponent(g, true);
+        return canvas;
+    };
+    const auto before = whole();
+    // Time passes: the envelopes move on, the LFOs turn, the sparks fall.
+    for (int i = 0; i < 20; ++i) play();
+    tick();
+    const auto after = whole();
+
+    const auto live = panel->liveRegions();
+    const juce::Image::BitmapData was(before, juce::Image::BitmapData::readOnly);
+    const juce::Image::BitmapData now(after, juce::Image::BitmapData::readOnly);
+    auto outside = 0;
+    juce::Rectangle<int> where;
+    for (int y = 0; y < before.getHeight(); ++y)
+        for (int x = 0; x < before.getWidth(); ++x)
+        {
+            if (live.containsPoint({x, y})) continue;
+            if (was.getPixelColour(x, y) == now.getPixelColour(x, y)) continue;
+            if (outside++ == 0) where = {x, y, 1, 1};
+            else where = where.getUnion({x, y, 1, 1});
+        }
+    if (outside > 0)
+        std::cerr << "  " << outside << " pixels outside the live regions changed, within "
+                  << where.toString() << "\n";
+    require(outside == 0, "nothing the panel draws live lies outside the regions the tick repaints");
+    require(live.getNumRectangles() > 4, "the live regions are a list of regions, not the whole panel");
+    require(!live.containsRectangle(editor->getLocalBounds()), "and leave the rest of the panel alone");
+}
 }
 
 void displayTests()
 {
     chromeCacheSuite();
+    liveRegionsSuite();
     modulatedTraceSuite();
     resizeSharpnessSuite();
     filterDisplaySuite();

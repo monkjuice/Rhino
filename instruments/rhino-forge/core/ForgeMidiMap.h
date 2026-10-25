@@ -92,13 +92,15 @@ public:
     void bind(const MidiSource& source, int parameterIndex)
     {
         if (!source.valid() || parameterIndex < 0) return;
-        bindings[slot(source)].store(parameterIndex, std::memory_order_relaxed);
+        if (bindings[slot(source)].exchange(parameterIndex, std::memory_order_relaxed) == unbound)
+            bound.fetch_add(1, std::memory_order_relaxed);
     }
 
     void forget(const MidiSource& source)
     {
         if (!source.valid()) return;
-        bindings[slot(source)].store(unbound, std::memory_order_relaxed);
+        if (bindings[slot(source)].exchange(unbound, std::memory_order_relaxed) != unbound)
+            bound.fetch_sub(1, std::memory_order_relaxed);
     }
 
     // Everything pointed at this parameter is dropped. The panel offers this
@@ -109,7 +111,10 @@ public:
         if (parameterIndex < 0) return;
         for (auto& binding : bindings)
             if (binding.load(std::memory_order_relaxed) == parameterIndex)
+            {
                 binding.store(unbound, std::memory_order_relaxed);
+                bound.fetch_sub(1, std::memory_order_relaxed);
+            }
     }
 
     // What drives this parameter, or an invalid source if nothing does. Where
@@ -125,17 +130,15 @@ public:
         return { MidiSourceKind::controller, 0, -1 };
     }
 
-    int boundCount() const
-    {
-        auto found = 0;
-        for (const auto& binding : bindings)
-            if (binding.load(std::memory_order_relaxed) != unbound) ++found;
-        return found;
-    }
+    // Kept rather than counted. The audio thread asks on every block whether
+    // anything is bound at all, and walking four thousand atomics to answer
+    // was the filter's whole cost on a block with nothing to filter.
+    int boundCount() const noexcept { return bound.load(std::memory_order_relaxed); }
 
     void clear()
     {
         for (auto& binding : bindings) binding.store(unbound, std::memory_order_relaxed);
+        bound.store(0, std::memory_order_relaxed);
         armed.store(unbound, std::memory_order_relaxed);
     }
 
@@ -236,6 +239,7 @@ private:
     }
 
     std::array<std::atomic<int>, kindCount * channelCount * numberCount> bindings;
+    std::atomic<int> bound {0};
     std::atomic<int> armed {unbound};
     // What the audio thread last saw, and how many things it has seen. The
     // count is what tells a learn that the controller has moved: a knob nudged

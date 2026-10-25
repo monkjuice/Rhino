@@ -1,10 +1,10 @@
 ---
 title: Forge themes and Merli
 type: component
-summary: Every Forge chrome colour is a token in ui/ForgeTheme.h with a value per theme; the theme is a machine setting read once before the first Editor, and Merli, the second theme, redraws the chrome as fur and matte plates over the identical layout.
+summary: Every Forge chrome colour is a token in ui/ForgeTheme.h with a value per theme; the theme is a machine setting the Editor reads once, as its first member, before any control is built, and Merli, the second theme, redraws the chrome as fur and matte plates over the identical layout.
 tags: [forge, ui, theme]
 sources: []
-updated: 2026-10-23
+updated: 2026-10-25
 ---
 
 # Forge themes and Merli
@@ -19,9 +19,9 @@ A token keeps its name when a theme paints it otherwise: `electricBlue` is the s
 
 ## A setting of the machine, read once
 
-`Processor::createEditor` calls `Processor::loadThemeOnce()` (`src/ForgeProcessorSettings.cpp`) before it builds the Editor. That reads `%APPDATA%\Rhino Forge\Settings.xml` (`<RhinoForgeSettings theme="merli"/>`, beside the [MIDI map](forge-midi-learn.md)) once per process; a missing file or an unknown name means Forge. Saving reads, changes and writes, so attributes a later build adds survive. `ui::selectTheme` applies a theme and marks it chosen, which pre-empts the file; `Processor::setSettingsFile` redirects the file for tests, as `setMidiMapFile` does.
+Since 2026-10-25 (uncommitted at the time of writing) the choice is the panel's own. `src/ForgeThemeSettings.h` declares `themeSettings::read()`, `save(ThemeId)`, `loadOnce()` and `forgetLoadedForTests()` in `rhino::forge::themeSettings`, defined in `src/ForgeProcessorSettings.cpp` beside the favourites because both read and write `Processor::settingsFile()`; `Editor` runs `loadOnce()` as its first data member, `themeInForce`, declared right after `processor` and before `lookAndFeel` and every control. Before, `Processor::createEditor` called `Processor::loadThemeOnce()`, and moving it took the last `ui/` include out of the Processor's header ([Forge's Processor includes nothing under ui/](forge-processor-includes-no-ui.md)). `loadOnce` reads `%APPDATA%\Rhino Forge\Settings.xml` (`<RhinoForgeSettings theme="merli"/>`, beside the [MIDI map](forge-midi-learn.md)) once per process; a missing file or an unknown name means Forge. Saving reads, changes and writes, so attributes a later build adds survive. `ui::selectTheme` applies a theme and marks it chosen, which pre-empts the file; `Processor::setSettingsFile` redirects the file for tests, as `setMidiMapFile` does.
 
-Why once: components copy tokens as they are built (`setColour`, member initialisers such as `accent = electricBlue`), so a live switch would recolour the painted chrome and miss the controls. The user decided on 2026-10-16 that a switch takes effect on restart, which is also why the cached chassis and plate layers carry no theme in their keys ([Forge's panel repaints whole at 24 Hz](forge-panel-repaint-cost.md)).
+Why once: components copy tokens as they are built (`setColour`, member initialisers such as `accent = electricBlue`), so a live switch would recolour the painted chrome and miss the controls. The user decided on 2026-10-16 that a switch takes effect on restart, which is also why the cached chassis and plate layers carry no theme in their keys ([Forge's tick repaints its live regions at 24 Hz](forge-panel-repaint-cost.md)).
 
 The menu is `Editor::showThemeMenu` (`src/ForgeEditorTheme.cpp`, from `ui::themeMenu`: ids one-based, the current one ticked). It opens on a plain click on the top half of the title plate (`ui::identityPlateBounds` less the unit mark, the preset's name on the `PresetPlate`, the status label and LOAD/SAVE: `Editor::onThemePlate`) or on a right-click on bare chassis that no control claims (`src/ForgeEditorInput.cpp`). Choosing the other theme saves it and shows `MERLI ON RESTART` (or `FORGE ...`) in the preset label in `signalViolet`.
 
@@ -73,7 +73,7 @@ Cost, `RhinoForgeTests --profile 1440 900 <theme>` alternating merli, forge, mer
 
 ## Tests and tools
 
-Area `theme` (`tests/ForgeTestsTheme.cpp`, CTest `forge_theme`) checks names, that `applyTheme` sets every token and restores Forge's bytes, the settings round trip through the override only, read-once, the menu, that Merli renders deterministically and keeps every bound but the `PresetPlate`'s, and that Forge is pixel-stable in-process. That last check is what caught a buffered `PresetPlate` ([A buffered child broke Forge's byte-identical paint](buffered-child-breaks-pixel-stability.md)). The test binary always starts on Forge ([Build and test Forge](build-and-test-forge.md)); `--snapshot` and `--profile` take a theme ([Seeing the UI without taking the screen](headless-ui-snapshots.md)).
+Area `theme` (`tests/ForgeTestsTheme.cpp`, CTest `forge_theme`) checks names, that `applyTheme` sets every token and restores Forge's bytes, the settings round trip through the override only, read-once (`themeSettings::forgetLoadedForTests` resets it between checks), the menu, that Merli renders deterministically and keeps every bound but the `PresetPlate`'s, and that Forge is pixel-stable in-process. That last check is what caught a buffered `PresetPlate` ([A buffered child broke Forge's byte-identical paint](buffered-child-breaks-pixel-stability.md)). The test binary always starts on Forge ([Build and test Forge](build-and-test-forge.md)); `--snapshot` and `--profile` take a theme ([Seeing the UI without taking the screen](headless-ui-snapshots.md)).
 
 ## Deferred
 

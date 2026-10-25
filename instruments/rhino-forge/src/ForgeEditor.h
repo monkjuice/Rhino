@@ -9,6 +9,7 @@
 #include "../ui/ForgeFxGestures.h"
 #include "../ui/ForgePresetPlate.h"
 #include "ForgePresetBrowser.h"
+#include "ForgeThemeSettings.h"
 #include <memory>
 #include <vector>
 
@@ -33,6 +34,14 @@ public:
     // than in paint().
     void paintOverChildren(juce::Graphics&) override;
     void resized() override;
+    // The parts of the panel that move on their own: the readings in the
+    // module headers, the displays, the rack, the matrix table and the ARP
+    // plate's well. It is what the 24 Hz tick repaints; everything else
+    // repaints itself when it changes, a knob when its value or its ring
+    // moves, a label when its text does. Public so the profile tool can time
+    // a tick as the panel pays it, and so the displays area can check that
+    // nothing drawn live falls outside it.
+    juce::RectangleList<int> liveRegions() const;
 
 private:
     // A control is a knob or a stepper (a slider with a label above) or a chip
@@ -102,6 +111,13 @@ private:
     };
 
     Processor& processor;
+    // Read and applied before anything below is built. Every control copies
+    // the colour tokens as it is constructed, so the theme has to be in force
+    // by the time the first one is, and a member declared ahead of them all
+    // is the one place that is guaranteed. Once per process: a later Editor
+    // finds it applied already, and a choice from the menu waits for the
+    // next start.
+    [[maybe_unused]] const ui::ThemeId themeInForce = themeSettings::loadOnce();
     ui::LookAndFeel lookAndFeel;
     // Rack controls are real children of this clipped viewport. A fixed-height
     // row crossing the bottom edge therefore keeps its knobs and selectors,
@@ -283,6 +299,14 @@ private:
     // Just the size and the raster scale, which is the whole of what the
     // chassis is drawn from.
     juce::String chassisKey(float scale) const;
+    // What the cached chassis is drawn from, less the raster scale that only
+    // paint() knows. The tick compares it with the last one it saw, so a
+    // change to the chassis from outside the panel's own gestures - a module
+    // switched off by a preset, a colour from the host - gets the whole panel
+    // repainted rather than only what moves.
+    juce::String liveKey() const;
+    juce::String liveKeyShown;
+    void repaintLive();
     bool slotIsLive(int slot) const;
     juce::String lfoHeaderDetail() const;
     // What the envelope module's header says: the stage the envelope showing is

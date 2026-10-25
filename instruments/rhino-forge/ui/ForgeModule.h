@@ -304,6 +304,10 @@ inline int bankWidthOf(const Module& module)
 inline constexpr int gridColumns = 24;
 inline constexpr int moduleGap = 8;
 inline constexpr int headerHeight = 34;
+// How far down a module its header's reading can reach: the header, or the
+// second line GLOBAL and MACROS print theirs on (drawModuleDetail). The
+// panel's tick repaints this much of every module for a reading that moves.
+inline constexpr int liveHeaderHeight = 40;
 
 // The margin along a plate's foot, kept clear of controls so the lowest row
 // does not sit on the rail and the rivet the housing carries there. It once

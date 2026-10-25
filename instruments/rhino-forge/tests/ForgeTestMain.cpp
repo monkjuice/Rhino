@@ -74,6 +74,7 @@ int main(int argc, char** argv)
     // None is a CTest case; all are documented in wiki/pages/headless-ui-snapshots.md.
     if (first == "--snapshot" && argc > 2) return runSnapshot(argc, argv);
     if (first == "--profile") return runProfile(argc, argv);
+    if (first == "--profile-browser") return runProfileBrowser(argc, argv);
     if (first == "--profile-audio") return runProfileAudio(argc, argv);
     if (first == "--render") return runRender(argc, argv);
     if (first == "--audition") return runAudition(argc, argv);

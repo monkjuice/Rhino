@@ -1,10 +1,10 @@
 ---
 title: Build and test Forge
 type: guide
-summary: Configure Forge against the JUCE and zstd checkouts Rhino's script fetches, build around the toolchain's traps, fix /W4 warnings at their source, run one test area at a time, and audition or convert any preset from the command line.
+summary: Configure Forge against the JUCE and zstd checkouts Rhino's script fetches, build around the toolchain's traps, fix /W4 warnings at their source, run one test area at a time, audition or convert any preset from the command line, and time a preset load and the browser with --profile-browser.
 tags: [forge, build, testing, windows, warnings]
 sources: []
-updated: 2026-10-23
+updated: 2026-10-25
 ---
 
 # Build and test Forge
@@ -116,8 +116,20 @@ ctest --test-dir instruments/rhino-forge/build -C Release -j 8 --output-on-failu
 - Never filter the build and run `ctest` in one command (`cmake --build ... | Select-String ...; ctest ...`): a failed
   build leaves the old binary and CTest reports it all passed. Redirect the build to a log, check `$LASTEXITCODE`, and
   only then run CTest ([Editing only a scenario .inc does not rebuild the tests](inc-edits-do-not-rebuild.md)).
-- `--snapshot`, `--profile`, `--profile-audio` and `--render` are development tools in the same binary, not test cases
+- `--snapshot`, `--profile`, `--profile-browser`, `--profile-audio` and `--render` are development tools in the same binary, not test cases
   ([Proving a Forge change changed nothing](proving-a-forge-change-changed-nothing.md)).
+- `--profile-browser [width height]` (`tests/ForgeTestTools.cpp`, dispatched in `tests/ForgeTestMain.cpp`; since 2026-10-25,
+  uncommitted at the time of writing) is the preset path's profile. It reads the real bank in Documents and the machine's
+  Serum 2 and Vital folders, writes nothing, and prints each library listed cold and warm, every factory preset loaded
+  through the call a click in the list makes (median and max, with the editor open), five converted Serum 2 and Vital
+  loads, the browser opened and each library chosen, and the browser's frames. The same day `--profile` gained
+  `whole panel`, `whole panel, chord held` and `tick, live regions`, painted with the children included
+  ([Forge's tick repaints its live regions at 24 Hz](forge-panel-repaint-cost.md#measuring-it)). The figures are on
+  [Forge preset browser and bank](forge-preset-browser.md#what-it-costs).
+- `--profile-audio` on the everything patch with five notes, 2026-10-25: block 64 median 662 us (50% of real time),
+  block 512 median 4.97 ms (46.5%), 0 allocations. Seen there and left alone: `Processor::arpSettings` makes about 27
+  `getRawParameterValue` lookups per block (StringRef keyed, no allocation), and `juce::MidiKeyboardState::processNextMidiBuffer`
+  takes a `CriticalSection` every block, JUCE's own design.
 - Two more tools in `tests/ForgeTestRender.cpp` take a preset of any format: `.forgepreset`, `.SerumPreset` or `.vital`.
   - `--audition <preset> <out.wav>` renders four seconds at 48 kHz in 512-sample blocks, C1 (note 36) from 0 to
     0.6 s and a C major chord (C4 E4 G4) from 0.8 to 2.4 s, writes them to the WAV, and prints the conversion's

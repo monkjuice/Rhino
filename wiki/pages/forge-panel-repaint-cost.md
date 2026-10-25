@@ -1,25 +1,35 @@
 ---
-title: Forge's panel repaints whole at 24 Hz
+title: Forge's tick repaints its live regions at 24 Hz
 type: gotcha
-summary: Forge's editor repaints the entire panel 24 times a second, so anything added to its paint path is paid on every frame.
+summary: Since 2026-10-25 Forge's editor tick repaints only its live regions - the ARP plate, each shown module's header band and display, the matrix and the rack, the table panel - and every control repaints itself when it changes; until then it repainted the whole panel every frame. What is drawn in a live region is still paid 24 times a second, and what moves on its own outside them is never redrawn.
 tags: [forge, ui, performance]
 sources: []
-updated: 2026-10-22
+updated: 2026-10-25
 ---
 
-# Forge's panel repaints whole at 24 Hz
+# Forge's tick repaints its live regions at 24 Hz
 
-`Editor::timerCallback` (`src/ForgeEditorInput.cpp`) ends with an unconditional `repaint()`, on a timer started with `startTimerHz(24)` in `src/ForgeEditor.cpp`. Every knob, button and label is redrawn 24 times a second whether it moved or not, so anything added to `Editor::paint` (`src/ForgeEditorPaint.cpp`) or to a LookAndFeel draw method is on the frame path. Frame pacing is a core requirement (`AGENTS.md`), and on 2026-09-19 a restyle of the metal took idle CPU from 31.8% to 84% of one core before anyone noticed.
+`Editor::timerCallback` (`src/ForgeEditorInput.cpp`) runs on a timer started with `startTimerHz(24)` in `src/ForgeEditor.cpp`. Until 2026-10-25 it ended with an unconditional `repaint()`: every knob, button and label was redrawn 24 times a second whether it moved or not, about half of every frame, and on 2026-09-19 a restyle of the metal took idle CPU from 31.8% to 84% of one core before anyone noticed. Frame pacing is a core requirement (`AGENTS.md`).
+
+Since 2026-10-25 (uncommitted at the time of writing) it ends with `repaintLive()`:
+
+- It repaints `Editor::liveRegions()` (public, `src/ForgeEditorPaint.cpp`): what `paint()` draws over the cached chassis that moves without a gesture. That is the ARP plate, every shown module's header band (`ui::liveHeaderHeight`, 40 px in `ui/ForgeModule.h`, covering the second line GLOBAL and MACROS print on) and its `displayBounds`, the matrix and the rack modules whole, and the table panel when visible. The drag line a source handle trails is not there, because a drag repaints the panel on every move of its own.
+- When `Editor::liveKey()`, which is `chromeKey(1.0f)`, differs from `liveKeyShown` (a module switched off by a preset, a colour from the host), it repaints the whole panel once instead.
+- Everything else repaints itself when it changes: a knob on a value or ring change, a label on `setText`, the keyboard on its own timer.
+
+Two rules follow. Anything new that moves on its own goes in `liveRegions()` or repaints itself, or it freezes on screen. And anything drawn inside a live region, in `Editor::paint` or a LookAndFeel method, is still on the frame path. `liveRegionsSuite` (`tests/ForgeTestsDisplays.cpp`, `forge_displays`) holds the first: it paints the panel whole, advances the voices with a chord held and the timer pumped, paints whole again and requires no pixel outside `liveRegions()` to have changed, both frames painted whole because the rasteriser is not clip-invariant ([JUCE's rasteriser is not clip-invariant](juce-rasteriser-not-clip-invariant.md)).
+
+Measured before the change, 2026-10-25, software-rendered at 1440x900: the editor's own paint 8.7 ms, the whole panel with its children 18.2 ms, and 18.7 ms with a chord held, so notes cost nothing extra on the frame. The user reported knobs while playing as smooth and only the preset browser as slow, which is the work this came with ([Forge preset browser and bank](forge-preset-browser.md#what-it-costs)). After the change, same tool, same machine, same day: idle frame 8.3 ms, whole panel 17.8 ms, the tick's live regions 10.3 ms, whole panel with a chord held 18.4 ms, resize frame 65 ms, module on/off 36 ms, tab walk 35 ms, tab flip 13.7 ms. So the tick now costs 10.3 ms of what was a 17.8 ms whole-panel frame, and the whole-panel figures themselves barely moved, as expected: what changed is how much of the panel a tick invalidates, not what a paint of it costs.
 
 ## Measuring it
 
-- `RhinoForgeTests --profile [width height [theme [page [preset]]]]` (`tests/ForgeTestTools.cpp`) builds the real editor headless and prints median frame times: idle, resize, module on/off, a tab walk and a tab flip. The idle and resize frames are the oscillators' unless a page is named (`FX` for the effects rack), and a preset can be loaded first, since an empty rack draws nothing; `-` skips the theme or the page. It times `Editor::paint` alone, so the strips' pictures, panels and readings are counted and the knobs, which are child components, are not. Its comment says it renders in software, but it paints into a plain `juce::Image`, which on Windows is a Direct2D bitmap with a fixed cost per paint ([Profile paint on a software image](profile-paint-on-a-software-image.md)). Compare two builds rather than reading the absolute numbers.
+- `RhinoForgeTests --profile [width height [theme [page [preset]]]]` (`tests/ForgeTestTools.cpp`) builds the real editor headless and prints median frame times: idle, resize, module on/off, a tab walk and a tab flip. The idle and resize frames are the oscillators' unless a page is named (`FX` for the effects rack), and a preset can be loaded first, since an empty rack draws nothing; `-` skips the theme or the page. Those lines time `Editor::paint` alone, so the strips' pictures, panels and readings are counted and the knobs, which are child components, are not. Since 2026-10-25 three more lines paint through `paintEntireComponent`, children included: `whole panel`, `whole panel, chord held` (eight notes sounding, the timer pumped by hand) and `tick, live regions` (the same paint clipped to `liveRegions()`, what the tick now repaints). Its comment says it renders in software, but it paints into a plain `juce::Image`, which on Windows is a Direct2D bitmap with a fixed cost per paint ([Profile paint on a software image](profile-paint-on-a-software-image.md)). Compare two builds rather than reading the absolute numbers.
 - Take medians, never means. One 30 ms rebuild among forty cached frames once read as a 1.8 ms idle regression.
 - Build the old binary aside and alternate runs: the machine drifts by more than some differences. For idle CPU, sample the standalone's `TotalProcessorTime` twice, about 8 s apart.
 
 ## Where the cost is
 
-Path stroking, not rasterisation: in a metal piece the gradient `strokePath` calls dominate and the grain is about 3%. So clipping a repaint to its dirty region bought only about 10% (written, measured, thrown away), and halving the raster scale saves about 40%, not 75%. If those figures came from `--profile`, they were taken on a plain image whose fixed overhead can hide a gain; re-measure on a software image before relying on them.
+Path stroking, not rasterisation: in a metal piece the gradient `strokePath` calls dominate and the grain is about 3%. So clipping a repaint to its dirty region bought only about 10% (written, measured, thrown away), and halving the raster scale saves about 40%, not 75%. The live-region tick is the other lever: it invalidates less, so the children outside the regions are not painted at all, rather than clipping the same paint. If those figures came from `--profile`, they were taken on a plain image whose fixed overhead can hide a gain; re-measure on a software image before relying on them.
 
 ## The cached layers
 

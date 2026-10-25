@@ -3,6 +3,8 @@
 // ForgePresetBrowserViews.cpp.
 #include "ForgePresetBrowserInternal.h"
 
+#include <optional>
+
 namespace rhino::forge
 {
 namespace
@@ -17,6 +19,70 @@ int depthBelow(const juce::File& folder, const juce::File& root)
     return juce::StringArray::fromTokens(folder.getRelativePathFrom(root), "\\/", {}).size();
 }
 }
+
+// The thread a folder is listed on.
+//
+// A library's first listing opens every file in it, which on a disk that has
+// not seen them lately is seconds, and the browser has to stay in the hand
+// meanwhile. One job at a time, the newest replacing one not yet started, so
+// clicking down a column of folders reads the last one clicked rather than
+// every one on the way. What it finds goes into the browser's mailbox under
+// its lock, and the browser is asked to take it on the message thread, which
+// is the only thread that touches anything else of the browser.
+class PresetBrowser::Lister final : public juce::Thread
+{
+public:
+    explicit Lister(PresetBrowser& owner) : juce::Thread("Forge preset lister"), browser(owner) {}
+    ~Lister() override { stopThread(5000); }
+
+    // Message thread.
+    void list(int request, const juce::File& folder, std::vector<PresetEntry> previous)
+    {
+        {
+            const juce::ScopedLock lock(pending);
+            next = Job {request, folder, std::move(previous)};
+        }
+        if (!isThreadRunning()) startThread();
+        notify();
+    }
+
+private:
+    struct Job
+    {
+        int request = 0;
+        juce::File folder;
+        std::vector<PresetEntry> previous;
+    };
+
+    void run() override
+    {
+        while (!threadShouldExit())
+        {
+            std::optional<Job> job;
+            {
+                const juce::ScopedLock lock(pending);
+                job.swap(next);
+            }
+            if (!job.has_value())
+            {
+                wait(-1);
+                continue;
+            }
+            auto entries = presetBank::presetsIn(job->folder, true, &job->previous,
+                                                 [this] { return threadShouldExit(); });
+            if (threadShouldExit()) return;
+            {
+                const juce::ScopedLock lock(browser.arrivalsLock);
+                browser.arrivals.push_back({job->request, job->folder.getFullPathName(), std::move(entries)});
+            }
+            browser.triggerAsyncUpdate();
+        }
+    }
+
+    PresetBrowser& browser;
+    juce::CriticalSection pending;
+    std::optional<Job> next;
+};
 
 PresetBrowser::PresetBrowser(Processor& p) : processor(p)
 {
@@ -103,7 +169,10 @@ void PresetBrowser::openToBrowse()
 {
     cancelRename();
     showSaveForm(false);
-    scanned.clear();
+    // What was listed before is kept and marked stale: a file written or
+    // removed since is noticed by the next listing, which opens only what
+    // changed, and the table is never empty while it looks.
+    for (auto& scan : scanned) scan.second.fresh = false;
     rebuildFolders();
 
     // Open on the folder the loaded patch came from, so the arrows walk its
@@ -208,29 +277,68 @@ void PresetBrowser::chooseFolder(int row)
 void PresetBrowser::relist()
 {
     listed.clear();
+    listing = false;
     const auto* row = chosenRow();
     if (row == nullptr) { refilter(); return; }
     if (row->kind == FolderRow::Kind::favourites)
     {
+        // A handful of files the player picked, read here and now.
         for (const auto& path : favourites)
         {
             const juce::File file(path);
             if (file.existsAsFile()) listed.push_back(readPresetEntry(file));
         }
+        refilter();
+        return;
     }
-    else
+
+    // A folder lists everything under it, so a library's root is the whole
+    // library and the bank's ALL is the whole bank.
+    const auto key = row->folder.getFullPathName();
+    const auto known = scanned.find(key);
+    if (known != scanned.end())
     {
-        // A folder lists everything under it, so a library's root is the
-        // whole library and the bank's ALL is the whole bank. Kept once read:
-        // a Serum install is six hundred files, and stepping back to a folder
-        // already seen should not read them all again.
-        const auto key = row->folder.getFullPathName();
-        auto found = scanned.find(key);
-        if (found == scanned.end())
-            found = scanned.emplace(key, presetBank::presetsIn(row->folder, true)).first;
-        listed = found->second;
+        // Shown as it was last read, fresh or not: a stale list is read again
+        // below, and the fresh one takes its place when it lands, with no
+        // empty table in between.
+        listed = known->second.entries;
+        if (known->second.fresh) { refilter(); return; }
     }
+    // Read on the lister's thread. A library's first listing opens every file
+    // in it, which on a cold disk is seconds, and the browser stays in the
+    // hand meanwhile. What was listed before goes along, so only the files
+    // that changed are opened.
+    listing = true;
+    ++listRequest;
+    if (lister == nullptr) lister = std::make_unique<Lister>(*this);
+    lister->list(listRequest, row->folder, known != scanned.end() ? known->second.entries
+                                                                  : std::vector<PresetEntry> {});
     refilter();
+}
+
+// Message thread: everything the lister has finished since last time.
+void PresetBrowser::handleAsyncUpdate()
+{
+    std::vector<Arrival> taken;
+    {
+        const juce::ScopedLock lock(arrivalsLock);
+        taken.swap(arrivals);
+    }
+    for (auto& arrival : taken) listArrived(arrival.request, arrival.key, std::move(arrival.entries));
+}
+
+// What the lister read. Kept whatever became of the request - a folder read
+// is a folder read - and shown only if the folder is still the one chosen.
+void PresetBrowser::listArrived(int request, const juce::String& key, std::vector<PresetEntry> entries)
+{
+    auto& scan = scanned[key];
+    scan.entries = std::move(entries);
+    scan.fresh = true;
+    if (request != listRequest) return;
+    listing = false;
+    listed = scan.entries;
+    refilter();
+    revealHighlighted();
 }
 
 void PresetBrowser::refilter()

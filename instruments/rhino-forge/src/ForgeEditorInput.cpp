@@ -762,6 +762,24 @@ void Editor::timerCallback()
     processor.tableStore().collect();
     processor.sampleStore().collect();
     takeFxMeters();
-    repaint();
+    repaintLive();
+}
+
+// What the tick repaints. It used to be the whole panel, every frame, so
+// every knob, label and key was drawn 24 times a second whether or not
+// anything had moved; that was half of every frame. Now only what moves on
+// its own is, and a control repaints itself when it changes. The one thing
+// that can change the cached chassis from outside the panel's own gestures
+// is caught by the key the chassis is drawn from, and answered with the
+// whole panel.
+void Editor::repaintLive()
+{
+    if (const auto key = liveKey(); key != liveKeyShown)
+    {
+        liveKeyShown = key;
+        repaint();
+        return;
+    }
+    for (const auto& region : liveRegions()) repaint(region);
 }
 }

@@ -2,8 +2,12 @@
 #include "ForgePresetImport.h"
 
 // A module's plate colour is not a parameter and rides on the state tree as a
-// property; the four it can be are named in the panel's own vocabulary.
-#include "../ui/ForgeStyle.h"
+// property, as an index. How many there are and where a new oscillator
+// starts are facts of the patch, kept in core; what the colours look like
+// is the panel's business, and nothing here needs to know it.
+#include "../core/ForgePanelColours.h"
+
+#include <set>
 
 // State, presets and the files a table comes from.
 //
@@ -256,14 +260,12 @@ int Processor::panelColour(const juce::String& moduleId) const
     const auto stored = state.state.getProperty(panelColourProperty(moduleId));
     // A state written before this existed has no property at all, and that is
     // the ordinary case rather than an error: it opens on the default.
-    return stored.isVoid() ? static_cast<int>(ui::defaultPanelColour)
-                           : static_cast<int>(ui::panelColourFrom(static_cast<int>(stored)));
+    return stored.isVoid() ? defaultPanelColourIndex : clampPanelColour(static_cast<int>(stored));
 }
 
 void Processor::setPanelColour(const juce::String& moduleId, int choice)
 {
-    state.state.setProperty(panelColourProperty(moduleId),
-                            static_cast<int>(ui::panelColourFrom(choice)), nullptr);
+    state.state.setProperty(panelColourProperty(moduleId), clampPanelColour(choice), nullptr);
 }
 
 // One property per macro, numbered as a player counts them, for the same reason
@@ -395,6 +397,12 @@ void Processor::applySavedState(const juce::ValueTree& saved)
 {
     // Read before migrated() strips the table nodes back out, so the live
     // parameter state stays parameters only.
+    //
+    // Everything below writes the parameters in one burst, and the panel is
+    // told so (isApplyingState): a reaction it would run per control - the
+    // rack laid out again for every slot whose type moved - waits until the
+    // burst is over and runs once.
+    const juce::ScopedValueSetter<bool> applying(applyingState, true);
     applyTables(saved);
     applySamples(saved);
     applyLfoTables(saved);
@@ -650,23 +658,30 @@ juce::ValueTree Processor::migrated(const juce::ValueTree& savedState) const
         type.setProperty("value", static_cast<float>(LfoType::sampleHold), nullptr);
     }
 
+    // The ids the tree still names, gathered in the same pass that prunes it.
+    // Asking parameterEntry about each of the seven hundred parameters below
+    // walked the whole tree seven hundred times, which was forty milliseconds
+    // of every preset load.
+    std::set<juce::String> present;
     for (int i = result.getNumChildren(); --i >= 0;)
     {
         // A table is data rather than a parameter and is applied separately, so
         // it is taken out here and never reaches the parameter state. An arp
         // slot's node stays: it is read from the parameter state itself, and
         // carries no id for the check below to mistake for a parameter.
-        if (result.getChild(i).hasType(tableNodeType) || result.getChild(i).hasType("ForgeLfoTable")
-            || result.getChild(i).hasType("ForgeLfoPath") || result.getChild(i).hasType(sampleNodeType))
+        const auto child = result.getChild(i);
+        if (child.hasType(tableNodeType) || child.hasType("ForgeLfoTable")
+            || child.hasType("ForgeLfoPath") || child.hasType(sampleNodeType))
         { result.removeChild(i, nullptr); continue; }
-        const auto id = result.getChild(i).getProperty("id").toString();
-        if (id.isNotEmpty() && state.getParameter(id) == nullptr)
-            result.removeChild(i, nullptr);
+        const auto id = child.getProperty("id").toString();
+        if (id.isEmpty()) continue;
+        if (state.getParameter(id) == nullptr) result.removeChild(i, nullptr);
+        else present.insert(id);
     }
     for (auto* raw : getParameters())
     {
         auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(raw);
-        if (ranged == nullptr || parameterEntry(result, ranged->paramID).isValid()) continue;
+        if (ranged == nullptr || present.count(ranged->paramID) > 0) continue;
         juce::ValueTree entry("PARAM");
         entry.setProperty("id", ranged->paramID, nullptr);
         entry.setProperty("value", ranged->convertFrom0to1(ranged->getDefaultValue()), nullptr);
@@ -727,7 +742,10 @@ void Processor::applyTables(const juce::ValueTree& tree)
             if (child.hasType(tableNodeType) && static_cast<int>(child.getProperty("osc", -1)) == osc)
                 found = child;
         if (found.isValid() && readTableNode(found, tables.edit(osc))) tables.publish(osc);
-        else tables.resetToBuiltIn(osc);
+        // An oscillator already on the built-in ten is left alone. Resetting
+        // it rebuilt the band-limited table the voice was already reading,
+        // and three of those were a third of what every preset load cost.
+        else if (!tables.edit(osc).isUntouched()) tables.resetToBuiltIn(osc);
     }
 }
 

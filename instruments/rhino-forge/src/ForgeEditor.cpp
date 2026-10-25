@@ -398,7 +398,12 @@ void Editor::buildModules()
                             repaint();
                         };
                     else
-                        control->slider.onValueChange = [this] { refreshFxSlots(); repaintFxDisplays(); };
+                        control->slider.onValueChange = [this]
+                        {
+                            if (processor.isApplyingState()) return;
+                            refreshFxSlots();
+                            repaintFxDisplays();
+                        };
                     control->attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
                         processor.state, declared.id, control->slider);
 
@@ -475,7 +480,18 @@ void Editor::buildModules()
                     // and the menu sets it.
                     control->slider.setSliderStyle(juce::Slider::LinearBarVertical);
                     control->slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-                    control->slider.onValueChange = [this] { refreshFxSlots(); resized(); repaint(); };
+                    control->slider.onValueChange = [this]
+                    {
+                        // Not while a patch is arriving: it moves every slot at
+                        // once, and the panel is laid out once for all of them
+                        // when it has (showPresetResult, and the tick for state
+                        // a host restores). Laid out here per slot, a preset
+                        // load paid for twenty-four layouts.
+                        if (processor.isApplyingState()) return;
+                        refreshFxSlots();
+                        resized();
+                        repaint();
+                    };
                     control->attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
                         processor.state, declared.id, control->slider);
                     addControl(*control->plate);
@@ -562,6 +578,9 @@ void Editor::buildModules()
                     const auto rackControl = control->id.startsWith("fx");
                     control->slider.onValueChange = [this, held, rackControl]
                     {
+                        // A value that arrived with a patch is nobody's gesture,
+                        // whatever the pointer happens to be resting on.
+                        if (processor.isApplyingState()) return;
                         if (bubbleHeld || held->slider.isMouseOverOrDragging()) showValueBubble(*held);
                         else if (bubbleControl == held) showValueBubble(*held);
                         // A knob repaints itself, not the panel around it, so a
@@ -575,7 +594,12 @@ void Editor::buildModules()
                 // so the readouts are pushed when it moves.
                 if (control->id.startsWith("fx")
                     && (control->id.endsWith("ModeA") || control->id.endsWith("ModeB")))
-                    control->slider.onValueChange = [this] { refreshFxSlots(); repaintFxDisplays(); };
+                    control->slider.onValueChange = [this]
+                    {
+                        if (processor.isApplyingState()) return;
+                        refreshFxSlots();
+                        repaintFxDisplays();
+                    };
                 // The attachment installs the parameter's own text formatting,
                 // so it must be created before anything reads the slider's text.
                 control->attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(

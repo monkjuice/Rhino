@@ -29,6 +29,71 @@ PresetInfo described(const char* name, const char* author, const char* style)
     return info;
 }
 
+
+// The browser lists a folder on a thread of its own and takes the result on
+// the message loop; with no loop running here, this takes it by hand.
+void waitForListing(PresetBrowser& browser)
+{
+    const auto until = juce::Time::getMillisecondCounterHiRes() + 10000.0;
+    while (browser.listing && juce::Time::getMillisecondCounterHiRes() < until)
+    {
+        juce::Thread::sleep(2);
+        browser.takeListings();
+    }
+    require(!browser.listing, "a folder's listing lands");
+}
+
+// A folder listed again is walked again, so a file added, changed or deleted
+// from outside Forge is noticed, but a file whose date and size have not
+// moved keeps the entry read last time rather than being opened again.
+void listingSuite()
+{
+    const auto scratch = scratchBank();
+    presetBank::ensure();
+    Processor processor;
+    const auto folder = presetBank::root().getChildFile("Relist");
+    folder.createDirectory();
+    const auto one = folder.getChildFile("One.forgepreset");
+    const auto two = folder.getChildFile("Two.forgepreset");
+    require(processor.savePreset(one, described("One", "First", "Bass")).wasOk(), "One saves");
+    require(processor.savePreset(two, described("Two", "First", "Lead")).wasOk(), "Two saves");
+    const auto first = presetBank::presetsIn(folder, true);
+    require(first.size() == 2, "both list");
+
+    // An entry handed back as the previous listing is trusted for a file that
+    // has not moved, so a doctored one proves the file was not opened again.
+    auto doctored = first;
+    for (auto& entry : doctored)
+        if (entry.file == one) entry.author = "Kept";
+    // Two is rewritten with a new author, and dated well after, so the clock's
+    // resolution cannot make the two writes look like one.
+    require(processor.savePreset(two, described("Two", "Second", "Lead")).wasOk(), "Two saves again");
+    two.setLastModificationTime(juce::Time::getCurrentTime() + juce::RelativeTime::seconds(30));
+    // And a third appears from outside, by a plain copy.
+    const auto three = folder.getChildFile("Three.forgepreset");
+    require(one.copyFileTo(three), "a copy arrives from outside");
+
+    const auto again = presetBank::presetsIn(folder, true, &doctored);
+    require(again.size() == 3, "a file added from outside is listed");
+    for (const auto& entry : again)
+    {
+        if (entry.file == one) requireText(entry.author, "Kept", "a file that has not moved keeps its entry");
+        if (entry.file == two) requireText(entry.author, "Second", "a file whose date moved is read again");
+        if (entry.file == three) requireText(entry.author, "First", "a new file is read");
+    }
+
+    require(three.deleteFile(), "the copy goes again");
+    const auto gone = presetBank::presetsIn(folder, true, &again);
+    require(gone.size() == 2, "a file deleted from outside leaves the list");
+
+    const auto stopped = presetBank::presetsIn(folder, true, nullptr, [] { return true; });
+    require(stopped.empty(), "a listing asked to stop before it starts lists nothing");
+
+    presetBank::setRootForTests({});
+    presetBank::setLibraryRootsForTests({});
+    scratch.deleteRecursively();
+}
+
 void bankSuite()
 {
     const auto scratch = scratchBank();
@@ -160,6 +225,7 @@ void browserSuite()
     auto* browser = childOf<PresetBrowser>(*editor);
     require(browser != nullptr && browser->isVisible(), "LOAD opens the browser");
     if (browser == nullptr) return;
+    waitForListing(*browser);
     require(browser->getBounds() == ui::contentBounds(editor->getLocalBounds()),
             "standing over the modules, between the title bar and the keys");
     require(load->getToggleState(), "with LOAD lit while it is open");
@@ -169,6 +235,7 @@ void browserSuite()
         if (browser->folderRows[static_cast<size_t>(row)].folder == folder) leads = row;
     require(leads >= 0, "the bank's folders are listed");
     browser->chooseFolder(leads);
+    waitForListing(*browser);
     require(browser->shown.size() == 3, "a folder shows its presets");
     browser->step(1);
     require(processor.presetFile() == folder.getChildFile("Alpha.forgepreset"), "the arrows load the first preset");
@@ -198,6 +265,8 @@ void browserSuite()
     if (auto* commit = presetButton(*browser, "SAVE")) commit->onClick();
     const auto delta = folder.getChildFile("Delta.forgepreset");
     require(delta.existsAsFile(), "SAVE in the form writes the preset");
+    waitForListing(*browser);
+    require(browser->shown.size() == 4, "and the folder lists it");
     require(!browser->isSaving(), "and puts the form away");
     requireText(processor.presetInfo().name, "Delta", "the patch is now the one saved");
     Processor check;
@@ -225,6 +294,7 @@ void browserSuite()
 
 void browserTests()
 {
+    listingSuite();
     bankSuite();
     browserSuite();
 }

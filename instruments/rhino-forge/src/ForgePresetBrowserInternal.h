@@ -78,6 +78,8 @@ public:
     void mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
     int rowAt(juce::Point<int>) const;
     juce::Rectangle<int> rowBounds(int row) const;
+    // Only the two rows that changed hands are repainted, never the list.
+    void setHover(int row);
     void reveal(int row);
     void clampScroll();
     int visibleRows() const;
@@ -108,6 +110,7 @@ public:
     void mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
     int rowAt(juce::Point<int>) const;
     juce::Rectangle<int> rowBounds(int shownIndex) const;
+    void setHover(int shownIndex);
     void reveal(int shownIndex);
     void clampScroll();
     int visibleRows() const;

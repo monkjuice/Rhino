@@ -34,6 +34,36 @@ juce::String Editor::chromeKey(float scale) const
     return key;
 }
 
+juce::String Editor::liveKey() const { return chromeKey(1.0f); }
+
+// Everything paint() draws over the cached chassis that can move without a
+// gesture on the panel: the ARP plate's lamp, buttons and well; each shown
+// module's header reading and display; and the matrix and the rack whole,
+// whose table lines, shelves, list and readings are painted across them.
+// The drag line a source handle trails is not here: a drag repaints the
+// panel on every move of its own.
+juce::RectangleList<int> Editor::liveRegions() const
+{
+    juce::RectangleList<int> live;
+    live.add(ui::arpPlateBounds(getLocalBounds()));
+    for (const auto& module : moduleUis)
+    {
+        const auto& descriptor = *module.descriptor;
+        if (!moduleShown(descriptor)) continue;
+        const auto area = moduleAreaFor(descriptor);
+        if (descriptor.columnHeaderHeight > 0 || isFxModule(descriptor))
+        {
+            live.add(area);
+            continue;
+        }
+        live.add(area.withHeight(ui::liveHeaderHeight));
+        const auto display = ui::displayBounds(area, descriptor);
+        if (!display.isEmpty()) live.add(display);
+    }
+    if (tablePanel != nullptr && tablePanel->isVisible()) live.add(tablePanel->getBounds());
+    return live;
+}
+
 void Editor::paintPlates(juce::Graphics& g)
 {
     // The shared plates go down first, because the modules that sit on them

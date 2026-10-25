@@ -130,6 +130,7 @@ set(forge_sources
     core/ForgeFilter.h
     core/ForgeMatrix.h
     core/ForgeMidiMap.h
+    core/ForgePanelColours.h
     core/ForgeNoise.h
     core/ForgePatch.h
     core/ForgeCore.h
@@ -177,6 +178,7 @@ set(forge_sources
     src/ForgeProcessorLfo.cpp
     src/ForgeProcessorMidi.cpp
     src/ForgeProcessorSettings.cpp
+    src/ForgeThemeSettings.h
     src/ForgePresetBank.h
     src/ForgePresetBank.cpp
     src/ForgePresetImport.h

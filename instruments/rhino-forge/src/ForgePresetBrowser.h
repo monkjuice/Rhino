@@ -27,7 +27,8 @@
 // pieces and the split across translation units.
 namespace rhino::forge
 {
-class PresetBrowser final : public juce::Component, private juce::TextEditor::Listener
+class PresetBrowser final : public juce::Component, private juce::TextEditor::Listener,
+                            private juce::AsyncUpdater
 {
 public:
     explicit PresetBrowser(Processor&);
@@ -60,6 +61,7 @@ public:
     class FolderList;
     class PresetTable;
     class InfoCard;
+    class Lister;
 
     // One line of the folder list.
     struct FolderRow
@@ -94,6 +96,14 @@ public:
     // A preset being dragged towards a folder, and the folder row under it.
     juce::File dragging;
     int dropRow = -1;
+    // Whether the folder chosen is still being read, on the lister's thread.
+    // The table shows what the folder listed last time meanwhile, or says
+    // that it is reading when there is nothing yet.
+    bool listing = false;
+    // Delivers any listing the lister has finished now, rather than on the
+    // message loop's next turn: for a test or a tool that runs no loop. The
+    // loop itself delivers them the same way, through the AsyncUpdater.
+    void takeListings() { handleUpdateNowIfNeeded(); }
 
     const FolderRow* chosenRow() const;
     bool isFavourite(const juce::File&) const;
@@ -115,9 +125,33 @@ private:
     bool saving = false;
     // Asked once to replace a file of the same name; a second SAVE does it.
     juce::File confirmReplace;
-    // Every folder's presets as last read, by path, until the next open or the
-    // next change to the files.
-    std::map<juce::String, std::vector<PresetEntry>> scanned;
+    // Every folder's presets as last read, by path. Opening the browser marks
+    // them stale rather than throwing them away: the next listing of a stale
+    // folder walks it again and opens only the files whose dates moved, so a
+    // library of six hundred costs its first open and a few milliseconds
+    // after. A change the browser makes to the files itself clears them.
+    struct Scan
+    {
+        std::vector<PresetEntry> entries;
+        bool fresh = true;
+    };
+    std::map<juce::String, Scan> scanned;
+    // The number of the listing last asked for, so one that lands after the
+    // folder has been changed again is kept but not shown.
+    int listRequest = 0;
+    void listArrived(int request, const juce::String& key, std::vector<PresetEntry> entries);
+    // What the lister has finished and the message thread has not yet taken.
+    // The lister pushes under the lock and triggers the update; nothing on
+    // the lister's thread touches the browser otherwise.
+    struct Arrival
+    {
+        int request = 0;
+        juce::String key;
+        std::vector<PresetEntry> entries;
+    };
+    juce::CriticalSection arrivalsLock;
+    std::vector<Arrival> arrivals;
+    void handleAsyncUpdate() override;
 
     std::unique_ptr<InfoCard> info;
     std::unique_ptr<FolderList> folders;
@@ -135,6 +169,13 @@ private:
     std::unique_ptr<juce::FileChooser> chooser;
 
     juce::Rectangle<int> topBar, leftColumn, infoArea, foldersTitle;
+    // The plate, the wells and the titles, which are the same from one frame
+    // to the next and were most of what a repaint cost: drawn once into an
+    // image keyed on the size and the form, and blitted after. paint() adds
+    // the little that moves over it.
+    juce::Image chrome;
+    juce::String chromeState;
+    void paintChrome(juce::Graphics&);
 
     void rebuildFolders();
     void relist();
@@ -158,5 +199,8 @@ private:
     void textEditorReturnKeyPressed(juce::TextEditor&) override;
     void textEditorEscapeKeyPressed(juce::TextEditor&) override;
     void textEditorFocusLost(juce::TextEditor&) override;
+    // The thread a folder is listed on. Last, so it is stopped before anything
+    // it could still be handing a listing to is gone.
+    std::unique_ptr<Lister> lister;
 };
 }

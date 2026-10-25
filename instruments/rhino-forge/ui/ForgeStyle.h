@@ -2,6 +2,7 @@
 
 #include "ForgeModule.h"
 #include "ForgeChrome.h"
+#include "../core/ForgePanelColours.h"
 #include "ForgeType.h"
 #include "ForgePanels.h"
 #include <functional>
@@ -174,10 +175,17 @@ inline juce::Colour accentFor(const Module& module)
 // is the size the colour actually has to work at.
 enum class PanelColour { red, orange, green, blue };
 
-inline constexpr int panelColourCount = 4;
+// How many there are and where a new oscillator starts are the patch's
+// numbers (core/ForgePanelColours.h), because a preset stores the choice as
+// an index; the list above has to agree with them. The count is brought
+// into this namespace so the panel and its tests call it by the name they
+// always have.
+using rhino::forge::panelColourCount;
+static_assert(static_cast<int>(PanelColour::blue) + 1 == panelColourCount,
+              "ui::PanelColour lists a different number of colours than core counts");
 
 // Where a new oscillator starts.
-inline constexpr PanelColour defaultPanelColour = PanelColour::green;
+inline constexpr PanelColour defaultPanelColour = static_cast<PanelColour>(defaultPanelColourIndex);
 
 inline const char* panelColourName(PanelColour choice)
 {
@@ -213,7 +221,7 @@ inline juce::Colour panelColourOf(PanelColour choice)
 // knew a different number of colours.
 inline PanelColour panelColourFrom(int stored)
 {
-    return static_cast<PanelColour>(juce::jlimit(0, panelColourCount - 1, stored));
+    return static_cast<PanelColour>(clampPanelColour(stored));
 }
 
 // The menu a module's LED opens. Built here rather than inside the editor so a

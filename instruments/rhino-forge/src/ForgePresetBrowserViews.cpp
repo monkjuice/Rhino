@@ -10,6 +10,46 @@ using namespace browserLook;
 
 void PresetBrowser::paint(juce::Graphics& g)
 {
+    // Rendered at the display's own pixel scale, as the panel's chassis is.
+    const auto scale = g.getInternalContext().getPhysicalPixelScaleFactor();
+    juce::String key;
+    key << getWidth() << 'x' << getHeight() << '@' << juce::String(scale, 3) << (saving ? 'S' : 'B');
+    if (chrome.isNull() || key != chromeState)
+    {
+        const auto pixelWidth = juce::jmax(1, static_cast<int>(std::ceil(getWidth() * scale)));
+        const auto pixelHeight = juce::jmax(1, static_cast<int>(std::ceil(getHeight() * scale)));
+        chrome = juce::Image(juce::Image::ARGB, pixelWidth, pixelHeight, true);
+        juce::Graphics into(chrome);
+        into.addTransform(juce::AffineTransform::scale(scale));
+        paintChrome(into);
+        chromeState = key;
+    }
+    g.drawImageTransformed(chrome, juce::AffineTransform::scale(1.0f / scale));
+
+    // The patch that is loaded, between the arrows that step through the list.
+    const auto middle = previousButton.getBounds().getUnion(nextButton.getBounds()).reduced(34, 0);
+    const auto current = processor.presetInfo();
+    g.setFont(ui::panelFont(ui::Face::emphasis, 15.0f));
+    g.setColour(ui::text);
+    g.drawFittedText(current.name.toUpperCase(), middle, juce::Justification::centred, 1, 0.8f);
+
+    if (saving)
+    {
+        // Where the save will go follows the folder chosen, so it is drawn live.
+        const auto to = notesField.getBounds().withY(notesField.getBottom() + 4).withHeight(16);
+        g.setColour(ui::mutedText);
+        g.setFont(ui::panelFont(ui::Face::label, 11.0f));
+        g.drawFittedText("INTO  " + folderCaption(saveFolder()).toUpperCase(), to,
+                         juce::Justification::centredLeft, 1, 0.8f);
+    }
+}
+
+// Everything that stays put: the plate, the top bar's well and title, the
+// folders' title, and the save form's well and heading when the form is up.
+// The plate alone is eight gradient strokes round the browser's whole edge,
+// and it was being drawn again for every row the pointer crossed.
+void PresetBrowser::paintChrome(juce::Graphics& g)
+{
     g.fillAll(ui::chassisWellFloor);
     ui::drawPlate(g, getLocalBounds().toFloat().reduced(2.0f), 1.0f, 9.0f);
 
@@ -18,13 +58,6 @@ void PresetBrowser::paint(juce::Graphics& g)
     g.setColour(ui::text);
     g.setFont(ui::panelFont(ui::Face::header, 14.5f));
     g.drawText("PRESETS", bar.removeFromLeft(120), juce::Justification::centredLeft);
-
-    // The patch that is loaded, between the arrows that step through the list.
-    const auto middle = previousButton.getBounds().getUnion(nextButton.getBounds()).reduced(34, 0);
-    const auto current = processor.presetInfo();
-    g.setFont(ui::panelFont(ui::Face::emphasis, 15.0f));
-    g.setColour(ui::text);
-    g.drawFittedText(current.name.toUpperCase(), middle, juce::Justification::centred, 1, 0.8f);
 
     g.setColour(ui::mutedText);
     g.setFont(ui::panelFont(ui::Face::label, 11.0f));
@@ -39,11 +72,6 @@ void PresetBrowser::paint(juce::Graphics& g)
         g.setColour(ui::text);
         g.setFont(ui::panelFont(ui::Face::header, 13.0f));
         g.drawText("SAVE PRESET", form.removeFromTop(18), juce::Justification::centredLeft);
-        const auto to = notesField.getBounds().withY(notesField.getBottom() + 4).withHeight(16);
-        g.setColour(ui::mutedText);
-        g.setFont(ui::panelFont(ui::Face::label, 11.0f));
-        g.drawFittedText("INTO  " + folderCaption(saveFolder()).toUpperCase(), to,
-                         juce::Justification::centredLeft, 1, 0.8f);
     }
 }
 
@@ -191,12 +219,15 @@ void PresetBrowser::FolderList::paint(juce::Graphics& g)
     ui::drawWell(g, getLocalBounds().toFloat(), ui::wellFloor, 1.0f, 5.0f);
     juce::Graphics::ScopedSaveState clip(g);
     g.reduceClipRegion(getLocalBounds().reduced(2));
+    // A repaint asked for two rows paints two rows.
+    const auto visible = g.getClipBounds();
     const auto shownRows = juce::jmin(visibleRows() + 1, static_cast<int>(drawn.size()) - first);
     for (int i = 0; i < shownRows; ++i)
     {
         const auto rowIndex = drawn[static_cast<size_t>(first + i)];
         const auto& row = browser.folderRows[static_cast<size_t>(rowIndex)];
         auto box = rowBounds(rowIndex);
+        if (!box.intersects(visible)) continue;
         const auto chosen = rowIndex == browser.chosenFolder;
         const auto dropping = rowIndex == browser.dropRow;
         const auto heading = row.kind != FolderRow::Kind::folder;
@@ -267,15 +298,25 @@ void PresetBrowser::FolderList::mouseDown(const juce::MouseEvent& event)
     if (event.getNumberOfClicks() == 2 && target.hasChildren) browser.toggleCollapsed(row);
 }
 
+// Only the two rows that changed hands, never the list: a repaint of the
+// whole list for every row the pointer crossed was most of what the
+// browser cost under the hand.
+void PresetBrowser::FolderList::setHover(int row)
+{
+    if (row == hover) return;
+    if (hover >= 0) repaint(rowBounds(hover));
+    hover = row;
+    if (hover >= 0) repaint(rowBounds(hover));
+}
+
 void PresetBrowser::FolderList::mouseMove(const juce::MouseEvent& event)
 {
-    const auto row = rowAt(event.getPosition());
-    if (row != hover) { hover = row; repaint(); }
+    setHover(rowAt(event.getPosition()));
 }
 
 void PresetBrowser::FolderList::mouseExit(const juce::MouseEvent&)
 {
-    if (hover != -1) { hover = -1; repaint(); }
+    setHover(-1);
 }
 
 void PresetBrowser::FolderList::mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails& wheelDetails)
@@ -388,19 +429,23 @@ void PresetBrowser::PresetTable::paint(juce::Graphics& g)
     {
         g.setColour(ui::mutedText);
         g.setFont(ui::panelFont(ui::Face::label, 13.0f));
-        g.drawText(browser.listed.empty() ? "NO PRESETS IN THIS FOLDER" : "NOTHING HERE MATCHES",
+        g.drawText(browser.listing && browser.listed.empty() ? "READING THE FOLDER"
+                   : browser.listed.empty() ? "NO PRESETS IN THIS FOLDER" : "NOTHING HERE MATCHES",
                    getLocalBounds().withTrimmedTop(headerHeight), juce::Justification::centred);
         return;
     }
 
     juce::Graphics::ScopedSaveState clip(g);
     g.reduceClipRegion(getLocalBounds().reduced(2).withTrimmedTop(headerHeight + 2));
+    // A repaint asked for two rows paints two rows.
+    const auto visible = g.getClipBounds();
     const auto rows = juce::jmin(visibleRows() + 1, static_cast<int>(browser.shown.size()) - first);
     for (int i = 0; i < rows; ++i)
     {
         const auto index = first + i;
         const auto& entry = browser.listed[static_cast<size_t>(browser.shown[static_cast<size_t>(index)])];
         const auto row = rowBounds(index);
+        if (!row.intersects(visible)) continue;
         const auto loaded = entry.file == browser.highlighted;
         if (index % 2 == 1)
         {
@@ -519,15 +564,22 @@ void PresetBrowser::PresetTable::mouseDoubleClick(const juce::MouseEvent& event)
     if (rowAt(event.getPosition()) >= 0 && !event.mods.isPopupMenu() && browser.onClose) browser.onClose();
 }
 
+void PresetBrowser::PresetTable::setHover(int index)
+{
+    if (index == hover) return;
+    if (hover >= 0) repaint(rowBounds(hover));
+    hover = index;
+    if (hover >= 0) repaint(rowBounds(hover));
+}
+
 void PresetBrowser::PresetTable::mouseMove(const juce::MouseEvent& event)
 {
-    const auto index = rowAt(event.getPosition());
-    if (index != hover) { hover = index; repaint(); }
+    setHover(rowAt(event.getPosition()));
 }
 
 void PresetBrowser::PresetTable::mouseExit(const juce::MouseEvent&)
 {
-    if (hover != -1) { hover = -1; repaint(); }
+    setHover(-1);
 }
 
 void PresetBrowser::PresetTable::mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails& wheelDetails)

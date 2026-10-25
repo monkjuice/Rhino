@@ -31,7 +31,7 @@ void Editor::showThemeMenu()
         {
             if (safe == nullptr || chosen <= 0) return;
             const auto theme = static_cast<ui::ThemeId>(chosen - 1);
-            Processor::saveThemeChoice(theme);
+            themeSettings::save(theme);
             // Picking the look already on screen changes nothing worth
             // announcing; picking the other one is answered where every
             // transient message on this panel goes, in the colour a failed

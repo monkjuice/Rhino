@@ -103,9 +103,12 @@ void presetSuite()
                     && reopened.tableStore().edit(1).isUntouched(),
                 "oscillators the preset said nothing about keep their built-in tables");
 
+        const auto untouchedRevision = reopened.tableStore().revision(0);
         require(reopened.loadPreset(preset).wasOk(), "a preset with no table loads over one with a table");
         require(reopened.tableStore().edit(2).isUntouched(),
                 "a preset that carries no table puts the built-in one back");
+        require(reopened.tableStore().revision(0) == untouchedRevision,
+                "and an oscillator already on the built-in table is not given it again");
 
         // Host state is the same payload by the same path, so a project reopens
         // on the table it was saved with.

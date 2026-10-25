@@ -4,7 +4,7 @@ type: component
 summary: Right-click learn binds a controller's knobs and pads to any control; bindings are kept per machine in MidiMap.xml, not in patches.
 tags: [forge, midi, controllers]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-25
 ---
 
 # Forge MIDI learn
@@ -25,7 +25,7 @@ Right-click any control, choose **MIDI learn**, then move a knob or hit a pad. T
 
 ## Two threads
 
-The audio thread asks "is this bound?" of a flat array of atomics indexed by kind, channel and number: no lock, no allocation. It never writes a parameter, because notifying a host takes locks. A bound message goes onto a fixed 256-entry lock-free queue that the **Processor's** own 60 Hz timer drains — not the editor's, or a learned knob would stop working when the window closed.
+The audio thread asks "is this bound?" of a flat array of atomics indexed by kind, channel and number: no lock, no allocation. It never writes a parameter, because notifying a host takes locks. Since 2026-10-25 (uncommitted at the time of writing) the map also keeps the number of bindings in an atomic `bound`, maintained by `bind`, `forget`, `forgetParameter` and `clear`, so `boundCount()`, which `Processor::applyMidiMap` asks every block, no longer walks the 4096 atomics. A bound message goes onto a fixed 256-entry lock-free queue that the **Processor's** own 60 Hz timer drains — not the editor's, or a learned knob would stop working when the window closed.
 
 In the standalone, tick the controller once under Options → Audio/MIDI Settings → *Active MIDI inputs*; JUCE leaves inputs off on Windows and macOS, and the choice is kept in `Rhino Forge.settings`. In a host nothing is needed.
 

@@ -842,10 +842,9 @@ const Modulation& Processor::modulation()
 
 juce::AudioProcessorEditor* Processor::createEditor()
 {
-    // Before the Editor exists, not inside it: its members copy the colour
-    // tokens as they are constructed, so a theme applied any later would reach
-    // the chrome and miss the controls. See ForgeProcessorSettings.cpp.
-    loadThemeOnce();
+    // The theme is the panel's own setting, and the Editor reads and applies
+    // it as its first act (ForgeThemeSettings.h); nothing about it is this
+    // class's business.
     return new Editor(*this);
 }
 }

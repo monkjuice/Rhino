@@ -1,15 +1,39 @@
 ﻿#include "ForgeTestTools.h"
 
 #include "../src/ForgeProcessor.h"
+#include "../src/ForgeEditor.h"
 #include "../ui/ForgeVisuals.h"
 #include "../src/ForgePresetBrowser.h"
 
+#include <algorithm>
 #include <iostream>
 #include <memory>
 #include <vector>
 
 namespace rhino::forge::tests
 {
+namespace
+{
+// The browser lists a folder on a thread of its own and takes the result on
+// the message loop; with no loop running here, this takes it by hand.
+void settleListing(rhino::forge::PresetBrowser& browser)
+{
+    const auto until = juce::Time::getMillisecondCounterHiRes() + 60000.0;
+    while (browser.listing && juce::Time::getMillisecondCounterHiRes() < until)
+    {
+        juce::Thread::sleep(1);
+        browser.takeListings();
+    }
+}
+
+rhino::forge::PresetBrowser* browserOf(juce::Component& editor)
+{
+    for (auto* child : editor.getChildren())
+        if (auto* browser = dynamic_cast<rhino::forge::PresetBrowser*>(child)) return browser;
+    return nullptr;
+}
+}
+
 // Render the real editor without opening a window, for visual review.
 int runSnapshot(int argc, char** argv)
 {
@@ -123,17 +147,20 @@ int runSnapshot(int argc, char** argv)
             if (auto* button = dynamic_cast<rhino::forge::ui::PresetButton*>(child))
                 if (button->getButtonText() == caption && button->onClick) button->onClick();
         const auto library = juce::String(argv[5]).fromFirstOccurrenceOf(":", false, false).toUpperCase();
-        if (library.isNotEmpty())
-            for (auto* child : editor->getChildren())
-                if (auto* browser = dynamic_cast<rhino::forge::PresetBrowser*>(child))
-                    for (int row = 0; row < static_cast<int>(browser->folderRows.size()); ++row)
-                        if (browser->folderRows[static_cast<size_t>(row)].caption == library)
-                        {
-                            const auto started = juce::Time::getMillisecondCounterHiRes();
-                            browser->chooseFolder(row);
-                            std::cout << library << ": " << browser->listed.size() << " presets listed in "
-                                      << juce::roundToInt(juce::Time::getMillisecondCounterHiRes() - started) << " ms\n";
-                        }
+        if (auto* browser = browserOf(*editor))
+        {
+            settleListing(*browser);
+            if (library.isNotEmpty())
+                for (int row = 0; row < static_cast<int>(browser->folderRows.size()); ++row)
+                    if (browser->folderRows[static_cast<size_t>(row)].caption == library)
+                    {
+                        const auto started = juce::Time::getMillisecondCounterHiRes();
+                        browser->chooseFolder(row);
+                        settleListing(*browser);
+                        std::cout << library << ": " << browser->listed.size() << " presets listed in "
+                                  << juce::roundToInt(juce::Time::getMillisecondCounterHiRes() - started) << " ms\n";
+                    }
+        }
     }
     else if (argc > 5)
         for (auto* child : editor->getChildren())
@@ -225,6 +252,61 @@ int runProfile(int argc, char** argv)
     std::cout << "panel          " << editor->getWidth() << "x" << editor->getHeight() << "\n";
     // What the 24Hz timer costs when nothing has moved.
     std::cout << "idle frame     " << median(40, [&] (int) { paintOnce(); }) << " ms\n";
+
+    // And what a frame costs while a chord is sounding: the well's sparks, the
+    // envelope and LFO readings and every modulated knob's ring are all moving,
+    // which is the panel a hand is turning a knob on. The whole panel is timed
+    // here, children included, because the knobs repaint with it.
+    const auto paintWhole = [&editor, &canvas]
+    {
+        juce::Graphics g(canvas);
+        editor->paintEntireComponent(g, true);
+    };
+    paintWhole();
+    std::cout << "whole panel    " << median(40, [&] (int) { paintWhole(); }) << " ms\n";
+    // And what the tick actually repaints of it: the regions that move on
+    // their own, with every control left to repaint itself.
+    if (auto* panel = dynamic_cast<rhino::forge::Editor*>(editor.get()))
+    {
+        const auto live = panel->liveRegions();
+        std::cout << "tick, live regions  " << median(40, [&] (int)
+        {
+            juce::Graphics g(canvas);
+            g.reduceClipRegion(live);
+            editor->paintEntireComponent(g, true);
+        }) << " ms\n";
+    }
+    processor->prepareToPlay(48000.0, 512);
+    juce::AudioBuffer<float> audio(2, 512);
+    juce::MidiBuffer midi;
+    for (const auto note : {48, 52, 55, 60, 64, 67, 72, 76})
+        processor->keyboardState.noteOn(1, note, 0.35f + 0.08f * static_cast<float>(note % 7));
+    // A block, then the editor's tick, which is what carries the notes onto
+    // the plate. Nothing here runs a message loop, so the timer is pumped by
+    // hand once it is due, as --snapshot's ARP page does.
+    const auto play = [&]
+    {
+        midi.clear();
+        processor->processBlock(audio, midi);
+        juce::Thread::sleep(45);
+        juce::Timer::callPendingTimersSynchronously();
+    };
+    for (int i = 0; i < 4; ++i) play();
+    {
+        std::vector<double> times;
+        for (int i = 0; i < 40; ++i)
+        {
+            play();
+            const auto start = juce::Time::getHighResolutionTicks();
+            paintWhole();
+            times.push_back(juce::Time::highResolutionTicksToSeconds(
+                                juce::Time::getHighResolutionTicks() - start) * 1000.0);
+        }
+        std::sort(times.begin(), times.end());
+        std::cout << "whole panel, chord held  " << times[times.size() / 2] << " ms\n";
+    }
+    for (const auto note : {48, 52, 55, 60, 64, 67, 72, 76}) processor->keyboardState.noteOff(1, note, 0.0f);
+    play();
     // And what one frame of a drag on a window edge costs.
     std::cout << "resize frame   " << median(40, [&] (int i)
     {
@@ -264,6 +346,157 @@ int runProfile(int argc, char** argv)
             if (auto& click = pageTabs[static_cast<size_t>(i) % 2 == 0 ? 0 : 2]->onClick) click();
             paintOnce();
         }) << " ms\n";
+    return 0;
+}
+
+// What the preset browser costs, on this machine: listing each library,
+// loading a preset the way a click in the list does, opening the browser, and
+// the frames that follow a hover in it. The bank in Documents and the Serum 2
+// and Vital folders are the real ones, read and never written, because the
+// numbers that matter are the ones the player feels here rather than on a
+// scratch bank of three files.
+int runProfileBrowser(int argc, char** argv)
+{
+    const auto now = [] { return juce::Time::getMillisecondCounterHiRes(); };
+    const auto timed = [&now] (auto&& body)
+    {
+        const auto started = now();
+        body();
+        return now() - started;
+    };
+    const auto medianOf = [] (std::vector<double> times)
+    {
+        std::sort(times.begin(), times.end());
+        return times.empty() ? 0.0 : times[times.size() / 2];
+    };
+    const auto print = [] (const char* what, double ms)
+    {
+        std::cout << what << juce::String(ms, 1) << " ms\n";
+    };
+
+    std::cout << "libraries\n";
+    for (const auto& library : rhino::forge::presetBank::libraries())
+    {
+        juce::Array<juce::File> folders;
+        const auto walk = timed([&] { folders = rhino::forge::presetBank::foldersUnder(library.root); });
+        std::vector<rhino::forge::PresetEntry> entries;
+        const auto cold = timed([&] { entries = rhino::forge::presetBank::presetsIn(library.root, true); });
+        const auto warm = timed([&] { entries = rhino::forge::presetBank::presetsIn(library.root, true); });
+        std::cout << "  " << library.name << ": " << folders.size() << " folders walked in "
+                  << juce::String(walk, 1) << " ms; " << entries.size() << " presets listed in "
+                  << juce::String(cold, 1) << " ms, listed again in " << juce::String(warm, 1) << " ms\n";
+    }
+
+    auto processor = std::make_unique<rhino::forge::Processor>();
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor->createEditor());
+    const auto width = argc > 2 ? juce::String(argv[2]).getIntValue() : editor->getWidth();
+    const auto height = argc > 3 ? juce::String(argv[3]).getIntValue() : editor->getHeight();
+    editor->setSize(width, height);
+    std::cout << "panel " << editor->getWidth() << "x" << editor->getHeight() << "\n";
+
+    // Every factory preset, through the same call a click in the list makes,
+    // with the editor open so its attachments and its tick are paid for too.
+    const auto factory = rhino::forge::presetBank::root().getChildFile(rhino::forge::presetBank::factoryFolderName);
+    auto factoryFiles = factory.findChildFiles(juce::File::findFiles, true, "*.forgepreset");
+    factoryFiles.sort();
+    if (!factoryFiles.isEmpty())
+    {
+        std::vector<double> times;
+        for (const auto& file : factoryFiles)
+            times.push_back(timed([&] { processor->loadPreset(file); }));
+        std::sort(times.begin(), times.end());
+        std::cout << "load a factory preset       median " << juce::String(times[times.size() / 2], 1)
+                  << " ms, max " << juce::String(times.back(), 1) << " ms, over "
+                  << factoryFiles.size() << " presets\n";
+    }
+    for (const auto& library : rhino::forge::presetBank::libraries())
+    {
+        if (library.writable) continue;
+        const auto found = library.root.findChildFiles(juce::File::findFiles, true,
+                                                       library.name.startsWith("VITAL") ? "*.vital" : "*.SerumPreset");
+        if (found.isEmpty()) continue;
+        std::vector<double> times;
+        for (int i = 0; i < juce::jmin(5, found.size()); ++i)
+            times.push_back(timed([&] { processor->loadPreset(found[i]); }));
+        std::cout << "load a " << library.name << " preset       median " << juce::String(medianOf(times), 1)
+                  << " ms (converted on the way in)\n";
+    }
+    if (!factoryFiles.isEmpty()) processor->loadPreset(factoryFiles[0]);
+
+    rhino::forge::PresetBrowser* browser = nullptr;
+    const auto pressLoad = [&editor]
+    {
+        for (auto* child : editor->getChildren())
+            if (auto* button = dynamic_cast<rhino::forge::ui::PresetButton*>(child))
+                if (button->getButtonText() == "LOAD" && button->onClick) button->onClick();
+    };
+    const auto opened = timed([&]
+    {
+        pressLoad();
+        browser = browserOf(*editor);
+        if (browser != nullptr) settleListing(*browser);
+    });
+    if (browser == nullptr)
+    {
+        std::cerr << "profile-browser: LOAD did not open the browser\n";
+        return 1;
+    }
+    print("open the browser, first time     ", opened);
+    {
+        std::vector<double> times;
+        for (int i = 0; i < 5; ++i)
+            times.push_back(timed([&] { browser->openToBrowse(); settleListing(*browser); }));
+        print("open the browser again           ", medianOf(times));
+    }
+    for (int row = 0; row < static_cast<int>(browser->folderRows.size()); ++row)
+    {
+        const auto& folder = browser->folderRows[static_cast<size_t>(row)];
+        if (folder.kind != rhino::forge::PresetBrowser::FolderRow::Kind::library) continue;
+        std::vector<double> times;
+        for (int i = 0; i < 3; ++i)
+            times.push_back(timed([&]
+            {
+                browser->openToBrowse();
+                browser->chooseFolder(row);
+                settleListing(*browser);
+            }));
+        std::cout << "open on " << folder.caption << " (" << browser->listed.size() << " presets)   "
+                  << juce::String(medianOf(times), 1) << " ms\n";
+    }
+    browser->openToBrowse();
+    settleListing(*browser);
+
+    juce::Image canvas(juce::Image::ARGB, editor->getWidth(), editor->getHeight(), true);
+    const auto frame = [&editor, &canvas]
+    {
+        juce::Graphics g(canvas);
+        editor->paintEntireComponent(g, true);
+    };
+    frame();
+    {
+        std::vector<double> times;
+        for (int i = 0; i < 20; ++i) times.push_back(timed(frame));
+        print("frame with the browser open, nothing moved   ", medianOf(times));
+    }
+    {
+        std::vector<double> times;
+        for (int i = 0; i < 20; ++i)
+        {
+            browser->repaint();
+            times.push_back(timed(frame));
+        }
+        print("frame after a hover in the list              ", medianOf(times));
+    }
+    {
+        std::vector<double> times;
+        for (int i = 0; i < 10; ++i)
+            times.push_back(timed([&]
+            {
+                juce::Graphics g(canvas);
+                browser->paintEntireComponent(g, true);
+            }));
+        print("the browser painted whole                    ", medianOf(times));
+    }
     return 0;
 }
 }

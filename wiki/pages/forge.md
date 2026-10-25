@@ -4,7 +4,7 @@ type: component
 summary: Rhino's independent wavetable and spectral synth, a VST3 and standalone app built from one JUCE AudioProcessor.
 tags: [forge, synth, overview]
 sources: []
-updated: 2026-10-23
+updated: 2026-10-25
 ---
 
 # Rhino Forge
@@ -55,12 +55,13 @@ state and hosting guides, are the canonical engineering documentation ([Document
 
 ## Status
 
-As of 2026-10-23:
+As of 2026-10-25:
 
 - **Done:** everything from M1 to M14b except the items below, plus M16a to M16c. M16d is partly done. M13b is partly done: four arp slots arrived on 2026-10-13 as the ARP plate's buttons (commit `8f28dc7`); EDIT ALL has not.
 - **Done on 2026-10-18/19:** the preset browser and bank, the factory set planned in M8, and import of Serum 2 and Vital presets. A converted Serum preset's absolute level is not yet calibrated against Serum ([Forge preset import](forge-preset-import.md)).
 - **Done on 2026-10-22:** M15, a second filter, in parallel or in series with the first ([Forge filter](forge-filter.md)). The importers do not fill it yet.
 - **Done on 2026-10-23:** a Drum n Bass folder in the factory set, eleven growls, leads and subs, 29 presets in all ([Writing Forge factory presets](writing-forge-factory-presets.md)).
+- **Done on 2026-10-25** (session rhino-62, uncommitted at the time of writing): the preset browser made fast after the user reported it slow, measured by the new `--profile-browser`. A load no longer rebuilds untouched tables or walks the tree per parameter and lays the rack out once ([Forge presets and state](forge-presets-and-state.md#one-way-a-patch-arrives)); the browser lists on a thread from a kept scan and caches its chrome ([Forge preset browser and bank](forge-preset-browser.md#listing-on-a-thread)); the editor's tick repaints only its live regions ([Forge's tick repaints its live regions at 24 Hz](forge-panel-repaint-cost.md)); and `src/ForgeProcessor.h` includes nothing under `ui/` ([Forge's Processor includes nothing under ui/](forge-processor-includes-no-ui.md)).
 - **Not started:**
   - M13c, the pattern editor.
   - M14c, sample noise sources.
@@ -75,6 +76,7 @@ Until commit `f2a972e` Forge could freeze its host when its DLL unloaded after i
 ## Related
 
 - [Overview](../overview.md)
+- [Forge's Processor includes nothing under ui/](forge-processor-includes-no-ui.md)
 - [Forge presets and state](forge-presets-and-state.md)
 - [Build and test Forge](build-and-test-forge.md)
 - [Hosting Forge in Rhino](forge-hosting.md)

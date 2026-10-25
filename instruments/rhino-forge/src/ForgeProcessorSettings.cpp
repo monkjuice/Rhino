@@ -1,4 +1,5 @@
 #include "ForgeProcessor.h"
+#include "ForgeThemeSettings.h"
 
 // The machine's own settings: the theme today, and whatever joins it. One file
 // serves every instance and every project on this machine, beside the MIDI map
@@ -49,9 +50,9 @@ juce::File Processor::settingsFile()
         .getChildFile("Settings.xml");
 }
 
-ui::ThemeId Processor::readThemeChoice()
+ui::ThemeId themeSettings::read()
 {
-    const auto root = settingsRoot(settingsFile());
+    const auto root = settingsRoot(Processor::settingsFile());
     if (root == nullptr) return ui::ThemeId::forge;
     // A missing attribute is an empty string, and an unknown name is Forge.
     return ui::themeFromName(root->getStringAttribute(themeAttribute));
@@ -60,9 +61,9 @@ ui::ThemeId Processor::readThemeChoice()
 // Read, change, write: a setting added by a later build survives an older one
 // saving the theme, instead of the file being rewritten from what this build
 // knows about.
-void Processor::saveThemeChoice(ui::ThemeId theme)
+void themeSettings::save(ui::ThemeId theme)
 {
-    const auto file = settingsFile();
+    const auto file = Processor::settingsFile();
     auto root = settingsRoot(file);
     if (root == nullptr) root = std::make_unique<juce::XmlElement>(settingsTag);
     root->setAttribute(themeAttribute, juce::String(ui::themeName(theme)).toLowerCase());
@@ -98,16 +99,16 @@ void Processor::saveFavouritePresets(const juce::StringArray& paths)
     root->writeTo(file);
 }
 
-ui::ThemeId Processor::loadThemeOnce()
+ui::ThemeId themeSettings::loadOnce()
 {
     auto& done = themeLoaded();
     if (done) return ui::currentThemeId;
     done = true;
     // A theme something already chose on purpose — the snapshot tool, a test —
     // outranks the file, which is what lets one binary render either look.
-    if (!ui::themeChosen()) ui::applyTheme(readThemeChoice());
+    if (!ui::themeChosen()) ui::applyTheme(read());
     return ui::currentThemeId;
 }
 
-void Processor::forgetLoadedThemeForTests() { themeLoaded() = false; }
+void themeSettings::forgetLoadedForTests() { themeLoaded() = false; }
 }

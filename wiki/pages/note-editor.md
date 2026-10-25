@@ -46,6 +46,19 @@ Since commit `4bd0f45` (2026-10-24) a sweep across part of the open MIDI clip in
 
 `RegionMove.inc` checks the framed span, a one-step span centred, and a grid framed while hidden inside a parent component that keeps its frame once shown.
 
+## A note that began before the window
+
+A MIDI clip plays a window into its sequence, set by its offset; cuts and trims move the window, never the notes ([Clips never overlap](clip-placement.md)). Tracktion plays a note that began before the window and ends inside it, from the clip's start: `MidiList::createDefaultPlaybackMidiSequence` keeps any note ending after the window's start, and `addToSequence` emits its note-on at `std::max (0.0, downTime)` (checked upstream at `4536d8a`). The arrangement drew it, but the grid and the velocity lane skip any note starting before step 0 (`rebuildVisibleNotes`, `rebuildLaneNotes`), so until commit `1818c5b` (2026-10-24) such a note sounded with nothing in the editor. It was found on a clip whose window opened 3/64 of a beat (23 ms) after a note began; how the clip got that window was not recovered, since moves are not logged.
+
+`Session::editorNotes` (`SessionNotes.cpp`, helper `shownStartStep`) now reports a note crossing the window's start as starting at step 0, with the length it sounds for. No UI file changed: the grid, the lane and the note clipboard all read `editorNotes`. Edits act on what is shown:
+
+- `resizeNote` and `fillNoteToClipEnd` measure the length from the shown start and keep the hidden part before the window.
+- `redistributeNotes` (Ctrl+E) divides from the window's start and drops the hidden part, so no retrigger lands where the clip cannot play it.
+- Moving the note left is refused by `moveNotes`' existing clamp. Moving it right lands it under the pointer, because `moveDraggedNotesAt` asks for the distance from where the note is shown.
+- A note wholly before the window plays nothing, keeps its negative start and stays off the grid.
+
+Showing what plays follows [Displays draw from the DSP](displays-draw-from-the-dsp.md). Live's manual does not say what Live does here. Silencing the note was the alternative, and it was not taken. `tests/Arrangement/scenarios/ClipWindow.inc` holds it: the note is shown at step 0 for its sounding length, in both `visibleNotes` and `laneNotes`, a resize keeps its true start, and a divide into two gives halves at steps 0 and 2.
+
 ## Drum rows
 
 When the open clip's track plays drums (`Session::isPatternDrums`), the grid shows `Session::pitches` (16) rows at its default zoom and pins its lowest row at the first note of the bank the [Drum Rack](drum-rack.md)'s face shows (`Session::patternDrumLowestNote`, from `DrumRackDevice::firstShownNote`; C2 by default). So the rows are the sixteen pads on the face. `StepGrid::automaticLowestPitch` reads it, and every change clears a manual pitch scroll for drums; `Session::showDrumBank` announces, so the rows follow the face as it pages (since 2026-10-07; before, they were fixed at `Session::lowestNote`, 48). Each row takes its name from `Session::patternNoteName`, which asks the instrument's `hasNameForMidiNoteNumber`, and a row whose pad is empty reads as its note. Pad names change without any note changing, so the grid keeps the names it last drew (`drumRowNames`) and repaints when they differ.

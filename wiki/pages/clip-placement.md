@@ -4,7 +4,7 @@ type: concept
 summary: The clip that just arrived wins the ground it lands on, and one function, Session::makeRoomForClip, enforces it for every path.
 tags: [rhino, clips, arrangement, editing, tracktion]
 sources: []
-updated: 2026-10-23
+updated: 2026-10-24
 ---
 
 # Clips never overlap
@@ -27,7 +27,7 @@ Every path that places or grows a clip ends there: `editClip` and `moveClips` (d
 - **Multi-clip drags pass `movingWith`**, naming every clip in the gesture; otherwise the leading clip of a run moved right would delete the one behind it. `Session::moveClips` carries the whole selection, drags and arrow nudges alike, in one transaction with one playback restart, and rolls everything back if any clip is refused (commit `b5d17e0`).
 - **Files dropped together land end to end** from the drop point, in the order given, as one undo step and all or nothing (`importAudioFilesAt`, commit `d20faa4`). Imported one at a time at the same point, each made room by trimming away the one before, and only the last survived.
 - **A hidden placeholder** inside a cleared span is removed whole rather than split into fragments nothing could address, and `repairPatternClip` then re-points the note editor.
-- **MIDI clips are cut by position and offset, never by their notes.** A split's right half keeps the whole sequence and plays a window into it, and trimming the start moves the window, so no note moves.
+- **MIDI clips are cut by position and offset, never by their notes.** A split's right half keeps the whole sequence and plays a window into it, and trimming the start moves the window, so no note moves. A note that began before the window and ends inside it still plays, from the clip's start, and the note editor shows it from step 0 ([Note editor](note-editor.md#a-note-that-began-before-the-window)).
 - **A MIDI clip carries its instrument.** Moving or pasting one onto another lane switches that lane's instrument to the source track's, deliberately (see the comment in `pasteClipRegion`). Since commit `b5d17e0` the source is named by catalog id (`carriedInstrument`), bypassed or not, and a clip from a track that plays nothing leaves the target's instrument alone ([One instrument per track](one-instrument-per-track.md)).
 - **Warp growth is covered** since `b5d17e0`: `rescaleWarpedClip` lengthens a clip in place (`*2` doubles it), and its callers now make room afterwards. A tempo change does not need to: a Repitch clip keeps its length in beats and the engine keeps the next clip on its beats, which `ClipWarp.inc` pins (commit `6eaa5ba`; [Time warp](time-warp.md)).
 

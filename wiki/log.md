@@ -1136,3 +1136,8 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 ## [2026-10-24] update | Keep clips off the track cards when scrolled (137ccb5)
 - source: the change's brief, checked against native/src/ui/arrangement/ArrangementClipPainter.cpp (`paintClipPiece`) and tests/Arrangement/scenarios/Rendering.inc; commit 137ccb5
 - updated: pages/arrangement-view.md (new rule: anything painted on the lanes clips at `headerWidth`, because `xFor` runs left of the lanes and the cards are painted first; the clip painter's x-0 clip region and what it spilled; the row dividers the one deliberate exception; the `Rendering.inc` pixel check)
+
+## [2026-10-24] update | Show a note that sounds into a clip from before its window (1818c5b)
+- source: the change's brief, checked against native/src/model/SessionNotes.cpp (`shownStartStep`, `editorNotes`, `resizeNote`, `fillNoteToClipEnd`, `redistributeNotes`); commit 1818c5b
+- updated: pages/note-editor.md (new section "A note that began before the window": Tracktion plays it from the clip's start, the grid and lane skipped it, `editorNotes` shows it from step 0, how resize, fill, divide and moves treat the hidden part, a note wholly before the window stays off the grid, show-what-plays chosen over silencing it, `ClipWindow.inc`)
+- updated: pages/clip-placement.md (a note crossing a MIDI clip's window start still plays and is shown from step 0)

@@ -28,7 +28,11 @@ juce::Result Session::moveClipRegion(double startSeconds, double endSeconds, int
         return juce::Result::fail("Select a span of the timeline first.");
     if (!std::isfinite(destinationStart) || destinationStart < 0.0 || destinationTrack < 0)
         return juce::Result::fail("Drop the selection on a track lane.");
+    // The returns are past the last lane, as for a paste: carried onto them,
+    // the material lands on lanes made for it above them.
+    destinationTrack = std::min(destinationTrack, firstReturnTrack());
     const auto tracks = audioTracks();
+    const auto lanesBefore = firstReturnTrack();
     firstTrack = std::max(0, firstTrack);
     lastTrack = std::min(lastTrack, tracks.size() - 1);
     if (firstTrack > lastTrack)
@@ -78,10 +82,10 @@ juce::Result Session::moveClipRegion(double startSeconds, double endSeconds, int
             continue;
         lastCarriedRow = static_cast<int>(row);
         const auto index = destinationTrack + static_cast<int>(row);
-        if (index >= tracks.size())
+        if (index >= lanesBefore)
             continue;
-        if (isGroupBusTrack(index))
-            return juce::Result::fail("A group track carries its members' audio, so it takes no clips.");
+        if (carriesOtherTracks(index))
+            return juce::Result::fail(noClipsReason(index));
         if (trackType(index) != *rowType[row])
             return juce::Result::fail(*rowType[row] == TrackType::midi
                 ? "That is an audio track. Move MIDI clips to a MIDI track."
@@ -104,9 +108,9 @@ juce::Result Session::moveClipRegion(double startSeconds, double endSeconds, int
     // that carries something; a row between them that carries nothing is
     // made as a paste makes one, so the rows keep their distances.
     auto addedLanes = false;
-    while (audioTracks().size() < destinationTrack + lastCarriedRow + 1)
+    while (firstReturnTrack() < destinationTrack + lastCarriedRow + 1)
     {
-        const auto row = audioTracks().size() - destinationTrack;
+        const auto row = firstReturnTrack() - destinationTrack;
         const auto type = juce::isPositiveAndBelow(row, static_cast<int>(rowType.size()))
                               ? rowType[static_cast<size_t>(row)].value_or(TrackType::audio)
                               : TrackType::audio;

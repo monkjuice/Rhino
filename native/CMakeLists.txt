@@ -60,6 +60,7 @@ target_sources(RhinoNative PRIVATE
     src/model/SessionGroups.cpp
     src/model/SessionSlots.cpp
     src/model/SessionMixer.cpp
+    src/model/SessionReturns.cpp
     src/model/SessionMeters.cpp
     src/model/SessionClips.cpp
     src/model/SessionAudioClips.cpp
@@ -110,6 +111,7 @@ target_sources(RhinoNative PRIVATE
     src/ui/arrangement/ArrangementAutomationPaint.cpp
     src/ui/arrangement/ArrangementDrops.cpp
     src/ui/arrangement/MonitorSelector.cpp
+    src/ui/arrangement/SendKnob.cpp
     src/ui/dj/DjView.cpp
     src/ui/dj/DjDeckPanel.cpp
     src/ui/dj/DjDeckPanelLayout.cpp

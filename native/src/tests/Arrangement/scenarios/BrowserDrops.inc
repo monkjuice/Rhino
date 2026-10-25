@@ -68,10 +68,14 @@
         view.fit();
         view.sync();
         require(view.clips.empty(), "Fresh startup hides the internal empty Pattern 1 placeholder");
-        // A new document is four empty tracks and the main row, nothing else:
-        // MIDI and audio alternating, so there is somewhere to play and
-        // somewhere to drop a file without building the stack first.
-        require(session.trackCount() == 4, "A new document opens with four tracks");
+        // A new document is four empty tracks, two returns and the main row,
+        // nothing else: MIDI and audio alternating, so there is somewhere to
+        // play and somewhere to drop a file without building the stack first,
+        // and a delay and a reverb at the foot for any of them to send to.
+        require(session.firstReturnTrack() == 4, "A new document opens with four tracks");
+        require(session.trackCount() == 6 && session.isReturnTrack(4) && session.isReturnTrack(5)
+                    && session.trackName(4) == "Delay" && session.trackName(5) == "Reverb",
+                "and two returns under them, A Delay and B Reverb");
         // A track is named for what it is and nothing else: the card prints the
         // row's one-based position beside the name itself, so a number in the
         // name was the same figure twice on every card.
@@ -81,16 +85,21 @@
         require(!session.trackHasInstrument(0) && session.patternInstrument() == nullptr,
                 "The starter track runs no instrument until one is dropped on it");
         require(session.deviceSlots(0).empty(), "The starter track shows no devices of its own");
-        require(view.rows.size() == 4, "The arrangement draws a lane for each of them");
+        require(view.rows.size() == 6, "The arrangement draws a lane for each of them, returns included");
         {
             // The stack this run works on has to survive, so the rule that a
             // document keeps at least one track is read off a document of its
             // own rather than by emptying this one.
             Session lastTrack;
-            while (lastTrack.trackCount() > 1)
-                require(lastTrack.removeAudioTrack(lastTrack.trackCount() - 1).wasOk(),
+            while (lastTrack.firstReturnTrack() > 1)
+                require(lastTrack.removeAudioTrack(lastTrack.firstReturnTrack() - 1).wasOk(),
                         "A starter track can be removed");
             require(lastTrack.removeAudioTrack(0).failed(), "The last remaining track cannot be removed");
+            // The returns play only what the tracks send them, so they are not
+            // what the rule keeps, and every one of them can go.
+            while (lastTrack.trackCount() > 1)
+                require(lastTrack.removeAudioTrack(lastTrack.trackCount() - 1).wasOk(), "A return can be removed");
+            require(lastTrack.removeAudioTrack(0).failed(), "and the last track still stays");
         }
         session.setNote(0, 48, true);
         view.sync();

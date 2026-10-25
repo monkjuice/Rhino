@@ -45,13 +45,13 @@ void Arrangement::filesDropped(const juce::StringArray& files, int x, int y)
     auto targetTrack = trackAt(static_cast<float>(y));
     if (targetTrack < 0 && session.trackCount() > 0 && static_cast<float>(y) > lane(session.trackCount() - 1).getBottom())
     {
-        const auto result = session.addAudioTrack();
+        // Made at the foot of the stack, which is above the returns.
+        const auto result = session.addTrack(Session::TrackType::audio, -1, &targetTrack);
         if (result.failed())
         {
             if (status) status(result.getErrorMessage());
             return;
         }
-        targetTrack = session.trackCount() - 1;
         selectTrack(targetTrack);
     }
     if (targetTrack < 0)
@@ -160,13 +160,12 @@ void Arrangement::itemDropped(const juce::DragAndDropTarget::SourceDetails& deta
         const auto* presetDevice = deviceForPresetDrop(description);
         if (const auto wanted = trackTypeForDropKind(presetDevice != nullptr ? deviceDropKind(*presetDevice) : kind))
         {
-            const auto result = session.addTrack(*wanted);
+            const auto result = session.addTrack(*wanted, -1, &targetTrack);
             if (result.failed())
             {
                 if (status) status(result.getErrorMessage());
                 return;
             }
-            targetTrack = session.trackCount() - 1;
         }
     }
 

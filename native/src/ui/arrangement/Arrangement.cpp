@@ -174,6 +174,26 @@ void Arrangement::resized()
         meters[index]->setBounds(cardMeterInset + static_cast<int>(trackIndent(i)), top, LevelMeter::width,
                                  std::max(0, static_cast<int>(row.getHeight() - trackDividerThickness)
                                                  - 2 * cardControlsTop));
+        // The sends sit under the name, from where it starts, level with the
+        // faders, wrapping onto a line below while the row has room for one;
+        // a row too short for a line keeps its knobs off the card, as one too
+        // short for the faders keeps those.
+        if (index < sends.size() && !sends[index].empty())
+        {
+            const auto& knobs = sends[index];
+            const auto first = static_cast<int>(disclosureBounds(i).getRight() + disclosureGap);
+            const auto pitch = SendKnob::size + cardControlGap;
+            const auto perLine = std::max(1, (static_cast<int>(headerWidth) - 6 - first + cardControlGap) / pitch);
+            for (size_t knob = 0; knob < knobs.size(); ++knob)
+            {
+                const auto line = static_cast<int>(knob) / perLine;
+                const auto offset = sendLineTop + line * pitch;
+                knobs[knob]->setBounds(first + (static_cast<int>(knob) % perLine) * pitch, top + offset,
+                                       SendKnob::size, SendKnob::size);
+                knobs[knob]->setVisible(visible && row.getHeight() >= static_cast<float>(cardControlsTop + offset
+                                                                                       + SendKnob::size + 4));
+            }
+        }
     }
     {
         // Everything the main row carries sits on its single line: the meter
@@ -979,11 +999,16 @@ void Arrangement::showAddTrackMenu()
     menu.addSectionHeader("NEW TRACK");
     menu.addItem(1, "MIDI Track" + juce::String(last == Session::TrackType::midi ? "       Ctrl+T" : ""));
     menu.addItem(2, "Audio Track" + juce::String(last == Session::TrackType::audio ? "       Ctrl+T" : ""));
+    // Not a kind Ctrl+T repeats: a return is added now and then, not in runs.
+    menu.addItem(3, "Return Track       Ctrl+Alt+T");
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(addTrack),
         [safe = juce::Component::SafePointer<Arrangement>(this)](int choice)
         {
             if (safe == nullptr || choice == 0) return;
-            safe->addTrackOfType(choice == 2 ? Session::TrackType::audio : Session::TrackType::midi);
+            if (choice == 3)
+                safe->insertReturnTrack();
+            else
+                safe->addTrackOfType(choice == 2 ? Session::TrackType::audio : Session::TrackType::midi);
         });
 }
 
@@ -994,6 +1019,22 @@ void Arrangement::addTrackOfType(Session::TrackType type)
 {
     Session::setLastAddedTrackType(type);
     insertTrack(type);
+}
+
+void Arrangement::insertReturnTrack()
+{
+    auto added = -1;
+    const auto result = session.addReturnTrack(&added);
+    if (result.wasOk())
+        selectTrack(added);
+    juce::String letter;
+    for (const auto& made : session.returnTracks())
+        if (made.track == added)
+            letter = made.letter;
+    if (status)
+        status(result.failed() ? result.getErrorMessage()
+                               : "Added return " + letter + ": turn up the " + letter
+                                     + " knob on a track to send it audio");
 }
 
 void Arrangement::insertTrack(Session::TrackType type)

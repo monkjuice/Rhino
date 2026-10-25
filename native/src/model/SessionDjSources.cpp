@@ -266,7 +266,7 @@ juce::Result Session::loadDjDeckTrack(int index, int track)
     if (slot < 0)
         return juce::Result::fail("That deck does not exist.");
     const auto tracks = audioTracks();
-    if (!juce::isPositiveAndBelow(track, tracks.size()) || isGroupBusTrack(track))
+    if (!juce::isPositiveAndBelow(track, tracks.size()) || carriesOtherTracks(track))
         return juce::Result::fail("Choose a track of the song for the deck.");
     for (int other = 0; other < dj->count; ++other)
         if (other != index && dj->decks[static_cast<size_t>(dj->slotOf(other))].boundTrack == tracks[track]->itemID)
@@ -306,7 +306,7 @@ juce::Result Session::loadDjDeckSlot(int index, int track, int scene)
     if (deckSlot < 0)
         return juce::Result::fail("That deck does not exist.");
     const auto tracks = audioTracks();
-    if (!juce::isPositiveAndBelow(track, tracks.size()) || isGroupBusTrack(track))
+    if (!juce::isPositiveAndBelow(track, tracks.size()) || carriesOtherTracks(track))
         return juce::Result::fail("Choose a track of the song for the deck.");
     const auto clip = slotClip(track, scene);
     if (!clip.hasClip)

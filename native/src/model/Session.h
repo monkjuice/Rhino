@@ -629,6 +629,43 @@ public:
     // themselves survive: what goes is the mixing point.
     juce::Result ungroupTracks(int groupId);
     juce::Result setTrackGroupCollapsed(int groupId, bool collapsed);
+    // Return tracks, as Live has them (SessionReturns.cpp): a track whose
+    // input is what the other tracks send it, so one delay or one reverb
+    // serves the whole song. A return is an ordinary track, as a group's bus
+    // is - fader, pan, mute, solo, devices, automation - kept with the other
+    // returns at the foot of the stack, under every other track and over the
+    // main row. It takes audio effects only, no clips, no input and no DJ
+    // deck, and sends to no other return. A new document has two, A Delay and
+    // B Reverb, both wholly wet.
+    struct ReturnTrack
+    {
+        int track = -1;
+        juce::String letter;  // A, B, ... by its place among the returns
+        juce::String name;
+        juce::Colour colour;
+    };
+    std::vector<ReturnTrack> returnTracks() const;
+    bool isReturnTrack(int track) const;
+    // The first return, or trackCount() when there is none. The tracks above
+    // it are the ones that hold clips, and a lane made for a clip arriving
+    // past the last of them - dragged, pasted or moved there - is made here,
+    // above the returns.
+    int firstReturnTrack() const;
+    // At the foot of the returns, named Return, with a send to it on every
+    // other track at nothing. One undo step.
+    juce::Result addReturnTrack(int* added = nullptr);
+    // A send: how much of a track, after its fader, feeds a return. From
+    // nothing, minimumSendDb, up to the track's own level and no further, as
+    // Live's knob runs - the return's fader and its devices are what make the
+    // effect louder. Every track has one send to every return and sends
+    // nothing until it is turned up; a return has none. A drag is bracketed
+    // and announced once, at its end, as a fader's is.
+    static constexpr float minimumSendDb = -100.0f, maximumSendDb = 0.0f;
+    bool hasSend(int track, int returnTrack) const;
+    float trackSendDb(int track, int returnTrack) const;
+    juce::Result setTrackSendDb(int track, int returnTrack, float decibels);
+    void beginTrackSendGesture(int track, int returnTrack);
+    void endTrackSendGesture(int track, int returnTrack);
     std::vector<DeviceSlot> deviceSlots(int track) const;
     std::vector<DeviceParameter> deviceParameters(int track, int slot) const;
     // Only the controls from `first`, `count` of them (fewer at the end), each
@@ -747,8 +784,8 @@ public:
     // decided by what the track already is, so there is nothing to choose and
     // nothing that can disagree with the rest of the document. A track running
     // an instrument takes the MIDI input, a track without one takes the audio
-    // input chosen in Audio settings, and a group bus or the main row takes
-    // neither.
+    // input chosen in Audio settings, and a group bus, a return or the main
+    // row takes neither.
     enum class RecordInput { none, midi, audio };
     RecordInput trackRecordInput(int track) const;
     bool isTrackArmed(int track) const;
@@ -1915,6 +1952,24 @@ private:
     void announceMixerChange(int track, ModelChange);
     void endMixerGesture();
     void ensureTrackMixers();
+    // SessionReturns.cpp. A group's bus or a return: a track that carries
+    // other tracks' audio, so it takes no clips, records nothing and plays no
+    // instrument, and the sentence each kind of refusal gives for it.
+    bool carriesOtherTracks(int track) const;
+    juce::String noClipsReason(int track) const;
+    juce::String audioEffectsOnlyReason(int track) const;
+    // Every return's way in and every other track's sends, run by
+    // ensureTrackMixers inside the caller's transaction.
+    void ensureReturnRouting();
+    te::AudioTrack* makeReturnTrack(const juce::String& name);
+    void addStarterReturns();
+    te::AuxSendPlugin* sendPlugin(int track, int returnTrack) const;
+    // After a solo or a mute changed, or an undo that may have changed
+    // either: returns heard under another track's solo unless one is soloed
+    // itself, and the graph built again when what a send reads changed.
+    void followReturnSolo(bool mutesChanged);
+    // Whether the graph was last built with a return soloed.
+    bool returnSoloHeard = false;
     // The reorder itself, without a transaction or a notification, so the group
     // calls can move several tracks inside one of their own.
     void moveTrackInEdit(int track, int destination);

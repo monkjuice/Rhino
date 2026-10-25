@@ -53,7 +53,7 @@ Tab, or the DJ switch beside the transport, swaps the arrangement for up to six 
 
 ### Mix with the essentials in reach
 
-Every audio and MIDI track has volume, pan, mute, solo, devices, automation, and routing. Group tracks into real bus tracks, process the main output, and use built-in tools including Rhino EQ, Rhino Tune, Rhino Vocoder, Utility, and sidechain routing.
+Every audio and MIDI track has volume, pan, mute, solo, devices, automation, and routing. Group tracks into real bus tracks, send any track to return tracks (a new project has a delay and a reverb on them), process the main output, and use built-in tools including Rhino EQ, Rhino Tune, Rhino Vocoder, Utility, and sidechain routing.
 
 ## What to expect from the alpha
 

@@ -420,6 +420,10 @@ void Arrangement::mouseDrag(const juce::MouseEvent& event)
         // top of the stack: the grabbed clip's row stops where that would
         // happen.
         targetTrack = std::max(targetTrack, originalTrack - timeSelection.firstTrack);
+        // The returns are past the last lane. Carried onto them or under
+        // them, the selection's first row goes no further than the first
+        // return, where the model makes lanes for it above the returns.
+        targetTrack = std::min(targetTrack, session.firstReturnTrack() + originalTrack - timeSelection.firstTrack);
     }
     const auto rawStart = anchor + timeAt(event.position.x) - dragTime;
     auto editTime = gesture == ClipGesture::move
@@ -769,6 +773,11 @@ void Arrangement::dragCardGesture(const juce::MouseEvent& event)
             destination = track;
             break;
         }
+    // The returns keep the foot of the stack: a track stops above them, and
+    // a return moves only among them, as the model holds it.
+    const auto firstReturn = session.firstReturnTrack();
+    destination = session.isReturnTrack(movingTrack) ? std::max(destination, firstReturn)
+                                                     : std::min(destination, std::max(0, firstReturn - 1));
     if (destination != moveDestination)
     {
         moveDestination = destination;
@@ -819,6 +828,9 @@ void Arrangement::showTrackMenu(int track)
         targets.push_back(track);
     const auto several = targets.size() > 1;
     const auto subject = several ? juce::String(targets.size()) + " tracks" : session.trackName(track);
+    // A return is the song's, fed by every track's send: it is not copied,
+    // bounced or grouped, only deleted, and another is added from the + menu.
+    const auto returning = session.isReturnTrack(track);
 
     juce::PopupMenu menu;
     menu.addSectionHeader(subject);
@@ -834,10 +846,10 @@ void Arrangement::showTrackMenu(int track)
     menu.addItem(3, "Rename " + session.trackName(track) + "...       F2");
     menu.addSeparator();
     // Whole tracks, a bus with its group. Paste lands under this card.
-    menu.addItem(20, "Cut       Ctrl+X");
-    menu.addItem(21, "Copy       Ctrl+C");
+    menu.addItem(20, "Cut       Ctrl+X", !returning);
+    menu.addItem(21, "Copy       Ctrl+C", !returning);
     menu.addItem(22, "Paste       Ctrl+V", !trackClipboard.isEmpty());
-    menu.addItem(23, "Duplicate       Ctrl+D");
+    menu.addItem(23, "Duplicate       Ctrl+D", !returning);
     menu.addItem(24, "Delete");
     menu.addSeparator();
     // What the track takes in and whether you hear it. The card carries both,
@@ -865,7 +877,7 @@ void Arrangement::showTrackMenu(int track)
     // than before its fader, which is a different thing to ask for.
     menu.addItem(8, juce::String(!several && session.trackGroupBusId(track) > 0 ? "Bounce Group to New Track"
                                                                                : "Bounce to New Track")
-                        + "       Ctrl+B");
+                        + "       Ctrl+B", !returning);
     menu.addSeparator();
     // A bus is the group, so what it offers is what happens to the group. The
     // cards under it offer what happens to their membership.
@@ -876,7 +888,7 @@ void Arrangement::showTrackMenu(int track)
     }
     else if (session.trackGroupId(track) > 0)
         menu.addItem(4, "Remove " + subject + " from group");
-    else
+    else if (!returning)
     {
         menu.addItem(5, "Group " + subject + "       Ctrl+G");
         juce::PopupMenu existing;

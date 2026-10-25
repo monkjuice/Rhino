@@ -7,9 +7,9 @@
         // it never sounded.
         {
             require(session.addTrack(Session::TrackType::midi).wasOk(), "Can add a track for the window fixture");
-            const auto windowSource = session.trackCount() - 1;
+            const auto windowSource = session.firstReturnTrack() - 1;
             require(session.addTrack(Session::TrackType::midi).wasOk(), "Can add the track the cut lands on");
-            const auto windowTarget = session.trackCount() - 1;
+            const auto windowTarget = session.firstReturnTrack() - 1;
 
             te::EditItemID windowClip;
             require(session.createClip(windowSource, 0.0, &windowClip).wasOk(), "Can make the window fixture clip");

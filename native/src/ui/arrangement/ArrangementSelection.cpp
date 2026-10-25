@@ -107,9 +107,13 @@ bool Arrangement::previewRowRefused(int row) const
         return false;
     const auto source = timeSelection.firstTrack + row;
     const auto destination = source + previewTrack - originalTrack;
+    // Past the lanes - a return's row included - the model makes a lane for
+    // whatever lands, of its kind, so nothing there is refused.
     if (!juce::isPositiveAndBelow(destination, static_cast<int>(trackFacts.size())))
         return false;
     const auto& facts = factsFor(destination);
+    if (facts.returnLetter.isNotEmpty())
+        return false;
     for (const auto& clip : clips)
         if (clip.track == source && carriedCut(clip).inside && (facts.bus || facts.midi != clip.midi))
             return true;

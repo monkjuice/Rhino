@@ -94,8 +94,8 @@ juce::Result Session::createClip(int trackIndex, double startSeconds, te::EditIt
     const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
         return juce::Result::fail("Select a track first.");
-    if (isGroupBusTrack(trackIndex))
-        return juce::Result::fail("A group track carries its members' audio, so it takes no clips.");
+    if (carriesOtherTracks(trackIndex))
+        return juce::Result::fail(noClipsReason(trackIndex));
     if (trackType(trackIndex) != TrackType::midi)
         return juce::Result::fail("That is an audio track. Add a MIDI track, or drop an instrument here.");
     auto* track = tracks[trackIndex];

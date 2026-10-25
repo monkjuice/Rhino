@@ -1,5 +1,5 @@
         require(session.addAudioTrack().wasOk(), "Can create an audio track");
-        require(session.trackCount() == 5 && session.trackName(4) == "Audio",
+        require(session.firstReturnTrack() == 5 && session.trackName(4) == "Audio",
                 "New audio track is visible in the arrangement model, named for where it sits");
         view.sync();
         view.resized();
@@ -190,8 +190,9 @@
         {
             const auto before = session.trackCount();
             require(session.addAudioTrack().wasOk(), "Can add a track while the arrangement is open");
-            const auto card = static_cast<size_t>(before);
-            require(view.mute.size() == card + 1, "The new track brings its own controls");
+            // At the foot of the stack, which is above the returns.
+            const auto card = static_cast<size_t>(session.firstReturnTrack() - 1);
+            require(view.mute.size() == static_cast<size_t>(before) + 1, "The new track brings its own controls");
             // No resize between adding the track and looking: a card that only
             // fills in on the next layout pass is the bug this covers.
             require(!view.mute[card]->getBounds().isEmpty() && !view.volume[card]->getBounds().isEmpty(),
@@ -432,6 +433,14 @@
             // the stack is: reading it off the panel rather than counting
             // lanes is what keeps this working as the starter stack grows.
             const auto tracksBeforeDrop = session.trackCount();
+            // The new lane is made above the returns, at the foot of the
+            // tracks that hold clips. The panel is made tall enough for the
+            // whole stack, returns included, to leave a strip under it.
+            const auto newLane = session.firstReturnTrack();
+            const auto shortHeight = view.getHeight();
+            view.setSize(view.getWidth(), 960);
+            view.sync();
+            view.resized();
             const auto lastLaneBottom = view.lane(tracksBeforeDrop - 1).getBottom();
             require(lastLaneBottom < view.masterLane().getY(),
                     "There is bare lane strip under the last track to drop into");
@@ -439,12 +448,25 @@
             drag({view.xFor(0.2), clipRowY(1)}, {view.xFor(0.5), belowLanes});
             require(session.trackCount() == tracksBeforeDrop + 1,
                     "Dragging an audio clip below the last lane creates a new track");
-            require(te::getAudioTracks(*session.edit)[tracksBeforeDrop]->findClipForID(id) != nullptr,
+            require(te::getAudioTracks(*session.edit)[newLane]->findClipForID(id) != nullptr,
                     "Drop-created track receives the dragged audio clip");
             require(renderClipRms(*session.findAudioClip(id)) > 0.01f,
                     "Drop-created track moved clip still renders audible audio");
             session.undo();
             require(session.trackCount() == tracksBeforeDrop, "Undo removes the track created by a clip drag");
+            view.sync();
+            // The returns are past the last lane too, so a clip carried onto
+            // one gets a lane of its own above them rather than a refusal.
+            drag({view.xFor(0.2), clipRowY(1)}, {view.xFor(0.5), view.lane(newLane).getCentreY()});
+            require(session.trackCount() == tracksBeforeDrop + 1
+                        && te::getAudioTracks(*session.edit)[newLane]->findClipForID(id) != nullptr
+                        && session.isReturnTrack(newLane + 1),
+                    "Dragging a clip onto a return makes a lane for it above the returns");
+            session.undo();
+            require(session.trackCount() == tracksBeforeDrop, "and undo takes that lane away too");
+            view.setSize(view.getWidth(), shortHeight);
+            view.sync();
+            view.resized();
         }
         require(te::getAudioTracks(*session.edit)[1]->findClipForID(id) != nullptr, "Undo restores the clip after a drag-created track");
         view.sync();
@@ -497,7 +519,7 @@
             // were left with is put back at the end.
             const auto editedBefore = session.patternClipID;
             require(session.addTrack(Session::TrackType::midi).wasOk(), "A MIDI track can be added");
-            const auto midiTrack = session.trackCount() - 1;
+            const auto midiTrack = session.firstReturnTrack() - 1;
             require(session.trackName(midiTrack) == "MIDI", "and is named for what it is");
             require(session.trackType(midiTrack) == Session::TrackType::midi,
                     "The track reads back as a MIDI track");
@@ -514,7 +536,7 @@
                     "Arming it records MIDI rather than the audio input");
 
             require(session.addTrack(Session::TrackType::audio).wasOk(), "An audio track can be added");
-            const auto audioTrack = session.trackCount() - 1;
+            const auto audioTrack = session.firstReturnTrack() - 1;
             require(session.trackName(audioTrack) == "Audio", "and is named for what it is");
             require(session.trackType(audioTrack) == Session::TrackType::audio,
                     "The track reads back as an audio track");
@@ -630,12 +652,15 @@
 
             view.sync();
             view.selectTrack(session.masterTrackIndex());
+            // The foot of the stack is above the returns, which keep the
+            // bottom of it to themselves.
+            const auto foot = session.firstReturnTrack();
             view.insertTrack(Session::TrackType::midi);
-            require(session.trackCount() == before + 1 && session.trackType(before) == Session::TrackType::midi
-                        && idOf(0) == first && idOf(1) == second,
-                    "With the main row selected a track goes at the foot of the stack");
-            require(view.selectedTrackIndex() == before, "and is selected there");
-            require(session.removeAudioTrack(before).wasOk(), "and can be removed again");
+            require(session.trackCount() == before + 1 && session.trackType(foot) == Session::TrackType::midi
+                        && idOf(0) == first && idOf(1) == second && session.isReturnTrack(foot + 1),
+                    "With the main row selected a track goes at the foot of the stack, above the returns");
+            require(view.selectedTrackIndex() == foot, "and is selected there");
+            require(session.removeAudioTrack(foot).wasOk(), "and can be removed again");
 
             // Under a group's last member is not between two members, so the
             // join is the model's to make rather than reconciling's.

@@ -116,6 +116,8 @@ int runArrangementTest()
        #include "scenarios/TrackManagement.inc"
         scenario("group bus routing");
        #include "scenarios/GroupBusRouting.inc"
+        // Renders, so before "gestures and persistence" closes the device.
+       #include "scenarios/ReturnTracks.inc"
         scenario("note editor");
        #include "scenarios/NoteEditor.inc"
         // After the note editor, because reopening a project replaces the

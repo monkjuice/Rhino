@@ -22,6 +22,7 @@ const juce::Identifier trackAutomationFoldedID {"rhinoAutomationFolded"};
 const juce::Identifier trackGroupBusID {"rhinoGroupBus"};
 const juce::Identifier trackGroupMemberID {"rhinoGroup"};
 const juce::Identifier trackGroupCollapsedID {"rhinoGroupCollapsed"};
+const juce::Identifier trackReturnBusID {"rhinoReturnBus"};
 const juce::Identifier legacyTrackGroupID {"rhinoTrackGroup"};
 const juce::Identifier legacyTrackGroupIdID {"id"};
 const juce::Identifier legacyTrackGroupNameID {"name"};
@@ -284,6 +285,15 @@ int djInputEnd(const te::AudioTrack& track)
     return list.size() > 0 && list[0] != nullptr && list[0]->getPluginType() == DjTrackInjectorDevice::xmlTypeName ? 1 : 0;
 }
 
+int chainHeadEnd(const te::AudioTrack& track)
+{
+    const auto& list = track.pluginList;
+    auto end = djInputEnd(track);
+    if (end < list.size() && list[end] != nullptr && list[end]->getPluginType() == te::AuxReturnPlugin::xmlTypeName)
+        ++end;
+    return end;
+}
+
 void ensureDjPortDevices(te::Edit& edit, te::AudioTrack& track)
 {
     auto& list = track.pluginList;
@@ -303,7 +313,7 @@ void ensureDjPortDevices(te::Edit& edit, te::AudioTrack& track)
     // song's. Every device added later lands ahead of it, as every add path
     // puts a device ahead of the channel strip.
     auto at = list.size();
-    for (int i = djInputEnd(track); i < list.size(); ++i)
+    for (int i = chainHeadEnd(track); i < list.size(); ++i)
         if (auto* plugin = list[i]; plugin != nullptr)
         {
             const auto type = plugin->getPluginType();

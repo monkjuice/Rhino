@@ -48,6 +48,14 @@ bool namesMainRow(const Session& session, const std::vector<int>& chosen)
     return std::any_of(chosen.begin(), chosen.end(), [&session](int track) { return session.isMasterTrack(track); });
 }
 
+// What a copy carries: the tracks that play. A return is the song's, fed by
+// every track's send to it, so it is not copied; a new one is added instead.
+std::vector<int> withoutReturns(const Session& session, std::vector<int> tracks)
+{
+    std::erase_if(tracks, [&session](int track) { return session.isReturnTrack(track); });
+    return tracks;
+}
+
 void renewKeysIn(juce::ValueTree node, std::map<juce::String, juce::String>& renewed)
 {
     if (const auto key = node.getProperty(deviceKeyID).toString(); key.isNotEmpty())
@@ -113,7 +121,7 @@ Session::TrackClipboard Session::copyTracks(const std::vector<int>& chosen) cons
     copied.document = documentSerial;
     copied.tempo = tempo();
     const auto tracks = audioTracks();
-    for (const auto track : wholeGroupsOf(*this, chosen))
+    for (const auto track : withoutReturns(*this, wholeGroupsOf(*this, chosen)))
     {
         // A hosted plugin keeps its settings to itself until asked, so the
         // state is brought up to date before it is copied.
@@ -134,10 +142,12 @@ juce::Result Session::pasteTracks(const TrackClipboard& clipboard, int below, st
 
 juce::Result Session::duplicateTracks(const std::vector<int>& chosen, std::vector<int>* duplicated)
 {
-    const auto covered = wholeGroupsOf(*this, chosen);
+    const auto covered = withoutReturns(*this, wholeGroupsOf(*this, chosen));
     if (covered.empty())
         return juce::Result::fail(namesMainRow(*this, chosen) ? "The main row cannot be duplicated."
-                                                              : "Select a track to duplicate.");
+                                  : !chosen.empty() && isReturnTrack(chosen.front())
+                                      ? "A return track is not duplicated: add another from the + menu."
+                                      : "Select a track to duplicate.");
     return insertTrackCopies(copyTracks(covered), covered.back(), duplicated,
                              covered.size() == 1 ? "Duplicate track" : "Duplicate tracks");
 }
@@ -154,7 +164,8 @@ juce::Result Session::insertTrackCopies(const TrackClipboard& clipboard, int bel
 
     // addTrack's rule for where a new track goes, with one more case: a copied
     // group cannot go inside another, so it lands below the whole of one.
-    auto after = juce::isPositiveAndBelow(below, trackCount()) ? below : -1;
+    // Under a return is the foot of the stack, which is above the returns.
+    auto after = juce::isPositiveAndBelow(below, firstReturnTrack()) ? below : -1;
     auto joining = noGroup;
     const auto groupId = trackGroupBusId(after) != noGroup ? trackGroupBusId(after) : trackGroupId(after);
     if (const auto group = trackGroup(groupId))
@@ -233,11 +244,15 @@ juce::Result Session::insertTrackCopies(const TrackClipboard& clipboard, int bel
     std::vector<te::EditItemID> made;
     std::vector<te::AudioTrack*> landed;
     te::Track* preceding = nullptr;
-    if (const auto tracks = audioTracks(); juce::isPositiveAndBelow(after, tracks.size()))
-        preceding = tracks[after];
+    const auto laneEnd = firstReturnTrack();
+    if (const auto tracks = audioTracks(); juce::isPositiveAndBelow(after >= 0 ? after : laneEnd - 1, tracks.size()))
+        preceding = tracks[after >= 0 ? after : laneEnd - 1];
+    // With no track above the returns, the copies open the stack.
+    const auto opensStack = preceding == nullptr && laneEnd < trackCount();
     for (const auto& state : copies)
     {
         const auto at = preceding != nullptr ? te::TrackInsertPoint(nullptr, preceding)
+                        : opensStack         ? te::TrackInsertPoint(nullptr, nullptr)
                                              : te::TrackInsertPoint::getEndOfTracks(*edit);
         auto track = edit->insertTrack(at, state, nullptr);
         if (track == nullptr)
@@ -302,7 +317,10 @@ juce::Result Session::removeTracks(const std::vector<int>& chosen)
     if (doomed.empty())
         return juce::Result::fail(namesMainRow(*this, chosen) ? "The main row cannot be removed."
                                                               : "Select a track to remove.");
-    if (static_cast<int>(doomed.size()) >= trackCount())
+    // The returns play only what the tracks send them, so they do not count.
+    const auto doomedReturns = static_cast<int>(std::count_if(doomed.begin(), doomed.end(),
+                                                              [this](int track) { return isReturnTrack(track); }));
+    if (static_cast<int>(doomed.size()) - doomedReturns >= firstReturnTrack())
         return juce::Result::fail("Keep at least one track.");
     auto& undoManager = edit->getUndoManager();
     undoManager.beginNewTransaction(doomed.size() == 1 ? "Remove track" : "Remove tracks");
@@ -328,6 +346,12 @@ juce::Result Session::removeTracks(const std::vector<int>& chosen)
                 edit->deleteTrack(track);
                 break;
             }
+    // A return takes every track's send to it along.
+    if (doomedReturns > 0)
+    {
+        ensureReturnRouting();
+        followReturnSolo(false);
+    }
     repairPatternClip();
     reconcileTrackGroups();
     refreshLoop();

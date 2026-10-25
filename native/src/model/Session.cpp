@@ -207,6 +207,10 @@ void Session::buildStarterEdit()
     patternClipID = patternClip->itemID;
     ensureSceneSlots();
     ensureTrackMixers();
+    // A delay and a reverb on the returns, every track sending nothing to
+    // either until it is turned up.
+    addStarterReturns();
+    returnSoloHeard = false;
     refreshLoop();
     edit->getUndoManager().clearUndoHistory();
     edit->resetChangedStatus();
@@ -293,6 +297,8 @@ void Session::refreshAfterUndoRedo(bool changed)
 {
     // An undo can take back any edit at all, so it cannot say what it changed.
     if (changed) markModified(-1, ModelChange::unknown);
+    // A solo or a mute may have come back, on a return or under one soloed.
+    if (changed) followReturnSolo(true);
     repairPatternClip();
     edit->tempoSequence.updateTempoData();
     refreshLoop();
@@ -491,6 +497,9 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
     // which is also what puts every member output back onto its bus.
     migrateLegacyTrackGroups();
     reconcileTrackGroups();
+    // The returns' isolation follows a solo saved on one of them.
+    returnSoloHeard = false;
+    followReturnSolo(false);
     // The decks the document saved come back empty and stale; the poll
     // loads them again.
     readDjState();

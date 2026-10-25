@@ -154,7 +154,8 @@ void writeBeat(const juce::File& file)
 
 void fillDocument(Session& session)
 {
-    while (session.trackCount() < profileTracks)
+    // Tracks that play: the starter's two returns are on top of these.
+    while (session.firstReturnTrack() < profileTracks)
         if (session.addTrack(Session::TrackType::midi).failed())
             throw std::runtime_error("Could not add a profile track");
 

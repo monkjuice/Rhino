@@ -9,7 +9,7 @@
         // it found it for the scenarios that follow.
         {
             require(session.addAudioTrack().wasOk(), "A clean track for the routing check");
-            const auto fresh = session.trackCount() - 1;
+            const auto fresh = session.firstReturnTrack() - 1;
             require(session.importAudioAt(source.getFile(), fresh, 0.0).wasOk(), "Audio can go on it");
             auto* routed = te::getAudioTracks(*session.edit)[fresh]->getClips().getLast();
             require(routed != nullptr, "The track holds that clip");
@@ -52,6 +52,6 @@
             session.deleteClip(routed->itemID);
             for (int track = 0; track < static_cast<int>(wasMuted.size()) && track < session.trackCount(); ++track)
                 session.setTrackMuted(track, wasMuted[static_cast<size_t>(track)]);
-            require(session.removeAudioTrack(session.trackCount() - 1).wasOk(),
+            require(session.removeAudioTrack(session.firstReturnTrack() - 1).wasOk(),
                     "and the track this scenario added is removed again");
         }

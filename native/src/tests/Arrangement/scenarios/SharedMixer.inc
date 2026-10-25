@@ -38,7 +38,7 @@
 
         scenario("arrangement mixer: new tracks and reopened projects get a fader");
         require(session.addAudioTrack().wasOk(), "A track can be added");
-        const auto addedTrack = session.trackCount() - 1;
+        const auto addedTrack = session.firstReturnTrack() - 1;
         require(session.trackVolumePlugin(addedTrack) != nullptr, "A new track arrives with a fader");
         require(session.setTrackVolumeDb(addedTrack, -5.0f).wasOk(), "The new track's fader works");
         {

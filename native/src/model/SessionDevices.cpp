@@ -13,10 +13,12 @@ bool isTrackInfrastructure(const juce::String& type)
 {
     // Tracktion represents permanent channel-strip facilities as plugins in
     // the processing graph. They are deliberately not user devices. "volume"
-    // and "level" are the engine's own and have no catalog entry.
+    // and "level" are the engine's own and have no catalog entry, and so are
+    // a track's sends and a return track's way in (SessionReturns.cpp).
     if (const auto* device = DeviceCatalog::byTypeName(type))
         return device->infrastructure;
-    return type == "volume" || type == "level";
+    return type == "volume" || type == "level" || type == te::AuxSendPlugin::xmlTypeName
+        || type == te::AuxReturnPlugin::xmlTypeName;
 }
 
 Session::DeviceKind deviceKind(te::Plugin& plugin)
@@ -43,8 +45,8 @@ int chainRank(Session::DeviceKind kind)
 int channelStripInsertIndex(te::AudioTrack& track)
 {
     // The channel strip closes the chain; a DJ deck's hidden input, when it
-    // is there, opens it and is passed over.
-    for (int i = djInputEnd(track); i < track.pluginList.size(); ++i)
+    // is there, opens it and is passed over, as is a return track's way in.
+    for (int i = chainHeadEnd(track); i < track.pluginList.size(); ++i)
         if (auto* plugin = track.pluginList[i]; plugin != nullptr && isTrackInfrastructure(plugin->getPluginType()))
             return i;
     return track.pluginList.size();
@@ -80,10 +82,11 @@ juce::Result Session::addDevice(const juce::String& deviceId, int trackIndex, co
     const auto* device = DeviceCatalog::byId(deviceId);
     if (device == nullptr)
         return juce::Result::fail("That device is not in this build.");
-    // A group carries audio that has already been played: there is nothing for
-    // an instrument to play, and no sequence for a MIDI effect to act on.
-    if (isGroupBusTrack(trackIndex) && device->kind != DeviceKind::AudioEffect)
-        return juce::Result::fail("A group track takes audio effects only.");
+    // A group or a return carries audio that has already been played: there
+    // is nothing for an instrument to play, and no sequence for a MIDI effect
+    // to act on.
+    if (carriesOtherTracks(trackIndex) && device->kind != DeviceKind::AudioEffect)
+        return juce::Result::fail(audioEffectsOnlyReason(trackIndex));
     if (device->kind == DeviceKind::Instrument)
         return addInstrumentDevice(*device, trackIndex, preset);
     if (device->kind == DeviceKind::MidiEffect)

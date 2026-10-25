@@ -20,7 +20,7 @@
             require(session.trackRecordInput(0) == Session::RecordInput::midi,
                     "so arming it would record MIDI");
             require(session.addAudioTrack().wasOk(), "A track with no instrument can be added");
-            const auto audioTrack = session.trackCount() - 1;
+            const auto audioTrack = session.firstReturnTrack() - 1;
             require(session.trackRecordInput(audioTrack) == Session::RecordInput::audio,
                     "and a track without an instrument records audio");
             require(session.trackRecordInput(session.masterTrackIndex()) == Session::RecordInput::none,
@@ -183,9 +183,9 @@
 
             scenario("recording: two armed tracks share the input rather than taking it from each other");
             require(session.addAudioTrack().wasOk(), "One audio track for the pair");
-            const auto pairFirst = session.trackCount() - 1;
+            const auto pairFirst = session.firstReturnTrack() - 1;
             require(session.addAudioTrack().wasOk(), "and a second beside it");
-            const auto pairSecond = session.trackCount() - 1;
+            const auto pairSecond = session.firstReturnTrack() - 1;
             juce::ignoreUnused(session.setTrackArmed(pairFirst, true));
             juce::ignoreUnused(session.setTrackArmed(pairSecond, true));
             require(session.isTrackArmed(pairFirst) && session.isTrackArmed(pairSecond),

@@ -49,6 +49,8 @@ void Session::ensureTrackMixers()
                 behindFader = i + 1;
         track->pluginList.insertPlugin(meter, behindFader, nullptr);
     }
+    // The sends after the meter, and each return's way in at its head.
+    ensureReturnRouting();
 }
 
 Session::TrackMixer Session::trackMixer(int track) const

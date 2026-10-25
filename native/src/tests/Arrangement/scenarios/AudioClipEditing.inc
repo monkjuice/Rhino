@@ -258,7 +258,7 @@
         require(te::getAudioTracks(*session.edit)[1]->getClips().size() == 2, "Dropping an audio file on the audio lane imports a clip");
         session.undo();
         require(te::getAudioTracks(*session.edit)[1]->getClips().size() == 1, "Undo restores dropped audio import");
-        require(session.trackCount() == 4, "An import onto a free starter lane creates no track");
+        require(session.firstReturnTrack() == 4, "An import onto a free starter lane creates no track");
         // Several files dropped together land end to end from the drop point,
         // and one undo takes the whole drop back. Imported one by one at the
         // same point, each trimmed away the one before it.

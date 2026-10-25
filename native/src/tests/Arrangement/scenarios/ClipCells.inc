@@ -10,9 +10,10 @@
             auto document = std::make_unique<Session>();
             auto& cells = *document;
             require(cells.sceneCount() == Session::defaultScenes, "A new document starts with a full set of scenes");
+            // A return holds no clips, so it has no cells to offer.
             for (int track = 0; track < cells.trackCount(); ++track)
-                require(cells.clipSlotAt(track, cells.sceneCount() - 1) != nullptr,
-                        "Every track has a cell for every scene");
+                require((cells.clipSlotAt(track, cells.sceneCount() - 1) != nullptr) != cells.isReturnTrack(track),
+                        "Every track that plays has a cell for every scene");
             // The starter stack holds both kinds: MIDI, Audio, MIDI, Audio.
             auto midiTrack = -1, audioTrack = -1, otherMidiTrack = -1;
             for (int track = 0; track < cells.trackCount(); ++track)
@@ -160,7 +161,7 @@
                 require(console->applyDrop(full, "rhino-browser:preset:AcidSteps", false).wasOk()
                             && cells.sceneCount() == full + 1 && cells.slotClip(midiTrack, full).hasClip,
                         "A pattern on the + row makes the row it lands in");
-                for (int track = 0; track < cells.trackCount(); ++track)
+                for (int track = 0; track < cells.firstReturnTrack(); ++track)
                     require(cells.clipSlotAt(track, full) != nullptr, "The new row reaches every track");
                 cells.undo();
                 require(cells.sceneCount() == full && !cells.slotClip(midiTrack, full).hasClip,

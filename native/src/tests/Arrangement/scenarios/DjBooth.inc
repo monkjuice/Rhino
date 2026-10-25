@@ -292,7 +292,7 @@
                         "but not into an audio track's cell");
                 require(session.createSlotClip(audioTrack, 0).failed(), "and an audio track's cell makes no MIDI clip");
                 require(session.addTrack(Session::TrackType::midi).wasOk(), "A fresh MIDI lane");
-                const auto freshLane = session.trackCount() - 1;
+                const auto freshLane = session.firstReturnTrack() - 1;
                 require(session.copySlotClipToArrangement(deckTrack, 1, 0.0, freshLane).wasOk(), "takes a cell's clip as a copy");
                 require(te::getAudioTracks(*session.edit)[freshLane]->getClips().size() == 1, "and gains the clip");
                 require(session.copySlotClipToArrangement(deckTrack, 1, 0.0, audioTrack).failed(), "An audio lane refuses it");

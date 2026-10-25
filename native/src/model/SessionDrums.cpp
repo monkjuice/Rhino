@@ -95,8 +95,8 @@ juce::Result Session::addDrumKit(const juce::File& file, int trackIndex)
     const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
         return juce::Result::fail("Drop drum kits on a track.");
-    if (isGroupBusTrack(trackIndex))
-        return juce::Result::fail("A group track takes audio effects only.");
+    if (carriesOtherTracks(trackIndex))
+        return juce::Result::fail(audioEffectsOnlyReason(trackIndex));
     // A kit is an instrument, so it goes where an instrument goes.
     if (trackType(trackIndex) != TrackType::midi)
         return juce::Result::fail("That is an audio track. Drop drum kits on a MIDI track instead.");
@@ -227,8 +227,8 @@ juce::Result Session::addDrumSound(const juce::File& file, int trackIndex)
     const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
         return juce::Result::fail("Drop drum sounds on a track.");
-    if (isGroupBusTrack(trackIndex))
-        return juce::Result::fail("A group track takes audio effects only.");
+    if (carriesOtherTracks(trackIndex))
+        return juce::Result::fail(audioEffectsOnlyReason(trackIndex));
     if (trackType(trackIndex) != TrackType::midi)
         return juce::Result::fail("That is an audio track. Drop drum sounds on a MIDI track instead.");
     auto* track = tracks[trackIndex];

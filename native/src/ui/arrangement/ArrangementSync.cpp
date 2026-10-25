@@ -99,6 +99,9 @@ void Arrangement::sync()
                               session.trackType(track) == Session::TrackType::midi,
                               session.isGroupBusTrack(track), session.isTrackFolded(track),
                               session.isTrackAutomationFolded(track)});
+        for (const auto& destination : returns)
+            if (destination.track == track)
+                trackFacts.back().returnLetter = destination.letter;
         mute[index]->setTooltip("Mute " + name + " - silences this track while the rest keeps playing.");
         solo[index]->setTooltip("Solo " + name + " - silences every track that is not soloed.");
         // The dot is the same whatever the track records, because the track
@@ -134,6 +137,19 @@ void Arrangement::sync()
             volume[index]->setValue(mixer.volumeDb, juce::dontSendNotification);
         if (!pan[index]->isMouseButtonDown())
             pan[index]->setValue(mixer.pan, juce::dontSendNotification);
+        // A knob per return, in the returns' order, each saying which return
+        // it feeds and how much.
+        const auto& knobs = sends[index];
+        for (size_t knob = 0; knob < knobs.size() && knob < returns.size(); ++knob)
+        {
+            const auto& destination = returns[knob];
+            const auto level = session.trackSendDb(track, destination.track);
+            if (!knobs[knob]->isMouseButtonDown())
+                knobs[knob]->setValue(level, juce::dontSendNotification);
+            knobs[knob]->setTooltip("Send from " + name + " to " + destination.letter + " " + destination.name + ", "
+                                    + SendKnob::describe(level) + " - how much of the track, after its fader, feeds "
+                                    "the return. Drag up to send more, double-click to send nothing.");
+        }
         // The track's clips, read again only if the model has marked the
         // track since they were last read, or has never been asked.
         auto& cache = trackClipCaches[tracks[track]->itemID.getRawID()];
@@ -387,6 +403,56 @@ void Arrangement::syncTrackControls()
         pan.pop_back();
         meters.pop_back();
     }
+    syncSendKnobs();
+}
+
+void Arrangement::syncSendKnobs()
+{
+    returns = session.returnTracks();
+    const auto count = session.trackCount();
+    const auto firstReturn = returns.empty() ? count : returns.front().track;
+    sends.resize(static_cast<size_t>(std::max(0, count)));
+    for (int track = 0; track < count; ++track)
+    {
+        auto& knobs = sends[static_cast<size_t>(track)];
+        const auto wanted = track < firstReturn ? returns.size() : size_t {0};
+        while (knobs.size() > wanted)
+            knobs.pop_back();
+        while (knobs.size() < wanted)
+        {
+            const auto knob = static_cast<int>(knobs.size());
+            auto made = std::make_unique<SendKnob>();
+            // A turn is one undo step and one announcement, as a fader drag
+            // is; the knob draws its own value meanwhile, and the line under
+            // the toolbar reads it out.
+            made->onDragStart = [this, track, knob]
+            {
+                if (const auto destination = returnTrackAt(knob); destination >= 0)
+                    session.beginTrackSendGesture(track, destination);
+            };
+            made->onDragEnd = [this, track, knob] { session.endTrackSendGesture(track, returnTrackAt(knob)); };
+            made->onValueChange = [this, track, knob, control = made.get()]
+            {
+                const auto destination = returnTrackAt(knob);
+                if (destination < 0)
+                    return;
+                session.setTrackSendDb(track, destination, static_cast<float>(control->getValue()));
+                if (status && control->isMouseButtonDown())
+                    status(session.trackName(track) + " to " + control->letter() + " " + session.trackName(destination)
+                           + ": " + SendKnob::describe(session.trackSendDb(track, destination)));
+            };
+            laneHeaders.addAndMakeVisible(*made);
+            knobs.push_back(std::move(made));
+        }
+        for (size_t knob = 0; knob < knobs.size(); ++knob)
+            knobs[knob]->setLetter(returns[knob].letter);
+    }
+}
+
+int Arrangement::returnTrackAt(int knob) const
+{
+    return juce::isPositiveAndBelow(knob, static_cast<int>(returns.size())) ? returns[static_cast<size_t>(knob)].track
+                                                                           : -1;
 }
 
 void Arrangement::updateScroll()

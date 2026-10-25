@@ -17,7 +17,7 @@
 
             scenario("keyboard curves: a track that names the port takes its stand-in");
             require(session.addTrack(Session::TrackType::midi).wasOk(), "A MIDI track for the keyboard");
-            const auto keysTrack = session.trackCount() - 1;
+            const auto keysTrack = session.firstReturnTrack() - 1;
             require(session.setTrackMidiInput(keysTrack, Session::midiInputDeviceToken(testPort)).wasOk(),
                     "It listens to the curved keyboard by the keyboard's own name");
             require(session.trackMidiInputName(keysTrack) == testPort, "and its card says so");

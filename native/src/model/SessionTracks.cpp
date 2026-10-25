@@ -61,8 +61,14 @@ void Session::setLastAddedTrackType(TrackType type)
 te::AudioTrack* Session::appendTrack(TrackType type, int after)
 {
     const auto tracks = audioTracks();
-    const auto at = juce::isPositiveAndBelow(after, tracks.size()) ? te::TrackInsertPoint(nullptr, tracks[after])
-                                                                  : te::TrackInsertPoint::getEndOfTracks(*edit);
+    // The foot of the stack is above the returns, which keep the bottom of
+    // it to themselves; with no track above them, it is the top.
+    const auto laneEnd = firstReturnTrack();
+    if (!juce::isPositiveAndBelow(after, laneEnd))
+        after = laneEnd - 1;
+    const auto at = after >= 0 ? te::TrackInsertPoint(nullptr, tracks[after])
+                    : laneEnd < tracks.size() ? te::TrackInsertPoint(nullptr, nullptr)
+                                              : te::TrackInsertPoint::getEndOfTracks(*edit);
     auto newTrack = edit->insertNewAudioTrack(at, nullptr, false);
     if (newTrack == nullptr)
         return nullptr;
@@ -80,7 +86,9 @@ te::AudioTrack* Session::appendTrack(TrackType type, int after)
 juce::Result Session::addTrack(TrackType type, int below, int* added)
 {
     const auto kind = trackTypeName(type);
-    auto after = juce::isPositiveAndBelow(below, trackCount()) ? below : -1;
+    // Under a return is under the last track that plays: the returns keep
+    // the foot of the stack.
+    auto after = juce::isPositiveAndBelow(below, firstReturnTrack()) ? below : -1;
     auto joining = 0;
     const auto groupId = trackGroupBusId(after) != 0 ? trackGroupBusId(after) : trackGroupId(after);
     if (const auto group = trackGroup(groupId))
@@ -106,14 +114,14 @@ juce::Result Session::addTrack(TrackType type, int below, int* added)
     ensureSceneSlots();
     ensureTrackMixers();
     edit->getUndoManager().beginNewTransaction();
-    const auto index = after < 0 ? trackCount() - 1 : after + 1;
+    const auto index = after < 0 ? firstReturnTrack() - 1 : after + 1;
     if (added != nullptr)
         *added = index;
     // An empty track below every other changes nothing any deck plays, and
     // moves no lane: the main row's index moves on one, but the mirror finds
     // a lane's curve by its device and parameter, not by the index. One
-    // landing higher up moves every lane under it and may have joined a
-    // group, which is what moving a track counts as.
+    // landing higher up, returns included, moves every lane under it and may
+    // have joined a group, which is what moving a track counts as.
     markModified(-1, index == trackCount() - 1 && joining == 0 ? ModelChange::none : ModelChange::unknown);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
@@ -126,7 +134,9 @@ juce::Result Session::removeAudioTrack(int track)
         return juce::Result::fail("The main row cannot be removed.");
     if (!juce::isPositiveAndBelow(track, tracks.size()))
         return juce::Result::fail("Select a track to remove.");
-    if (tracks.size() <= 1)
+    // The returns play only what the tracks send them, so they do not count.
+    const auto returning = isReturnTrack(track);
+    if (!returning && firstReturnTrack() <= 1)
         return juce::Result::fail("Keep at least one track.");
     edit->getUndoManager().beginNewTransaction("Remove track");
     // Anything taking this track's audio as a sidechain loses its source. The
@@ -139,6 +149,12 @@ juce::Result Session::removeAudioTrack(int track)
     if (const auto groupId = trackGroupBusId(track); groupId != 0)
         dissolveGroupInEdit(groupId);
     edit->deleteTrack(tracks[track]);
+    // A return takes every track's send to it along.
+    if (returning)
+    {
+        ensureReturnRouting();
+        followReturnSolo(false);
+    }
     // The note editor's clip may have gone with the track.
     repairPatternClip();
     reconcileTrackGroups();
@@ -331,7 +347,11 @@ juce::Result Session::moveTrack(int track, int destination)
         return juce::Result::fail("The main row keeps its place.");
     if (!juce::isPositiveAndBelow(track, tracks.size()))
         return juce::Result::fail("Select a track to move.");
-    destination = juce::jlimit(0, tracks.size() - 1, destination);
+    // The returns keep the foot of the stack: a track carried down onto them
+    // stops above them, and a return moves only among the returns.
+    const auto laneEnd = firstReturnTrack();
+    destination = isReturnTrack(track) ? juce::jlimit(laneEnd, tracks.size() - 1, destination)
+                                       : juce::jlimit(0, std::max(0, laneEnd - 1), destination);
     if (destination == track)
         return juce::Result::ok();
     edit->getUndoManager().beginNewTransaction("Move track");

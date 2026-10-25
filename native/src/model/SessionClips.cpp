@@ -77,13 +77,16 @@ juce::Result Session::editClipInEdit(te::EditItemID id, ClipGeometry next, ClipG
         targetTrack = oldTrackIndex;
     if (targetTrack < 0 || targetTrack > tracks.size())
         return juce::Result::fail("Drop the clip on a track lane.");
+    // The returns, and the space under them, are past the last lane: a clip
+    // dropped there gets a lane of its own, made above the returns.
+    const auto laneEnd = firstReturnTrack();
     // A clip only ever lands on a lane of its own kind. Dropping one on the
     // wrong lane used to drag the lane's kind along with it - a MIDI clip
     // carried its instrument onto an audio track and silently made it MIDI.
-    if (targetTrack != oldTrackIndex && targetTrack < tracks.size())
+    if (targetTrack != oldTrackIndex && targetTrack < laneEnd)
     {
-        if (isGroupBusTrack(targetTrack))
-            return juce::Result::fail("A group track carries its members' audio, so it takes no clips.");
+        if (carriesOtherTracks(targetTrack))
+            return juce::Result::fail(noClipsReason(targetTrack));
         if (trackType(targetTrack) != (movingMidi ? TrackType::midi : TrackType::audio))
             return juce::Result::fail(movingMidi
                 ? "That is an audio track. Move MIDI clips to a MIDI track."
@@ -95,13 +98,13 @@ juce::Result Session::editClipInEdit(te::EditItemID id, ClipGeometry next, ClipG
         && std::abs(old.offset.inSeconds() - next.offset) < 1.0e-8
         && targetTrack == oldTrackIndex)
         return juce::Result::ok();
-    if (targetTrack == tracks.size())
+    if (targetTrack >= laneEnd)
     {
         // Dragged off the bottom of the stack: the new lane is made for the
         // clip that is arriving, so a MIDI clip gets a MIDI track.
         if (appendTrack(movingMidi ? TrackType::midi : TrackType::audio) == nullptr)
             return juce::Result::fail("Could not create a track for the moved clip.");
-        targetTrack = tracks.size();
+        targetTrack = laneEnd;
         // A lane made by a drop is a lane like any other from the start: its
         // fader, its scene slots and its routing, not at the next addTrack.
         ensureTrackMixers();
@@ -456,6 +459,7 @@ void Session::toggleTrackMute(int track)
     edit->getUndoManager().beginNewTransaction("Track mute");
     tracks[track]->state.setProperty(te::IDs::mute, !tracks[track]->isMuted(false), &edit->getUndoManager());
     edit->getUndoManager().beginNewTransaction();
+    followReturnSolo(true);
     // How the song is being listened to, not what any deck plays: a deck's
     // copy of the document leaves the song's mute and solo out.
     markModified(track, ModelChange::none);
@@ -469,6 +473,7 @@ void Session::toggleTrackSolo(int track)
     edit->getUndoManager().beginNewTransaction("Track solo");
     tracks[track]->state.setProperty(te::IDs::solo, !tracks[track]->isSolo(false), &edit->getUndoManager());
     edit->getUndoManager().beginNewTransaction();
+    followReturnSolo(false);
     markModified(track, ModelChange::none);
     sendSynchronousChangeMessage();
 }

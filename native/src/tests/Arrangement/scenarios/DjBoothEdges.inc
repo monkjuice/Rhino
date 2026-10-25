@@ -144,8 +144,8 @@
                 render(song, 20);
                 require(song.djDeckState(1).master && close(song.djDeckState(1).effectiveBpm, bpm * 1.12),
                         "The second deck holds +12 per cent when the first stops again");
-                require(song.addTrack(Session::TrackType::midi).wasOk() && song.createSlotClip(song.trackCount() - 1, 0).wasOk()
-                            && song.loadDjDeckSlot(1, song.trackCount() - 1, 0).wasOk() && song.djDeckInfo(1).loaded,
+                require(song.addTrack(Session::TrackType::midi).wasOk() && song.createSlotClip(song.firstReturnTrack() - 1, 0).wasOk()
+                            && song.loadDjDeckSlot(1, song.firstReturnTrack() - 1, 0).wasOk() && song.djDeckInfo(1).loaded,
                         "A cell of a third track on it");
                 const auto fresh = travel(1);
                 require(close(song.djDeckState(1).effectiveBpm, bpm) && std::abs(fresh / (before / 1.1) - 1.0) < 1.0e-4,

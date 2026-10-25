@@ -581,9 +581,11 @@
         require(session.trackCount() == tracksBeforeRemoval - 1,
                 "Removing the extra audio track leaves the rest of the stack");
         const auto tracksBeforeDrop = session.trackCount();
+        // Made at the foot of the stack, above the returns.
+        const auto droppedLane = session.firstReturnTrack();
         view.filesDropped(dropped, static_cast<int>(view.xFor(1.0)), view.getHeight() - 3);
         require(session.trackCount() == tracksBeforeDrop + 1, "Dropping audio below the lanes creates a new audio track");
-        require(te::getAudioTracks(*session.edit)[tracksBeforeDrop]->getClips().size() == 1,
+        require(te::getAudioTracks(*session.edit)[droppedLane]->getClips().size() == 1,
                 "Drop-created track receives the audio clip");
         session.undo();
         session.undo();

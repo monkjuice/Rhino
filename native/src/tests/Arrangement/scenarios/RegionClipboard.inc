@@ -505,7 +505,7 @@
             view.resized();
             require(clipsOn(1) == startingAudioClips && clipsOn(0) == startingPatternClips,
                     "The region scenario leaves the arrangement as it found it");
-            require(session.trackCount() == 4, "The region scenario creates no tracks");
+            require(session.firstReturnTrack() == 4, "The region scenario creates no tracks");
         }
 
         // A copy plays the same stretch of its file as the clip it came from.

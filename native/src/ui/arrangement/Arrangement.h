@@ -2,6 +2,7 @@
 #include "model/Session.h"
 #include "ArrangementGrid.h"
 #include "MonitorSelector.h"
+#include "SendKnob.h"
 #include "ui/shared/LevelMeter.h"
 #include <array>
 #include <map>
@@ -42,6 +43,9 @@ public:
     // Public because Ctrl+T is a shell shortcut that answers wherever the
     // focus is.
     void insertTrack(Session::TrackType);
+    // Adds a return track at the foot of the returns and selects it: the +
+    // menu's third choice, and Ctrl+Alt+T, as in Live.
+    void insertReturnTrack();
     // The clip a command would act on, or an invalid id when the selection is
     // a track, an insert point, a span with no clip in it, or nothing. The
     // shell reads it to decide which editor the lower pane should be showing.
@@ -259,6 +263,12 @@ private:
     // and Ctrl+J from the DJ view.
     void syncIfStale();
     void syncTrackControls();
+    // One knob per return on every card but a return's, made or taken away
+    // as returns come and go; syncTrackControls runs it.
+    void syncSendKnobs();
+    // The return a card's knob feeds, by the knob's place in the row: its
+    // track, or -1 once there is no such return.
+    int returnTrackAt(int knob) const;
     void configureMasterControls();
     void updateScroll();
     void zoom(double factor, double anchor);
@@ -568,6 +578,9 @@ private:
         juce::String name;
         juce::Colour colour;
         bool midi = false, bus = false, folded = false, automationFolded = false;
+        // A return's letter, which its card shows where another shows its
+        // place in the stack; empty on every other track.
+        juce::String returnLetter;
     };
     std::vector<TrackFacts> trackFacts;
     const TrackFacts& factsFor(int track) const;
@@ -609,6 +622,11 @@ private:
     std::vector<std::unique_ptr<MonitorSelector>> monitor;
     // The track's fader and pan, the session's own mixer values.
     std::vector<std::unique_ptr<juce::Slider>> volume, pan;
+    // Its sends, one knob per return in the returns' order, under the name;
+    // none on a return, which sends to no other. The returns are read once
+    // per sync, as the facts are.
+    std::vector<std::vector<std::unique_ptr<SendKnob>>> sends;
+    std::vector<Session::ReturnTrack> returns;
     juce::Slider masterVolume, masterPan;
     // What each track sends to the mix, and on the main row what leaves the
     // song, each at the start of its header.
@@ -798,5 +816,8 @@ private:
     // it: cardMeterInset from the card's edge, and what is left before
     // cardControlLeft between it and the controls.
     static constexpr int cardMeterInset = 9;
+    // The send knobs' first line, from the top of the controls: level with
+    // the faders, across the name column, under the name.
+    static constexpr int sendLineTop = 21;
 };
 }

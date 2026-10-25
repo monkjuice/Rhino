@@ -146,7 +146,7 @@ VocoderEngine::Settings plainSettings()
 void checkVocoderPanel(Session& session)
 {
     require(session.addAudioTrack().wasOk());
-    const auto track = session.trackCount() - 1;
+    const auto track = session.firstReturnTrack() - 1;
     require(session.addDevice("RhinoVocoder", track).wasOk());
     auto slot = std::optional<Session::DeviceSlot>();
     for (const auto& device : session.deviceSlots(track))

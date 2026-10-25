@@ -16,7 +16,7 @@
             juce::TemporaryFile entryProject(".rhinoedit");
 
             require(session.addAudioTrack().wasOk(), "A clean track for the reload check");
-            require(session.moveTrack(session.trackCount() - 1, 1).wasOk(), "carried up under the pattern track");
+            require(session.moveTrack(session.firstReturnTrack() - 1, 1).wasOk(), "carried up under the pattern track");
             require(session.importAudioAt(source.getFile(), 1, 0.0).wasOk(), "with audio on it");
             // The pattern track goes in too, so the reopened document still
             // finds everything it looks for and fails on nothing but this.

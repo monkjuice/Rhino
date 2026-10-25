@@ -958,7 +958,7 @@ void checkThroughSession()
     // A drum pattern brings the 808 kit to a blank rack, and plays whatever a
     // filled one holds.
     require(stack.addTrack(Session::TrackType::midi).wasOk(), "a fresh MIDI track");
-    const auto fresh = stack.trackCount() - 1;
+    const auto fresh = stack.firstReturnTrack() - 1;
     require(stack.addInstrument(Session::Instrument::Drums, fresh).wasOk() && rackOn(stack, fresh) != nullptr
                 && rackOn(stack, fresh)->isBlank(),
             "a Drum Rack added on its own is blank");
@@ -987,7 +987,7 @@ void checkThroughSession()
                 "the drum track's kick becomes Sub Kick");
         require(stack.addTrack(Session::TrackType::midi).wasOk() && stack.addTrack(Session::TrackType::midi).wasOk(),
                 "two more MIDI tracks");
-        const auto pastedTo = stack.trackCount() - 2, movedTo = stack.trackCount() - 1;
+        const auto pastedTo = stack.firstReturnTrack() - 2, movedTo = stack.firstReturnTrack() - 1;
         const auto bar = 4.0 * 60.0 / stack.tempo();
         std::vector<te::EditItemID> pasted;
         require(stack.pasteClipRegion(stack.copyClipRegion(0.0, bar, fresh, fresh), 0.0, pastedTo, pasted).wasOk()

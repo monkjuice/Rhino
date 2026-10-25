@@ -13,7 +13,7 @@
                 require(choice.name != testPort, "and no card offers it");
 
             require(session.addTrack(Session::TrackType::midi).wasOk(), "A MIDI track for the Push");
-            const auto pushTrack = session.trackCount() - 1;
+            const auto pushTrack = session.firstReturnTrack() - 1;
             require(session.addDevice("FourOsc", pushTrack).wasOk(), "with an instrument on it");
             int instrument = -1;
             for (const auto& slot : session.deviceSlots(pushTrack))
@@ -233,7 +233,7 @@
             scenario("push: a Drum Rack's bank on the bottom-left four by four");
             {
                 require(session.addTrack(Session::TrackType::midi).wasOk(), "A track for the drums");
-                const auto drumTrack = session.trackCount() - 1;
+                const auto drumTrack = session.firstReturnTrack() - 1;
                 require(session.addDevice("Drums", drumTrack).wasOk(), "with a Drum Rack on it");
                 int drums = -1;
                 for (const auto& slot : session.deviceSlots(drumTrack))

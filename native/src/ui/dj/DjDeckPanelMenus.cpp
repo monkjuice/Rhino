@@ -20,7 +20,7 @@ void DjDeckPanel::showSourceMenu()
     const auto count = session.trackCount();
     for (int track = 0; track < count; ++track)
     {
-        if (session.isGroupBusTrack(track)) continue;
+        if (session.isGroupBusTrack(track) || session.isReturnTrack(track)) continue;
         const auto kind = session.trackType(track) == Session::TrackType::midi ? "MIDI" : "Audio";
         menu.addItem(100 + track, juce::String(track + 1).paddedLeft('0', 2) + "  " + session.trackName(track) + "  (" + kind + ")",
                      true, info.kind == Session::DjSourceKind::track && info.track == track);

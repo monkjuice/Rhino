@@ -273,6 +273,9 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
         return juce::Result::fail("Copy one or more clips first.");
     if (!std::isfinite(destinationStart) || destinationStart < 0.0 || destinationTrack < 0)
         return juce::Result::fail("Choose a valid paste location.");
+    // The returns are past the last lane: a paste that lands on them lands
+    // on lanes made for it above them, from the first return down.
+    destinationTrack = std::min(destinationTrack, firstReturnTrack());
 
     // A clip lands on a lane of its own kind, so what each row of the region
     // needs is read off it before anything is created or cleared: a paste that
@@ -284,16 +287,16 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
         if (juce::isPositiveAndBelow(snapshot.track, static_cast<int>(rowType.size())))
             rowType[static_cast<size_t>(snapshot.track)] = snapshot.midi ? TrackType::midi : TrackType::audio;
 
-    const auto trackCountBefore = audioTracks().size();
+    const auto lanesBefore = firstReturnTrack();
     for (size_t row = 0; row < rowType.size(); ++row)
     {
         // A row the paste will make is made as the kind that row wants, so
         // only the rows already there can be the wrong kind.
         const auto index = destinationTrack + static_cast<int>(row);
-        if (!rowType[row].has_value() || index >= trackCountBefore)
+        if (!rowType[row].has_value() || index >= lanesBefore)
             continue;
-        if (isGroupBusTrack(index))
-            return juce::Result::fail("A group track carries its members' audio, so it takes no clips.");
+        if (carriesOtherTracks(index))
+            return juce::Result::fail(noClipsReason(index));
         if (trackType(index) != *rowType[row])
             return juce::Result::fail(*rowType[row] == TrackType::midi
                 ? "That is an audio track. Paste MIDI clips on a MIDI track."
@@ -312,9 +315,9 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
         return failure;
     };
     auto addedLanes = false;
-    while (audioTracks().size() < destinationTrack + region.trackSpan + 1)
+    while (firstReturnTrack() < destinationTrack + region.trackSpan + 1)
     {
-        const auto row = audioTracks().size() - destinationTrack;
+        const auto row = firstReturnTrack() - destinationTrack;
         const auto type = juce::isPositiveAndBelow(row, static_cast<int>(rowType.size()))
                               ? rowType[static_cast<size_t>(row)].value_or(TrackType::audio)
                               : TrackType::audio;

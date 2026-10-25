@@ -184,8 +184,12 @@ juce::Result Session::groupTracks(std::vector<int> tracks, const juce::String& n
         return juce::Result::fail("Select one or more tracks to group.");
     const auto existing = audioTracks();
     for (const auto track : tracks)
+    {
         if (busGroupOf(existing, track) != noGroup)
             return juce::Result::fail("A group cannot go inside another group.");
+        if (isReturnTrack(track))
+            return juce::Result::fail("A return track stays with the returns, outside any group.");
+    }
 
     // One past the highest id the document has used, so an id freed by an
     // undone grouping is never handed out twice.
@@ -230,6 +234,8 @@ juce::Result Session::addTracksToGroup(std::vector<int> tracks, int groupId)
             continue;
         if (isGroupBusTrack(track))
             return juce::Result::fail("A group cannot go inside another group.");
+        if (isReturnTrack(track))
+            return juce::Result::fail("A return track stays with the returns, outside any group.");
         members.push_back(track);
         ++joining;
     }
@@ -360,6 +366,20 @@ juce::Result Session::setTrackGroupCollapsed(int groupId, bool collapsed)
 void Session::reconcileTrackGroups()
 {
     auto* undoManager = &edit->getUndoManager();
+    // The returns keep the foot of the stack. Every path that makes or moves
+    // a track already leaves them there; this holds the line for one that
+    // does not, by carrying any return found above another track down.
+    {
+        const auto stack = audioTracks();
+        std::vector<te::EditItemID> playing, returns;
+        for (auto* track : stack)
+            (track->state.hasProperty(trackReturnBusID) ? returns : playing).push_back(track->itemID);
+        if (!returns.empty() && firstReturnTrack() != static_cast<int>(playing.size()))
+        {
+            playing.insert(playing.end(), returns.begin(), returns.end());
+            arrangeTrackOrder(playing);
+        }
+    }
     const auto tracks = audioTracks();
     // A track carried into the middle of a group joins it, the way a clip
     // dropped on a lane belongs to that lane. Directly under the bus is the
@@ -368,7 +388,8 @@ void Session::reconcileTrackGroups()
     // group inside a group is a routing tree this deliberately does not build.
     for (int track = 1; track + 1 < tracks.size(); ++track)
     {
-        if (memberGroupOf(tracks, track) != noGroup || busGroupOf(tracks, track) != noGroup)
+        if (memberGroupOf(tracks, track) != noGroup || busGroupOf(tracks, track) != noGroup
+            || tracks[track]->state.hasProperty(trackReturnBusID))
             continue;
         const auto above = busGroupOf(tracks, track - 1) != noGroup ? busGroupOf(tracks, track - 1)
                                                                     : memberGroupOf(tracks, track - 1);

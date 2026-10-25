@@ -31,7 +31,7 @@ void runPatternDeviceRackTest()
         return false;
     };
     require(hasUtility(0), "Session creates the Utility device on the starter track");
-    require(session.trackCount() == 4 && !session.trackHasInstrument(0),
+    require(session.firstReturnTrack() == 4 && !session.trackHasInstrument(0),
             "A new document opens with four empty tracks and nothing else");
     require(session.trackType(0) == Session::TrackType::midi
             && session.trackType(1) == Session::TrackType::audio
@@ -44,7 +44,8 @@ void runPatternDeviceRackTest()
     require(session.addInstrument(Session::Instrument::FourOsc, 0).wasOk(),
             "The starter track takes an instrument");
     {
-        const auto added = session.trackCount();
+        // At the foot of the stack, which is above the returns.
+        const auto added = session.firstReturnTrack();
         require(session.addAudioTrack().wasOk(), "A track can be added to the starter stack");
         auto* addedTrack = te::getAudioTracks(*session.edit)[added];
         auto carriesUtility = false;

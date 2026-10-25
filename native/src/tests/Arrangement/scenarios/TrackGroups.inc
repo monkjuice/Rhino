@@ -4,7 +4,7 @@
         // the automation reach it with no code of their own - and it is what
         // these first assertions are really about.
         const auto tracksBeforeGroups = session.trackCount();
-        while (session.trackCount() < 4)
+        while (session.firstReturnTrack() < 4)
             require(session.addAudioTrack().wasOk(), "Groups need four tracks to work with");
         view.setSize(1000, 620);
         view.sync();
@@ -246,7 +246,7 @@
         }
 
         while (session.trackCount() > tracksBeforeGroups)
-            require(session.removeAudioTrack(session.trackCount() - 1).wasOk(),
+            require(session.removeAudioTrack(session.firstReturnTrack() - 1).wasOk(),
                     "The tracks this scenario added can be removed again");
         view.sync();
         view.resized();

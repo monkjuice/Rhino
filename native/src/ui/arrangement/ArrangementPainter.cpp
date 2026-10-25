@@ -337,7 +337,12 @@ void Arrangement::paintTrackCards(juce::Graphics& g)
             // Elided rather than shrunk to fit: a scaled-down line lands on a
             // fractional em again, which is the blur this is avoiding.
             const auto nameArea = trackNameBounds(track);
-            drawSnappedText(g, juce::String(track + 1).paddedLeft('0', 2) + "  " + factsFor(track).name,
+            // A return is called by its letter, the way its knobs on the
+            // other cards are; every other track by its place in the stack.
+            const auto& facts = factsFor(track);
+            drawSnappedText(g, (facts.returnLetter.isNotEmpty() ? facts.returnLetter
+                                                                 : juce::String(track + 1).paddedLeft('0', 2))
+                                   + "  " + facts.name,
                             nameArea, juce::Justification::centredLeft, true);
         }
         g.setFont(uiFont(10.0f));

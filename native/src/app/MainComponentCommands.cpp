@@ -36,6 +36,12 @@ bool MainComponent::keyPressed(const juce::KeyPress& key)
     // arrangement's + button is where the kind is chosen; the shortcut
     // repeats that choice instead of asking again, and starts on MIDI. The
     // track lands under the arrangement's selected card either way.
+    // Ctrl+Alt+T adds a return instead, as it does in Live.
+    if (key.getModifiers().isCommandDown() && key.getModifiers().isAltDown() && key.getKeyCode() == 'T')
+    {
+        arrangement.insertReturnTrack();
+        return true;
+    }
     if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'T')
     {
         arrangement.insertTrack(Session::lastAddedTrackType());

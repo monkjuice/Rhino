@@ -20,6 +20,12 @@ bool namesMainRow(const Session& session, const std::vector<int>& cards)
 {
     return std::any_of(cards.begin(), cards.end(), [&session](int track) { return session.isMasterTrack(track); });
 }
+
+bool onlyReturns(const Session& session, const std::vector<int>& cards)
+{
+    return !cards.empty()
+        && std::all_of(cards.begin(), cards.end(), [&session](int track) { return session.isReturnTrack(track); });
+}
 }
 
 // The cards a paste or a duplicate made, top to bottom. The last becomes the
@@ -40,7 +46,9 @@ void Arrangement::copyCards(std::vector<int> cards)
     auto copied = session.copyTracks(cards);
     if (copied.isEmpty())
     {
-        if (status) status(namesMainRow(session, cards) ? "The main row cannot be copied" : "Select a track to copy");
+        if (status) status(namesMainRow(session, cards)   ? "The main row cannot be copied"
+                           : onlyReturns(session, cards) ? "A return track is not copied: add another from the + menu"
+                                                         : "Select a track to copy");
         return;
     }
     trackClipboard = std::move(copied);
@@ -54,9 +62,14 @@ void Arrangement::cutCards(std::vector<int> cards)
     auto copied = session.copyTracks(cards);
     if (copied.isEmpty())
     {
-        if (status) status(namesMainRow(session, cards) ? "The main row cannot be cut" : "Select a track to cut");
+        if (status) status(namesMainRow(session, cards)   ? "The main row cannot be cut"
+                           : onlyReturns(session, cards) ? "A return track is not cut: delete it instead"
+                                                         : "Select a track to cut");
         return;
     }
+    // What the copy left out stays: a cut never deletes a return it could
+    // not put on the clipboard.
+    std::erase_if(cards, [this](int track) { return session.isReturnTrack(track); });
     const auto first = *std::min_element(cards.begin(), cards.end());
     // A cut the model refuses - the last track - copies nothing either, so
     // the clipboard keeps what it held.

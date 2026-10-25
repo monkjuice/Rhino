@@ -61,15 +61,18 @@
             auto& stack = *document;
             te::EditItemID made;
             require(stack.createClip(0, 0.0, &made).wasOk(), "A MIDI clip to carry");
-            const auto below = stack.trackCount();
+            // Below the last lane is the returns' row, and the lane is made
+            // above them.
+            const auto below = stack.firstReturnTrack();
+            const auto stackBefore = stack.trackCount();
             require(stack.editClip(made, {0.0, 2.0, 0.0}, ClipGesture::move, below).wasOk()
-                        && stack.trackCount() == below + 1,
+                        && stack.trackCount() == stackBefore + 1 && stack.firstReturnTrack() == below + 1,
                     "Dragging a clip below the last lane makes a lane for it");
             require(stack.setTrackVolumeDb(below, -5.0f).wasOk(), "and that lane has a fader at once");
             const auto copied = stack.copyClipRegion(0.0, 2.0, below, below);
             std::vector<te::EditItemID> pasted;
             require(stack.pasteClipRegion(copied, 0.0, below + 1, pasted).wasOk()
-                        && stack.trackCount() == below + 2,
+                        && stack.trackCount() == stackBefore + 2 && stack.firstReturnTrack() == below + 2,
                     "A paste below the last lane makes a lane for it");
             require(stack.setTrackVolumeDb(below + 1, -5.0f).wasOk(), "and that lane has a fader at once too");
             stack.releaseAudioDevice();

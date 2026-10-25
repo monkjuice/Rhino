@@ -150,7 +150,7 @@
                 const auto instrument = slotOfKind(song, lane, DeviceKind::Instrument);
                 require(instrument > 0, "The instrument stands behind the way in");
                 require(song.addTrack(Session::TrackType::midi).wasOk(), "A track added later");
-                auto& added = trackOf(song, song.trackCount() - 1);
+                auto& added = trackOf(song, song.firstReturnTrack() - 1);
                 require(placeOf(added, DjTrackInjectorDevice::xmlTypeName) == 0 && countOf(added, DjTrackTapDevice::xmlTypeName) == 1,
                         "carries them from the start too");
 

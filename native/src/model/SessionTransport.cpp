@@ -52,7 +52,7 @@ juce::Result Session::importAudio(const juce::File& file)
     // in the same undo step, so one Ctrl+Z takes both the clip and its lane.
     const auto tracks = audioTracks();
     for (int track = 0; track < tracks.size(); ++track)
-        if (trackType(track) == TrackType::audio && !isGroupBusTrack(track)
+        if (trackType(track) == TrackType::audio && !carriesOtherTracks(track)
             && tracks[track]->getClips().isEmpty())
             return importAudioAt(file, track, 0.0);
     auto& undoManager = edit->getUndoManager();
@@ -62,13 +62,15 @@ juce::Result Session::importAudio(const juce::File& file)
     ensureSceneSlots();
     ensureTrackMixers();
     reconcileTrackGroups();
-    if (const auto imported = importAudioInEdit(file, trackCount() - 1, 0.0); imported.failed())
+    // At the foot of the stack, which is above the returns.
+    const auto lane = firstReturnTrack() - 1;
+    if (const auto imported = importAudioInEdit(file, lane, 0.0); imported.failed())
     {
         undoManager.undoCurrentTransactionOnly();
         return imported;
     }
     undoManager.beginNewTransaction();
-    markClipsModified({trackCount() - 1});
+    markClipsModified({lane});
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
@@ -115,8 +117,8 @@ juce::Result Session::importAudioInEdit(const juce::File& file, int trackIndex, 
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     if (!std::isfinite(startSeconds) || startSeconds < 0.0)
         return juce::Result::fail("Invalid audio drop position.");
-    if (isGroupBusTrack(trackIndex))
-        return juce::Result::fail("A group track carries its members' audio, so it takes no clips.");
+    if (carriesOtherTracks(trackIndex))
+        return juce::Result::fail(noClipsReason(trackIndex));
     // Audio belongs on an audio track. Dropping a sample onto a MIDI track is
     // the one drop Rhino refuses outright.
     if (trackType(trackIndex) == TrackType::midi)

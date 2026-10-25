@@ -53,8 +53,10 @@
             // The clipboard holds values, so the original going takes nothing
             // from it.
             require(doc.removeTracks({0}).wasOk() && doc.trackCount() == starter - 1, "The original can be deleted");
-            require(doc.pasteTracks(copied, -1, &pasted).wasOk() && pasted == std::vector<int> {starter - 1}
-                        && doc.trackName(starter - 1) == "Lead" && doc.trackAutomations(starter - 1).size() == 1,
+            // The foot of the stack is above the returns.
+            const auto foot = doc.firstReturnTrack();
+            require(doc.pasteTracks(copied, -1, &pasted).wasOk() && pasted == std::vector<int> {foot}
+                        && doc.trackName(foot) == "Lead" && doc.trackAutomations(foot).size() == 1,
                     "and the copy still pastes, at the foot of the stack when no card is named");
             require(doc.removeTracks({doc.masterTrackIndex()}).failed(), "The main row cannot be deleted");
             std::vector<int> everything;
@@ -154,10 +156,10 @@
             cards.keyPressed(command('X'));
             require(doc.trackCount() == starter + 1 && cards.trackClipboard.tracks.size() == 1,
                     "Ctrl+X takes the card off the stack and onto the clipboard");
-            focusCard(doc.trackCount() - 1);
+            focusCard(doc.firstReturnTrack() - 1);
             cards.keyPressed(command('V'));
-            require(doc.trackCount() == starter + 2 && doc.trackName(doc.trackCount() - 1) == cutName
-                        && !te::getAudioTracks(*doc.edit).getLast()->getClips().isEmpty(),
+            require(doc.trackCount() == starter + 2 && doc.trackName(doc.firstReturnTrack() - 1) == cutName
+                        && !te::getAudioTracks(*doc.edit)[doc.firstReturnTrack() - 1]->getClips().isEmpty(),
                     "and pasting puts it down again, clips and all");
 
             focusCard(0);

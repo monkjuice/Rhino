@@ -85,7 +85,7 @@
             {
                 // The last track: an audio lane outside the group, playing
                 // what it is given straight through.
-                const auto lane = song.trackCount() - 1;
+                const auto lane = song.firstReturnTrack() - 1;
                 require(!song.isGroupBusTrack(lane) && song.trackType(lane) == Session::TrackType::audio,
                         "An audio lane to play a tone through");
                 for (auto* plugin : trackAt(lane).pluginList)
@@ -121,8 +121,10 @@
 
             scenario("track meters: every card and the main row open with a meter, ahead of their controls");
             {
+                // Tall enough for every card, the two returns at the foot
+                // included.
                 auto panel = std::make_unique<Arrangement>(song);
-                panel->setSize(1200, 760);
+                panel->setSize(1200, 1000);
                 require(static_cast<int>(panel->meters.size()) == song.trackCount(), "One meter per card");
                 for (int track = 0; track < song.trackCount(); ++track)
                 {
@@ -175,7 +177,7 @@
                     path.isNotEmpty())
                 {
                     // One row folded, so both ways the arrow points are in it.
-                    require(song.setTrackFolded(song.trackCount() - 2, true).wasOk(), "A row folds for the picture");
+                    require(song.setTrackFolded(song.firstReturnTrack() - 2, true).wasOk(), "A row folds for the picture");
                     const float levels[] {-30.0f, -9.0f, -2.0f, 2.0f, -48.0f, -14.0f};
                     for (size_t track = 0; track < panel->meters.size(); ++track)
                     {

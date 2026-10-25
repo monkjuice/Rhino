@@ -26,7 +26,7 @@ te::ClipSlot* Session::clipSlotAt(int track, int scene) const
 {
     const auto tracks = audioTracks();
     if (!juce::isPositiveAndBelow(track, tracks.size())) return nullptr;
-    if (isGroupBusTrack(track)) return nullptr;
+    if (carriesOtherTracks(track)) return nullptr;
     const auto slots = tracks[track]->getClipSlotList().getClipSlots();
     if (!juce::isPositiveAndBelow(scene, slots.size())) return nullptr;
     return slots[scene];
@@ -86,7 +86,7 @@ juce::Result Session::deleteSlotClip(int track, int scene)
 
 juce::Result Session::insertPatternPresetInSlot(PatternPreset preset, int track, int scene)
 {
-    if (!juce::isPositiveAndBelow(track, trackCount()) || isGroupBusTrack(track) || scene < 0)
+    if (!juce::isPositiveAndBelow(track, trackCount()) || carriesOtherTracks(track) || scene < 0)
         return juce::Result::fail("Drop clips on a cell.");
     const auto data = presetPattern(preset);
     edit->getUndoManager().beginNewTransaction("Add " + data.name + " to slot");
@@ -131,8 +131,8 @@ juce::Result Session::insertPatternPresetInSlot(PatternPreset preset, int track,
 // slot cannot become the way round the rule that a track's kind is fixed.
 juce::Result Session::clipLaneRefusal(int track, bool midi) const
 {
-    if (isGroupBusTrack(track))
-        return juce::Result::fail("A group track carries its members' audio, so it takes no clips.");
+    if (carriesOtherTracks(track))
+        return juce::Result::fail(noClipsReason(track));
     if (trackType(track) != (midi ? TrackType::midi : TrackType::audio))
         return juce::Result::fail(midi ? "That is an audio track. Put MIDI clips on a MIDI track."
                                        : "That is a MIDI track. Put audio clips on an audio track.");
@@ -361,7 +361,7 @@ juce::Result Session::createSlotClip(int track, int scene)
     if (!juce::isPositiveAndBelow(track, tracks.size()) || scene < 0)
         return juce::Result::fail("That clip slot does not exist.");
     if (const auto refused = clipLaneRefusal(track, true); refused.failed())
-        return juce::Result::fail(!isGroupBusTrack(track) && trackType(track) == TrackType::audio
+        return juce::Result::fail(!carriesOtherTracks(track) && trackType(track) == TrackType::audio
                                       ? "An audio track's cell takes a sample or an audio clip: drop one on it."
                                       : refused.getErrorMessage());
     edit->getUndoManager().beginNewTransaction("New clip in slot");

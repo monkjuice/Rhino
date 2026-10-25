@@ -55,6 +55,9 @@ extern const juce::Identifier trackAutomationFoldedID;
 extern const juce::Identifier trackGroupBusID;
 extern const juce::Identifier trackGroupMemberID;
 extern const juce::Identifier trackGroupCollapsedID;
+// A return track, and the engine's aux bus it returns: the bus every track's
+// send to it names. Absent on every other track. SessionReturns.cpp.
+extern const juce::Identifier trackReturnBusID;
 // Only the migration reads these: they describe the group table written before
 // a group was a bus track of its own.
 extern const juce::Identifier legacyTrackGroupID;
@@ -105,6 +108,12 @@ struct RhinoEngineBehaviour final : te::EngineBehaviour
     // this the engine skipped the whole chain of a muted track. The price is
     // the CPU a muted track's devices take.
     bool shouldProcessMutedTracks() override { return true; }
+    // Whether a send goes on feeding its return while its track is silenced.
+    // A muted track sends nothing, and neither does one another's solo leaves
+    // out - unless the solo is on a return, which is soloed to hear what the
+    // tracks send it. Read as the graph is built, so the session rebuilds it
+    // when a return's solo changes. SessionReturns.cpp.
+    bool shouldProcessAuxSendWhenTrackIsMuted(te::AuxSendPlugin&) override;
     std::function<juce::File()> recordingDirectory;
 };
 
@@ -217,6 +226,11 @@ te::Plugin* findPlugin(te::AudioTrack& track, const juce::String& type);
 // after it, so a MIDI effect or an instrument never lands ahead of the notes
 // it is meant to play.
 int djInputEnd(const te::AudioTrack&);
+// Past every hidden plugin that heads a chain: the DJ input, and on a return
+// track the aux return after it, which is where the sends come in. Every path
+// that puts a device at the front of a chain, or looks for where the track's
+// own devices end, starts here.
+int chainHeadEnd(const te::AudioTrack&);
 // Gives a track the booth's hidden input at the head of its chain and its
 // hidden output where its own devices end and its channel strip begins, when
 // it lacks either.

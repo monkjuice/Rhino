@@ -83,6 +83,9 @@ inline const juce::Colour displayTextFaint {0xff76856f};
 // on the main row alike.
 inline const juce::Colour volume           {0xff45d0d4};
 inline const juce::Colour pan              {0xffd4564e};
+// A send to a return, the third quantity a card sets, in a hue neither of the
+// other two nor a meter wears.
+inline const juce::Colour send             {0xffa98cf2};
 // A track meter runs green while a signal has headroom, turns yellow as it
 // nears full scale and red at it, the way every mixer's does. See LevelMeter.h.
 inline const juce::Colour meterSafe        {0xff3ddc84};

@@ -121,7 +121,7 @@ Session::RecordInput Session::trackRecordInput(int trackIndex) const
 {
     if (audioTrack(trackIndex) == nullptr)
         return RecordInput::none;
-    if (isGroupBusTrack(trackIndex))
+    if (carriesOtherTracks(trackIndex))
         return RecordInput::none;
     return trackType(trackIndex) == TrackType::midi ? RecordInput::midi : RecordInput::audio;
 }

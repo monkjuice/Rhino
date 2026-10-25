@@ -36,7 +36,7 @@
             const auto endOf = [](te::Clip* clip) { return clip != nullptr ? clip->getPosition().time.getEnd().inSeconds() : -1.0; };
             const auto offsetOf = [](te::Clip* clip) { return clip != nullptr ? clip->getPosition().offset.inSeconds() : -1.0; };
             const auto lowerRow = [&view](int track) { return view.lane(track).getBottom() - 8.0f; };
-            require(session.trackCount() == 4 && session.trackType(0) == Session::TrackType::midi
+            require(session.firstReturnTrack() == 4 && session.trackType(0) == Session::TrackType::midi
                         && session.trackType(1) == Session::TrackType::audio
                         && session.trackType(2) == Session::TrackType::midi
                         && session.trackType(3) == Session::TrackType::audio,
@@ -290,13 +290,15 @@
                 te::EditItemID midi;
                 require(doc.createClip(0, 0.0, &midi).wasOk() && doc.importAudioAt(source.getFile(), 1, 0.0).wasOk(),
                         "A MIDI clip and an audio clip to carry");
-                const auto lanes = doc.trackCount();
+                const auto stack = doc.trackCount();
+                const auto lanes = doc.firstReturnTrack();
                 // Past the last lane: the lanes the rows need are made, of the
-                // kinds they want, in the same undo step as the move.
+                // kinds they want, in the same undo step as the move, above
+                // the returns, which are past the last lane too.
                 std::vector<te::EditItemID> moved;
                 require(doc.moveClipRegion(0.0, 1.0, 0, 1, 10.0, lanes, &moved).wasOk(),
                         "A span carried past the last lane moves");
-                require(doc.trackCount() == lanes + 2 && doc.trackType(lanes) == Session::TrackType::midi
+                require(doc.trackCount() == stack + 2 && doc.trackType(lanes) == Session::TrackType::midi
                             && doc.trackType(lanes + 1) == Session::TrackType::audio,
                         "and makes the lanes its rows need, of the kinds they want");
                 require(moved.size() == 2 && sameSpans(visibleClips(lanes), {{10.0, 11.0}})
@@ -305,7 +307,7 @@
                 require(sameSpans(visibleClips(0), {{1.0, 2.0}}) && visibleClips(1).empty(),
                         "and what was outside the span stays behind");
                 doc.undo();
-                require(doc.trackCount() == lanes && sameSpans(visibleClips(0), {{0.0, 2.0}})
+                require(doc.trackCount() == stack && sameSpans(visibleClips(0), {{0.0, 2.0}})
                             && sameSpans(visibleClips(1), {{0.0, 1.0}}),
                         "One undo takes the lanes and the move back together");
                 // A row that may not land refuses the whole move before anything is cut.
@@ -329,7 +331,7 @@
                             && sameSpans(visibleClips(2), {{11.0, 12.0}}),
                         "An empty row inside a carried span empties the lane it lands on, as a paste does");
                 // A span with nothing in it moves nothing and succeeds.
-                require(doc.moveClipRegion(20.0, 21.0, 0, 3, 30.0, 0).wasOk() && doc.trackCount() == lanes,
+                require(doc.moveClipRegion(20.0, 21.0, 0, 3, 30.0, 0).wasOk() && doc.trackCount() == stack,
                         "A span holding nothing moves nothing");
                 doc.releaseAudioDevice();
             }
@@ -354,5 +356,5 @@
             require(clipsOn(0) == startingClips[0] && clipsOn(1) == startingClips[1]
                         && clipsOn(2) == startingClips[2] && clipsOn(3) == startingClips[3],
                     "The move scenario leaves the arrangement as it found it");
-            require(session.trackCount() == 4, "The move scenario creates no tracks");
+            require(session.firstReturnTrack() == 4, "The move scenario creates no tracks");
         }

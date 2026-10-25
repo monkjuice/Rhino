@@ -41,7 +41,7 @@
 
             Session::BounceResult made;
             require(bounce.bounceClipsToNewTracks({firstID, secondID}, &made).wasOk(), "Two clips bounce");
-            require(bounce.trackCount() == 5 && made.tracks.size() == 1 && made.tracks.front() == lane + 1,
+            require(bounce.firstReturnTrack() == 5 && made.tracks.size() == 1 && made.tracks.front() == lane + 1,
                     "to one new track, directly under the lane they came from");
             const auto bounced = made.tracks.front();
             require(bounce.trackName(bounced) == bounce.trackName(lane) + " (Bounce)",
@@ -71,7 +71,7 @@
             require(bounce.bounceClipsToNewTracks({firstID}).failed(),
                     "A muted clip is refused, since it would bounce to silence");
             bounce.undo();
-            require(bounce.trackCount() == 4, "Undo takes the new track away");
+            require(bounce.firstReturnTrack() == 4, "Undo takes the new track away");
             require(!bounce.findClip(firstID)->isMuted() && !bounce.findClip(secondID)->isMuted(),
                     "and plays the sources again");
 
@@ -86,7 +86,7 @@
             const auto refused = bounce.bounceClipsToNewTracks({empty});
             require(refused.failed() && refused.getErrorMessage().contains("instrument"),
                     "is refused: nothing would turn its notes into sound");
-            require(bounce.trackCount() == 4, "and nothing is made");
+            require(bounce.firstReturnTrack() == 4, "and nothing is made");
             bounce.deleteClip(empty);
 
             // A preset brings the instrument and the notes it plays.
@@ -135,7 +135,7 @@
             const auto memberLevel = bounceRms(aloneMix.sourceFile, 0.6, 0.95);
             require(memberLevel > 0.3f, "and is heard before the member's fader and the bus");
             grouped.undo();
-            require(grouped.trackCount() == 5 && !grouped.trackMixer(member).muted, "Undo puts the member back");
+            require(grouped.firstReturnTrack() == 5 && !grouped.trackMixer(member).muted, "Undo puts the member back");
 
             require(grouped.bounceTracksToNewTracks({group.busTrack, member}, &made).wasOk(),
                     "The bus bounces the group, the member chosen with it going in once");
@@ -167,7 +167,7 @@
             keyedView.setSelection({clipID}, clipID);
             const auto ctrlB = juce::KeyPress('B', juce::ModifierKeys(juce::ModifierKeys::commandModifier), 0);
             keyedView.keyPressed(ctrlB);
-            require(keyed.trackCount() == 5 && keyed.findClip(clipID)->isMuted(), "Ctrl+B bounces the selected clip");
+            require(keyed.firstReturnTrack() == 5 && keyed.findClip(clipID)->isMuted(), "Ctrl+B bounces the selected clip");
             const auto bouncedID = keyedView.selectedClipID();
             require(bouncedID != clipID && keyed.audioClipMix(bouncedID).valid,
                     "and the selection follows onto the bounced clip");
@@ -193,7 +193,7 @@
             keyedView.selectTrack(2);
             keyedView.focus = Arrangement::Focus::track;
             keyedView.keyPressed(ctrlB);
-            require(keyed.trackCount() == 6 && keyed.trackMixer(2).muted && keyedView.selectedTrack == 3,
+            require(keyed.firstReturnTrack() == 6 && keyed.trackMixer(2).muted && keyedView.selectedTrack == 3,
                     "With a card selected it bounces the track, and the new card is selected");
         }
 
@@ -222,13 +222,13 @@
                 return found;
             };
             const auto refusedEmpty = spanned.bounceRegionToNewTracks(0.25, 0.75, 0, 0);
-            require(refusedEmpty.failed() && spanned.trackCount() == 4,
+            require(refusedEmpty.failed() && spanned.firstReturnTrack() == 4,
                     "A selection over a lane with nothing in it is refused, and nothing is made");
 
             Session::BounceResult made;
             require(spanned.bounceRegionToNewTracks(0.25, 0.75, 0, lane, &made).wasOk(),
                     "A selection across part of a clip bounces");
-            require(spanned.trackCount() == 5 && made.tracks == std::vector<int>({lane + 1}),
+            require(spanned.firstReturnTrack() == 5 && made.tracks == std::vector<int>({lane + 1}),
                     "to one new track under the lane that had a clip in it, the empty lane passed over");
             require(made.clips.size() == 1, "as one clip");
             const auto span = spanned.audioClipMix(made.clips.front());
@@ -247,7 +247,7 @@
                     "and only the part inside it is muted");
             spanned.undo();
             const auto whole = laneClips();
-            require(spanned.trackCount() == 4 && whole.size() == 1 && close(whole[0].end, 1.0)
+            require(spanned.firstReturnTrack() == 4 && whole.size() == 1 && close(whole[0].end, 1.0)
                         && !whole[0].muted && spanned.findClip(sourceID) != nullptr,
                     "One undo takes the bounce away and puts the clip back whole and playing");
 
@@ -261,7 +261,7 @@
             spanView.focus = Arrangement::Focus::region;
             const auto ctrlB = juce::KeyPress('B', juce::ModifierKeys(juce::ModifierKeys::commandModifier), 0);
             spanView.keyPressed(ctrlB);
-            require(spanned.trackCount() == 5 && laneClips().size() == 3,
+            require(spanned.firstReturnTrack() == 5 && laneClips().size() == 3,
                     "Ctrl+B on a dragged span bounces the span, not the whole clip");
             const auto bouncedSpan = spanned.audioClipMix(spanView.selectedClipID());
             require(bouncedSpan.valid && close(bouncedSpan.startSeconds, 0.25) && close(bouncedSpan.endSeconds, 0.75),
@@ -269,7 +269,7 @@
             spanView.setSelection({});
             spanView.setTimeSelection(0.25, 0.75, lane, lane);
             spanView.keyPressed(ctrlB);
-            require(spanned.trackCount() == 5,
+            require(spanned.firstReturnTrack() == 5,
                     "A span whose clips are already muted has nothing playing in it to bounce");
         }
         // In steps, as the shell's loading screen runs it: a slice renders and
@@ -294,11 +294,11 @@
                         && midway.fraction >= 0.0f && midway.fraction <= 1.0f,
                     "and says what it is on and how far it has got");
             stepped.undo();
-            require(stepped.isBouncing() && stepped.trackCount() == 4, "Undo waits rather than pulling the track away");
+            require(stepped.isBouncing() && stepped.firstReturnTrack() == 4, "Undo waits rather than pulling the track away");
             stepped.cancelBounce();
             require(!stepped.isBouncing() && stepped.bounceOutcome().getErrorMessage().contains("cancelled"),
                     "Cancelling stops it");
-            require(stepped.trackCount() == 4 && !stepped.trackMixer(lane).muted && bounces() == before,
+            require(stepped.firstReturnTrack() == 4 && !stepped.trackMixer(lane).muted && bounces() == before,
                     "with nothing changed and nothing left on disk");
             require(te::getAudioTracks(*stepped.edit)[lane]->getVolumePlugin()->isEnabled(),
                     "and the fader it switched off for the render back on");
@@ -330,13 +330,13 @@
                 screen.timerCallback();
             }
             require(finished == 1 && !screen.isVisible(), "and goes once it is done, handing it back once");
-            require(stepped.bounceOutcome().wasOk() && stepped.trackCount() == 5 && stepped.trackMixer(lane).muted,
+            require(stepped.bounceOutcome().wasOk() && stepped.firstReturnTrack() == 5 && stepped.trackMixer(lane).muted,
                     "What the screen drove lands like any bounce");
 
             require(stepped.startBounceTracks({lane + 1}).wasOk(), "The bounce can itself be bounced");
             screen.run(task());
             screen.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey));
-            require(!screen.isRunning() && finished == 2 && !stepped.isBouncing() && stepped.trackCount() == 5,
+            require(!screen.isRunning() && finished == 2 && !stepped.isBouncing() && stepped.firstReturnTrack() == 5,
                     "Esc on the screen cancels the bounce, and the screen still hands it back");
         }
         bounceScratch.deleteRecursively();

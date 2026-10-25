@@ -161,7 +161,7 @@ Layout readLayout(Session& session)
 {
     Layout layout;
     for (int track = 0; track < session.trackCount(); ++track)
-        if (!session.isGroupBusTrack(track))
+        if (!session.isGroupBusTrack(track) && !session.isReturnTrack(track))
             (session.trackType(track) == Session::TrackType::midi ? layout.midi : layout.audio).push_back(track);
     return layout;
 }
@@ -171,7 +171,8 @@ Layout addTracks(Session& session, const Shape& shape)
     while (static_cast<int>(readLayout(session).midi.size()) < shape.midiTracks())
         if (session.addTrack(Session::TrackType::midi).failed())
             throw std::runtime_error("Could not add a MIDI track");
-    while (session.trackCount() < shape.tracks)
+    // Tracks that play: the starter's two returns are on top of the shape.
+    while (session.firstReturnTrack() < shape.tracks)
         if (session.addTrack(Session::TrackType::audio).failed())
             throw std::runtime_error("Could not add an audio track");
     return readLayout(session);

@@ -16,10 +16,10 @@
 
             scenario("vocoder: the carrier is another track's audio");
             require(session.addTrack(Session::TrackType::midi).wasOk(), "A track for the synth");
-            const auto carrierTrack = session.trackCount() - 1;
+            const auto carrierTrack = session.firstReturnTrack() - 1;
             require(session.addDevice("FourOsc", carrierTrack).wasOk(), "which runs one");
             require(session.addAudioTrack().wasOk(), "and an audio track for the voice");
-            const auto voiceTrack = session.trackCount() - 1;
+            const auto voiceTrack = session.firstReturnTrack() - 1;
             require(session.addDevice("RhinoVocoder", voiceTrack).wasOk(), "which takes the vocoder");
 
             auto vocoderSlot = -1;
@@ -86,7 +86,7 @@
             require(session.setDeviceSidechainSource(voiceTrack, reopenedSlot, carrierTrack).wasOk(),
                     "The synth track is the carrier again");
             require(session.addTrack(Session::TrackType::midi).wasOk(), "A spare track, to delete a different one");
-            const auto spareTrack = session.trackCount() - 1;
+            const auto spareTrack = session.firstReturnTrack() - 1;
             require(session.removeAudioTrack(spareTrack).wasOk(), "Removing a track that nothing points at");
             require(session.deviceSidechainSource(voiceTrack, reopenedSlot) == carrierTrack,
                     "leaves the routing alone");

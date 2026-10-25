@@ -232,7 +232,7 @@
                                                                   {4.0, laneParameters.front().maximum}}).wasOk(),
                     "Redraw a curve for the delete-routing checks");
             require(session.addAudioTrack().wasOk(), "The delete-routing checks need a track of their own");
-            const auto spareTrack = session.trackCount() - 1;
+            const auto spareTrack = session.firstReturnTrack() - 1;
             const auto tracksBefore = session.trackCount();
             view.sync();
             if (view.clips.empty())
@@ -289,7 +289,7 @@
             require(session.addAudioTrack().wasOk() && session.addAudioTrack().wasOk(),
                     "Add two tracks to renumber between");
             view.sync();
-            const auto lowerTrack = session.trackCount() - 1;
+            const auto lowerTrack = session.firstReturnTrack() - 1;
             const auto upperTrack = lowerTrack - 1;
             // A fresh track's one automatable device is its Utility strip,
             // found by what it is: the DJ booth's hidden ends stand ahead of

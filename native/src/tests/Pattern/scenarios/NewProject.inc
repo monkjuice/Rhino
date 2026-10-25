@@ -8,7 +8,7 @@
         session.newProject();
         require(session.projectFile == juce::File{}, "A new project is untitled");
         require(!session.hasUnsavedChanges(), "A new project is clean");
-        require(session.trackCount() == 4, "A new project has four tracks");
+        require(session.firstReturnTrack() == 4, "A new project has four tracks");
         // A track is named for what it is and nothing else: the card prints the
         // row's one-based position beside the name itself, so a number in the
         // name was the same figure twice on every card.

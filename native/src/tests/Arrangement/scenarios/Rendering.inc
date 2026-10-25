@@ -140,6 +140,33 @@
         require(escapedMidiPixels == 0, "Short MIDI clips must clip note bars to the visible clip bounds");
         session.undo();
         view.sync();
+        // A clip that starts left of the view is cut at the lanes' left edge.
+        // Clipped only at the panel's, it was filled across the track cards
+        // whenever the view scrolled past a clip's start. The cards do not
+        // depend on the view, so with the view inside the clip they must
+        // paint exactly as they do with the clip out of sight.
+        {
+            const auto shown = session.pattern().getPosition().time;
+            const auto previousViewStart = view.viewStart;
+            const auto paintPanel = [&view]
+            {
+                juce::Image picture(juce::Image::RGB, view.getWidth(), view.getHeight(), true);
+                juce::Graphics g(picture);
+                view.paint(g);
+                return picture;
+            };
+            view.viewStart = (shown.getStart() + shown.getLength() * 0.5).inSeconds();
+            const auto insideClip = paintPanel();
+            view.viewStart = shown.getEnd().inSeconds() + view.viewSpan;
+            const auto pastClip = paintPanel();
+            view.viewStart = previousViewStart;
+            const auto row = view.lane(0);
+            int coveredCardPixels = 0;
+            for (auto y = static_cast<int>(row.getY()); y < static_cast<int>(row.getBottom()); ++y)
+                for (int x = 0; x < static_cast<int>(view.headerWidth); ++x)
+                    if (insideClip.getPixelAt(x, y) != pastClip.getPixelAt(x, y)) ++coveredCardPixels;
+            require(coveredCardPixels == 0, "A clip scrolled past its start must not paint over the track cards");
+        }
         view.setSelection({patternID}, patternID);
         view.duplicateSelected();
         require(te::getAudioTracks(*session.edit)[0]->getClips().size() == 2, "Duplicate creates a second MIDI pattern clip");

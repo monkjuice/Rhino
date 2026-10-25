@@ -34,10 +34,13 @@ void Arrangement::paintClipPiece(juce::Graphics& g, const ClipView& clip, const 
     const auto position = piece.position;
     const auto box = boundsOf(position, paintTrack);
     const auto visible = box.getIntersection(lane(paintTrack))
-        .getIntersection({0.0f, lanesTop, static_cast<float>(getWidth() - 14), laneContentHeight()});
+        .getIntersection({headerWidth, lanesTop, static_cast<float>(getWidth()) - 14.0f - headerWidth, laneContentHeight()});
     if (visible.isEmpty() || !visible.intersects(dirty)) return;
     juce::Graphics::ScopedSaveState scope(g);
-    g.reduceClipRegion(juce::Rectangle<int>(0, static_cast<int>(lanesTop), getWidth() - 14,
+    // Clipped to the lanes, not the panel: a clip that starts left of the view
+    // is filled from its true start, which would otherwise run across the cards.
+    g.reduceClipRegion(juce::Rectangle<int>(static_cast<int>(headerWidth), static_cast<int>(lanesTop),
+                                            std::max(1, getWidth() - static_cast<int>(headerWidth) - 14),
                                             std::max(1, static_cast<int>(laneContentHeight()))));
     // A clip wears the colour of the lane it is drawn on, so the two read as
     // one band; a clip that has been coloured by hand keeps its own. Darkened,

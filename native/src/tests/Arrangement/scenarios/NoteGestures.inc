@@ -7,9 +7,9 @@
             // See tests/README.md.
             auto owned = std::make_unique<StepGrid>(session);
             auto& grid = *owned;
-            // The open clip is a drum clip on the bank from 48, and its rows
-            // keep their height. The opening height is exactly sixteen whole
-            // rows, 48 to 63, so no press lands on a row cut short.
+            // The piano clip the selection scenario opened. Its rows keep their
+            // height, and the opening height is exactly sixteen whole rows, 48 to
+            // 63 on an empty clip, so no press lands on a row cut short.
             grid.setSize(1000, StepGrid::openingHeight);
             grid.changeListenerCallback(nullptr);
 

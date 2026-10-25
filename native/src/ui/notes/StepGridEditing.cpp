@@ -97,13 +97,13 @@ void StepGrid::selectPitch(int pitch, const juce::ModifierKeys& mods)
 
 // Session::moveNotes clamps the shift so no note leaves 0-127 and refuses a
 // lane that is already taken, so both edges are its business rather than ours.
-bool StepGrid::transposeSelection(int semitones)
+bool StepGrid::transposeSelection(int amount)
 {
     const auto states = selectedStates();
-    if (states.empty() || semitones == 0)
+    if (states.empty() || amount == 0)
         return false;
-    session.beginNoteGesture(std::abs(semitones) == 12 ? "Transpose octave" : "Transpose notes");
-    juce::ignoreUnused(session.moveNotes(states, 0.0, semitones));
+    session.beginNoteGesture(std::abs(amount) == 12 ? "Transpose octave" : "Transpose notes");
+    juce::ignoreUnused(session.moveNotes(states, 0.0, amount, shownPitches));
     session.endNoteGesture();
     // The key is consumed either way: a transpose that lands on an occupied
     // lane is a refusal, not an unhandled keystroke to pass further up.
@@ -534,7 +534,7 @@ bool StepGrid::beginSubdivision()
         return false;
     // The badge stands over the first note.
     const auto& first = chopSources.front();
-    const auto row = lowestVisiblePitch + visiblePitchRows() - 1 - first.pitch;
+    const auto row = rowOfPitch(first.pitch);
     subdivisionSourceBounds = {xForStep(first.startSteps), rowsTop() + static_cast<float>(row) * rowHeight(),
                                static_cast<float>(first.lengthSteps) * cellWidth(), rowHeight()};
     session.beginNoteGesture("Chop notes");

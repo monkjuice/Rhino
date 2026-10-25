@@ -641,7 +641,8 @@ juce::Result Session::moveNotes(const std::vector<std::pair<int, int>>& sources,
     return juce::Result::ok();
 }
 
-juce::Result Session::moveNotes(const std::vector<juce::ValueTree>& states, double stepDelta, int pitchDelta)
+juce::Result Session::moveNotes(const std::vector<juce::ValueTree>& states, double stepDelta, int pitchDelta,
+                                const std::vector<int>& lanes)
 {
     if (states.empty() || (std::abs(stepDelta) < 0.0001 && pitchDelta == 0))
         return juce::Result::ok();
@@ -650,7 +651,8 @@ juce::Result Session::moveNotes(const std::vector<juce::ValueTree>& states, doub
 
     auto& sequence = pattern().getSequence();
     const auto stepBeats = stepDurationBeats(editorStepResolution());
-    struct Move { te::MidiNote* note; double start, length; int pitch; };
+    // lane is the note's place among lanes, -1 when it is on none of them.
+    struct Move { te::MidiNote* note; double start, length; int pitch, lane; };
     std::vector<Move> moves;
     moves.reserve(states.size());
     for (const auto& state : states)
@@ -658,10 +660,20 @@ juce::Result Session::moveNotes(const std::vector<juce::ValueTree>& states, doub
         auto* note = sequence.getNoteFor(state);
         if (note == nullptr)
             return juce::Result::fail("Select notes to move.");
+        const auto pitch = note->getNoteNumber();
+        const auto lane = std::lower_bound(lanes.begin(), lanes.end(), pitch);
         moves.push_back({note, stepForBeat(note->getStartBeat().inBeats()),
-                         note->getLengthBeats().inBeats() / stepBeats,
-                         note->getNoteNumber()});
+                         note->getLengthBeats().inBeats() / stepBeats, pitch,
+                         lane != lanes.end() && *lane == pitch ? static_cast<int>(lane - lanes.begin()) : -1});
     }
+    // Where a pitch change puts a note: so many semitones, or so many lanes.
+    const auto byLanes = !lanes.empty();
+    const auto targetPitchOf = [&lanes, byLanes](const Move& move, int delta)
+    {
+        if (delta == 0)
+            return move.pitch;
+        return byLanes ? lanes[static_cast<size_t>(move.lane + delta)] : move.pitch + delta;
+    };
 
     const auto isMoving = [&states](const te::MidiNote& candidate)
     {
@@ -683,7 +695,7 @@ juce::Result Session::moveNotes(const std::vector<juce::ValueTree>& states, doub
         {
             lowest = std::max(lowest, -move.start);
             highest = std::min(highest, gridSteps - move.length - move.start);
-            const auto targetPitch = move.pitch + candidatePitchDelta;
+            const auto targetPitch = targetPitchOf(move, candidatePitchDelta);
             for (auto* other : sequence.getNotes())
             {
                 if (other->getNoteNumber() != targetPitch || isMoving(*other))
@@ -702,7 +714,9 @@ juce::Result Session::moveNotes(const std::vector<juce::ValueTree>& states, doub
     };
 
     for (const auto& move : moves)
-        pitchDelta = std::clamp(pitchDelta, -move.pitch, 127 - move.pitch);
+        pitchDelta = !byLanes ? std::clamp(pitchDelta, -move.pitch, 127 - move.pitch)
+                   : move.lane < 0 ? 0
+                   : std::clamp(pitchDelta, -move.lane, static_cast<int>(lanes.size()) - 1 - move.lane);
     double lowest = 0.0, highest = 0.0;
     if (!shiftRange(pitchDelta, lowest, highest))
     {
@@ -723,7 +737,7 @@ juce::Result Session::moveNotes(const std::vector<juce::ValueTree>& states, doub
     {
         move.note->setStartAndLength(tracktion::core::BeatPosition::fromBeats(beatForStep(move.start + resolvedDelta)),
                                      move.note->getLengthBeats(), undoManager);
-        move.note->setNoteNumber(move.pitch + pitchDelta, undoManager);
+        move.note->setNoteNumber(targetPitchOf(move, pitchDelta), undoManager);
     }
     markModified(patternTrackIndex(), ModelChange::notes);
     if (wasPlaying) edit->restartPlayback();

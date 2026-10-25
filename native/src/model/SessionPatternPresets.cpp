@@ -200,6 +200,16 @@ std::optional<juce::String> Session::patternNoteName(int pitch) const
     return std::nullopt;
 }
 
+std::vector<int> Session::patternNamedNotes() const
+{
+    std::vector<int> notes;
+    if (auto* plugin = patternInstrument())
+        for (int pitch = 0; pitch < 128; ++pitch)
+            if (juce::String name; plugin->hasNameForMidiNoteNumber(pitch, 1, name) && name.isNotEmpty())
+                notes.push_back(pitch);
+    return notes;
+}
+
 // Puts a track into the state a preset expects: the right instrument and its
 // patch. Shared by the timeline and clip-slot insertion paths so the two cannot
 // drift apart, and the same for every track: none is special for being first.

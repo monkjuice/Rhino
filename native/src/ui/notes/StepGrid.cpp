@@ -17,7 +17,8 @@ StepGrid::StepGrid(Session& s) : session(s), vblank(this, [this] { updatePlayhea
     setTitle("Pattern notes");
     setDescription("Step editor. Drag to select, double-click a cell for a note, right-click for options, "
                    "B for draw mode, Alt to move or resize off the grid. Click a piano key to select its notes; "
-                   "drag the keys sideways to resize the lanes, up and down to scroll them. "
+                   "drag the keys sideways to resize the lanes, up and down to scroll them; Alt and the wheel "
+                   "make the lanes taller or shorter. "
                    "The velocity lane under the notes: drag a marker to change its note's velocity.");
     drawButton.setButtonText("Draw");
     drawButton.setTooltip("Draw mode (B). Drag to paint notes, and press a note to erase it; with it off, drag "
@@ -208,36 +209,46 @@ void StepGrid::zoomAt(double factor, float pointerX)
 // pitchZoom is a thinner row, so dragging the keys left still thins them.
 void StepGrid::zoomPitchAt(double factor, float pointerY)
 {
-    // The pitch under the pointer, as a continuous position. Holding it still
+    // The line under the pointer, as a continuous position. Holding it still
     // is what makes the lanes grow out from the pointer rather than from the
     // top of the grid.
     const auto rowsBottom = headerHeight + rowAreaHeight();
     const auto y = std::clamp(pointerY, headerHeight, rowsBottom);
-    const auto held = pitchAtY(y);
+    const auto held = lineAtY(y);
     const auto heightBefore = rowHeight();
     pitchZoom = std::clamp(pitchZoom * factor, static_cast<double>(baseRowHeight / maximumRowHeight),
                            static_cast<double>(baseRowHeight / minimumRowHeight));
     if (rowHeight() == heightBefore)
         return;
     pitchRowCount = computePitchRowCount();
-    // The rows stand on the bottom, so a pitch sits (its height above the
-    // lowest) rows up from it.
-    lowestVisiblePitch = juce::jlimit(0, 128 - pitchRowCount,
-                                      juce::roundToInt(held - (rowsBottom - y) / rowHeight()));
+    // The rows stand on the bottom, so a line sits (its distance above the
+    // bottom one) rows up from it.
+    setBottomLine(juce::roundToInt(held - (rowsBottom - y) / rowHeight()));
     manualPitchScroll = true;
     rebuildVisibleNotes();
     repaint();
 }
 
-// A drum clip's rows scroll as a piano's do: they no longer always fit.
-void StepGrid::scrollPitchBy(int semitones)
+// From the whole pixel the rows are at, or from the next one along when the
+// keys' zoom left them between two, so every notch lands on a whole pixel.
+void StepGrid::nudgeRowHeight(int pixels, float pointerY)
 {
-    if (semitones == 0)
+    const auto height = rowHeight();
+    const auto from = pixels > 0 ? std::floor(height + 0.001f) : std::ceil(height - 0.001f);
+    const auto target = std::clamp(from + static_cast<float>(pixels), minimumRowHeight, maximumRowHeight);
+    if (target != height)
+        zoomPitchAt(static_cast<double>(baseRowHeight / target) / pitchZoom, pointerY);
+}
+
+// A drum clip's rows scroll as a piano's do: they no longer always fit.
+void StepGrid::scrollPitchBy(int rows)
+{
+    if (rows == 0)
         return;
-    const auto next = juce::jlimit(0, 128 - visiblePitchRows(), lowestVisiblePitch + semitones);
-    if (next == lowestVisiblePitch)
+    const auto before = lowestVisiblePitch;
+    setBottomLine(bottomLine() + rows);
+    if (lowestVisiblePitch == before)
         return;
-    lowestVisiblePitch = next;
     manualPitchScroll = true;
     rebuildVisibleNotes();
 }
@@ -253,7 +264,8 @@ void StepGrid::setDrawMode(bool shouldDraw)
           "press a note to erase it, B to go back to selecting."
         : "Step editor. Drag to select, double-click a cell for a note, right-click for options, "
           "B for draw mode, Alt to move or resize off the grid. Click a piano key to select its notes; "
-          "drag the keys sideways to resize the lanes, up and down to scroll them. "
+          "drag the keys sideways to resize the lanes, up and down to scroll them; Alt and the wheel "
+          "make the lanes taller or shorter. "
           "The velocity lane under the notes: drag a marker to change its note's velocity.");
     repaint(footerBounds().getSmallestIntegerContainer());
 }
@@ -297,15 +309,84 @@ float StepGrid::rowHeight() const
 }
 
 // Every row that reaches into the area, the top one perhaps only in part, up
-// to the whole MIDI range.
+// to every line there is: the whole MIDI range, or a drum clip's few rows,
+// which a tall pane shows with room to spare below them.
 int StepGrid::computePitchRowCount() const
 {
-    return std::clamp(static_cast<int>(std::ceil(rowAreaHeight() / rowHeight() - 0.001f)), 1, maxPitchRows);
+    return std::clamp(static_cast<int>(std::ceil(rowAreaHeight() / rowHeight() - 0.001f)), 1, lineCount());
 }
 
 float StepGrid::rowsTop() const
 {
-    return headerHeight + rowAreaHeight() - static_cast<float>(visiblePitchRows()) * rowHeight();
+    return std::min(headerHeight, headerHeight + rowAreaHeight() - static_cast<float>(visiblePitchRows()) * rowHeight());
+}
+
+int StepGrid::lineCount() const
+{
+    return shownPitches.empty() ? maxPitchRows : static_cast<int>(shownPitches.size());
+}
+
+int StepGrid::lineOfPitch(int pitch) const
+{
+    if (shownPitches.empty())
+        return juce::isPositiveAndBelow(pitch, maxPitchRows) ? pitch : -1;
+    const auto found = std::lower_bound(shownPitches.begin(), shownPitches.end(), pitch);
+    return found != shownPitches.end() && *found == pitch ? static_cast<int>(found - shownPitches.begin()) : -1;
+}
+
+int StepGrid::pitchOfLine(int line) const
+{
+    if (!juce::isPositiveAndBelow(line, lineCount()))
+        return -1;
+    return shownPitches.empty() ? line : shownPitches[static_cast<size_t>(line)];
+}
+
+// lowestVisiblePitch can name a key that has just lost its row - its pad
+// emptied - and then the bottom row is the next key up that has one.
+int StepGrid::bottomLine() const
+{
+    if (shownPitches.empty())
+        return lowestVisiblePitch;
+    const auto above = std::lower_bound(shownPitches.begin(), shownPitches.end(), lowestVisiblePitch);
+    return std::min(static_cast<int>(above - shownPitches.begin()), lineCount() - 1);
+}
+
+int StepGrid::pitchOfRow(int row) const
+{
+    const auto rows = visiblePitchRows();
+    return juce::isPositiveAndBelow(row, rows) ? pitchOfLine(bottomLine() + rows - 1 - row) : -1;
+}
+
+int StepGrid::rowOfPitch(int pitch) const
+{
+    const auto line = lineOfPitch(pitch);
+    return line < 0 ? -1 : bottomLine() + visiblePitchRows() - 1 - line;
+}
+
+void StepGrid::setBottomLine(int line)
+{
+    lowestVisiblePitch = pitchOfLine(std::clamp(line, 0, std::max(0, lineCount() - visiblePitchRows())));
+}
+
+bool StepGrid::updateShownPitches()
+{
+    std::vector<int> keys;
+    if (session.isPatternDrums())
+        keys = session.patternNamedNotes();
+    if (!keys.empty())
+    {
+        const auto steps = session.editorStepCount();
+        for (const auto& note : session.editorNotes())
+            if (const auto step = static_cast<int>(std::floor(note.startSteps)); step >= 0 && step < steps)
+                keys.push_back(note.pitch);
+        std::sort(keys.begin(), keys.end());
+        keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
+    }
+    if (keys == shownPitches)
+        return false;
+    shownPitches = std::move(keys);
+    repaint();
+    return true;
 }
 
 juce::Rectangle<float> StepGrid::footerBounds() const
@@ -503,9 +584,16 @@ int StepGrid::automaticLowestPitch() const
 {
     const auto rows = visiblePitchRows();
     // A Drum Rack's rows start at the bank of pads its face shows, its first
-    // pad on the bottom row, which is always a whole one.
+    // pad on the bottom row, which is always a whole one; when the rows are
+    // its assigned keys, at the first of them from that bank up.
     if (session.isPatternDrums())
-        return juce::jlimit(0, 128 - rows, session.patternDrumLowestNote());
+    {
+        const auto bank = session.patternDrumLowestNote();
+        if (shownPitches.empty())
+            return juce::jlimit(0, 128 - rows, bank);
+        const auto first = std::lower_bound(shownPitches.begin(), shownPitches.end(), bank) - shownPitches.begin();
+        return pitchOfLine(std::clamp(static_cast<int>(first), 0, std::max(0, lineCount() - rows)));
+    }
     if (!session.hasPatternClip())
         return Session::lowestNote;
 
@@ -559,6 +647,10 @@ void StepGrid::changeListenerCallback(juce::ChangeBroadcaster*)
         repaint();
     }
     syncHorizontalScroll();
+    // A drum clip's rows are its rack's assigned keys and the keys its notes
+    // are on, which a pad filled or emptied changes as much as a note does.
+    if (gesture == Gesture::none)
+        updateShownPitches();
     const auto previousLowestPitch = lowestVisiblePitch;
     // The rows follow the notes, or a drum clip's the bank its rack's face
     // shows, until they are scrolled; a drum clip's follow again when the face
@@ -601,7 +693,7 @@ void StepGrid::rebuildVisibleNotes()
     const auto previousRows = pitchRowCount;
     pitchRowCount = computePitchRowCount();
     const auto rows = pitchRowCount;
-    lowestVisiblePitch = juce::jlimit(0, 128 - rows, lowestVisiblePitch);
+    setBottomLine(bottomLine());
     std::bitset<Session::steps * maxPitchRows> next;
     std::fill(nextLengths.begin(), nextLengths.end(), 0.0f);
     std::fill(nextStartOffsets.begin(), nextStartOffsets.end(), 0.0f);
@@ -610,7 +702,7 @@ void StepGrid::rebuildVisibleNotes()
     const auto allNotes = session.editorNotes();
     for (const auto& note : allNotes)
     {
-        const auto row = lowestVisiblePitch + rows - 1 - note.pitch;
+        const auto row = rowOfPitch(note.pitch);
         const auto step = static_cast<int>(std::floor(note.startSteps));
         if (row >= 0 && row < rows && step >= 0 && step < steps)
         {
@@ -657,7 +749,7 @@ void StepGrid::rebuildVisibleNotes()
     juce::StringArray nextRowNames;
     if (nextDrumLabels)
         for (int row = 0; row < rows; ++row)
-            nextRowNames.add(session.patternNoteName(lowestVisiblePitch + rows - 1 - row).value_or(juce::String()));
+            nextRowNames.add(session.patternNoteName(pitchOfRow(row)).value_or(juce::String()));
     const auto rowNamesChanged = nextRowNames != drumRowNames;
     drumRowNames = std::move(nextRowNames);
     if (stepCountChanged || rows != previousRows || lengthsChanged || offsetsChanged

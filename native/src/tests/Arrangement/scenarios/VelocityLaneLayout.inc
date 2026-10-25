@@ -260,6 +260,8 @@
                     if (note.state == state) return note.velocity;
                 return -1;
             };
+            require(grid.shownPitches.empty() && grid.lineCount() == StepGrid::maxPitchRows,
+                    "A rack with no key assigned has a row for every key");
             require(grid.velocityLaneHeight() == 64.0f && grid.laneNoteFor(kick)->inWindow && grid.laneNoteFor(hat)->inWindow,
                     "A drum clip has the lane too, with every pad's marker");
             const juce::Point<float> both {grid.xForStep(0.0), grid.yForVelocity(100.0f)};

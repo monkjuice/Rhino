@@ -405,6 +405,10 @@ public:
     // names it: a Drum Rack names each of its pads after its sound. The note
     // editor labels its drum rows with it.
     std::optional<juce::String> patternNoteName(int pitch) const;
+    // Every note it names, lowest first, in one pass: a Drum Rack's assigned
+    // keys, the pads that hold a sound, which are the drum editor's rows with
+    // the keys its notes are on. Empty when it names none.
+    std::vector<int> patternNamedNotes() const;
     // The lowest of the note editor's drum rows until they are scrolled: the
     // first note of the bank of sixteen pads the open clip's Drum Rack shows,
     // so the rows open on the pads on its face. lowestNote when it plays no
@@ -966,7 +970,13 @@ public:
     void mirrorAutomationToEngine();
     juce::Result moveNote(int sourceStep, int sourcePitch, int targetStep, int targetPitch);
     juce::Result moveNotes(const std::vector<std::pair<int, int>>&, int stepDelta, int pitchDelta);
-    juce::Result moveNotes(const std::vector<juce::ValueTree>&, double stepDelta, int pitchDelta);
+    // With lanes - the pitches the note editor shows as rows, lowest first -
+    // pitchDelta counts rows rather than semitones, so on a drum clip whose
+    // rows are its assigned keys a note goes from one pad to another and none
+    // lands on a key with no row. A note on no lane cannot change pitch then,
+    // so a selection holding one moves along the clip only.
+    juce::Result moveNotes(const std::vector<juce::ValueTree>&, double stepDelta, int pitchDelta,
+                           const std::vector<int>& lanes = {});
     juce::Result redistributeNotes(const std::vector<juce::ValueTree>&, int divisions,
                                    std::vector<juce::ValueTree>& replacementStates);
     // Chopping, Ctrl+E in the note editor: each note cut where it stands, on

@@ -65,17 +65,17 @@ float StepGrid::xForStep(double step) const
     return labelWidth + static_cast<float>(step - stepScroll) * cellWidth();
 }
 
-// Continuous pitch rather than a row index: whole numbers land on the line
-// between two lanes, so a lane for pitch p covers [p, p + 1). That is what
-// lets a marquee say which lanes it touches without rounding twice.
-double StepGrid::pitchAtY(float y) const
+// A continuous line rather than a row index: whole numbers land on the
+// boundary between two rows, so the row for line l covers [l, l + 1). That is
+// what lets a marquee say which rows it touches without rounding twice.
+double StepGrid::lineAtY(float y) const
 {
-    return lowestVisiblePitch + visiblePitchRows() - (y - rowsTop()) / rowHeight();
+    return bottomLine() + visiblePitchRows() - (y - rowsTop()) / rowHeight();
 }
 
-float StepGrid::yForPitch(double pitch) const
+float StepGrid::yForLine(double line) const
 {
-    return rowsTop() + static_cast<float>(lowestVisiblePitch + visiblePitchRows() - pitch) * rowHeight();
+    return rowsTop() + static_cast<float>(bottomLine() + visiblePitchRows() - line) * rowHeight();
 }
 
 bool StepGrid::isOverKeyboard(juce::Point<float> point) const
@@ -92,9 +92,9 @@ int StepGrid::cellHit(juce::Point<float> point) const
     const auto step = static_cast<int>(stepScroll + (point.x - labelWidth) / cellWidth());
     if (step < 0 || step >= steps)
         return -1;
-    // Below the top only on a panel taller than all 128 rows.
-    const auto row = std::min(visiblePitchRows() - 1, static_cast<int>(std::floor((point.y - rowsTop()) / rowHeight())));
-    return row < 0 ? -1 : row * Session::steps + step;
+    // None in the room to spare below rows that all fit.
+    const auto row = static_cast<int>(std::floor((point.y - rowsTop()) / rowHeight()));
+    return juce::isPositiveAndBelow(row, visiblePitchRows()) ? row * Session::steps + step : -1;
 }
 
 int StepGrid::hit(juce::Point<float> point) const
@@ -225,7 +225,7 @@ void StepGrid::mouseDown(const juce::MouseEvent& event)
         gesture = Gesture::pan;
         panAnchor = event.position;
         panStartStep = stepScroll;
-        panStartPitch = lowestVisiblePitch;
+        panStartLine = bottomLine();
         setHoveredNote({});
         setMouseCursor(juce::MouseCursor::DraggingHandCursor);
         return;
@@ -430,7 +430,7 @@ void StepGrid::beginMarquee(const juce::MouseEvent& event)
 {
     gesture = Gesture::select;
     selectionAnchorStep = stepAtX(event.position.x);
-    selectionAnchorPitch = pitchAtY(event.position.y);
+    selectionAnchorLine = lineAtY(event.position.y);
     dragPosition = event.position;
     selectionBox = {};
     verticalAutoScroll = 0.0f;
@@ -461,12 +461,12 @@ void StepGrid::apply(int index)
 
 int StepGrid::pitchForIndex(int index) const
 {
-    return lowestVisiblePitch + visiblePitchRows() - 1 - index / Session::steps;
+    return pitchOfRow(index / Session::steps);
 }
 
 int StepGrid::indexForCell(int step, int pitch) const
 {
-    const auto row = lowestVisiblePitch + visiblePitchRows() - 1 - pitch;
+    const auto row = rowOfPitch(pitch);
     if (step < 0 || step >= session.editorStepCount() || row < 0 || row >= visiblePitchRows())
         return -1;
     return row * Session::steps + step;
@@ -480,7 +480,9 @@ juce::Result StepGrid::moveCurrentNotesBy(double stepDelta, int pitchDelta)
     sources.reserve(movingNotes.size());
     for (const auto& note : movingNotes)
         sources.push_back(note.state);
-    const auto result = session.moveNotes(sources, stepDelta, pitchDelta);
+    // On a drum clip whose rows are its assigned keys the pitch change counts
+    // those rows, so the group goes from pad to pad.
+    const auto result = session.moveNotes(sources, stepDelta, pitchDelta, shownPitches);
     if (result.wasOk())
     {
         if (movingGroup) setSelectedStates(std::move(sources));
@@ -492,10 +494,12 @@ juce::Result StepGrid::moveCurrentNotesBy(double stepDelta, int pitchDelta)
 
 void StepGrid::moveDraggedNotesAt(juce::Point<float> position)
 {
-    // A note carried below the rows - into the velocity lane, or past it - sits
-    // on the lowest row while the view scrolls pitch down after it, rather
-    // than freezing where the pointer left the rows.
-    const auto rowsBottom = headerHeight + rowAreaHeight();
+    // A note carried below the rows - into the room under rows that all fit,
+    // the velocity lane, or past it - sits on the lowest row while the view
+    // scrolls pitch down after it, rather than freezing where the pointer left
+    // the rows.
+    const auto rowsBottom = std::min(headerHeight + rowAreaHeight(),
+                                     rowsTop() + static_cast<float>(visiblePitchRows()) * rowHeight());
     const auto index = cellHit(position.y >= rowsBottom ? juce::Point<float>(position.x, rowsBottom - 0.5f) : position);
     if (index < 0 || dragStartStep < 0.0 || moveGrabPitch < 0 || movingNotes.empty())
         return;
@@ -518,9 +522,11 @@ void StepGrid::moveDraggedNotesAt(juce::Point<float> position)
                                                   : std::round(anchor.step + travelled);
     // Asking for the distance from where the group actually sits to where the
     // pointer wants it keeps the two together even when the session clamps a
-    // move short against a neighbouring note or the end of the clip.
+    // move short against a neighbouring note or the end of the clip. In
+    // lines, which on a piano clip are the pitches themselves.
     moveCurrentNotesBy(target - placed->start,
-                       anchor.pitch + pitchForIndex(index) - moveGrabPitch - placed->pitch);
+                       lineOfPitch(anchor.pitch) + lineOfPitch(pitchForIndex(index)) - lineOfPitch(moveGrabPitch)
+                           - lineOfPitch(placed->pitch));
     // The preview follows the note to each new pitch.
     if (const auto* moved = noteForState(anchor.state); moved != nullptr && moved->pitch != session.auditionedPitch()
         && session.noteAuditionEnabled())
@@ -551,9 +557,9 @@ void StepGrid::autoScrollDrag()
         const auto pitchSteps = static_cast<int>(verticalAutoScroll);
         if (pitchSteps != 0)
         {
-            const auto nextLowest = juce::jlimit(0, 128 - visiblePitchRows(), lowestVisiblePitch + pitchSteps);
-            changed = changed || nextLowest != lowestVisiblePitch;
-            lowestVisiblePitch = nextLowest;
+            const auto before = lowestVisiblePitch;
+            setBottomLine(bottomLine() + pitchSteps);
+            changed = changed || lowestVisiblePitch != before;
             verticalAutoScroll -= static_cast<float>(pitchSteps);
             manualPitchScroll = true;
             rebuildVisibleNotes();
@@ -575,11 +581,10 @@ void StepGrid::panView(juce::Point<float> pointer)
     stepScroll = std::clamp(panStartStep - (pointer.x - panAnchor.x) / cellWidth(), 0.0, maximumStart);
     // Dragging down carries the notes down and brings the pitches above them
     // into view, so the lowest row on show climbs by the rows travelled.
-    const auto next = juce::jlimit(0, 128 - visiblePitchRows(),
-                                   panStartPitch + juce::roundToInt((pointer.y - panAnchor.y) / rowHeight()));
-    if (next != lowestVisiblePitch)
+    const auto before = lowestVisiblePitch;
+    setBottomLine(panStartLine + juce::roundToInt((pointer.y - panAnchor.y) / rowHeight()));
+    if (lowestVisiblePitch != before)
     {
-        lowestVisiblePitch = next;
         manualPitchScroll = true;
         rebuildVisibleNotes();
     }
@@ -699,9 +704,9 @@ void StepGrid::dragGesture(const juce::MouseEvent& event)
         if (std::abs(delta.x) > 0.0f)
             zoomPitchAt(std::exp(-delta.x * 0.02f), event.position.y);
         keyboardScrollRemainder += delta.y / rowHeight();
-        const auto semitones = static_cast<int>(keyboardScrollRemainder);
-        keyboardScrollRemainder -= semitones;
-        scrollPitchBy(semitones);
+        const auto rows = static_cast<int>(keyboardScrollRemainder);
+        keyboardScrollRemainder -= rows;
+        scrollPitchBy(rows);
         return;
     }
     // Scrolling is the gesture clock's business, not the pointer's: it has to
@@ -823,6 +828,10 @@ void StepGrid::mouseUp(const juce::MouseEvent& event)
     hasResizeTarget = false;
     resizeFreely = false;
     noteMoved = false;
+    // A drum clip's rows held still under the gesture; a key its notes have
+    // all left, with no pad, gives up its row now.
+    if (updateShownPitches())
+        changeListenerCallback(nullptr);
     // A marker may have been left away from the pointer, so the one that
     // lights is the one a press would now take.
     if (isMouseOver(true))
@@ -832,25 +841,26 @@ void StepGrid::mouseUp(const juce::MouseEvent& event)
 void StepGrid::updateMarqueeSelection()
 {
     const auto pointerStep = stepAtX(dragPosition.x);
-    const auto pointerPitch = pitchAtY(dragPosition.y);
+    const auto pointerLine = lineAtY(dragPosition.y);
     const auto firstStep = std::min(selectionAnchorStep, pointerStep);
     const auto lastStep = std::max(selectionAnchorStep, pointerStep);
-    const auto lowPitch = std::min(selectionAnchorPitch, pointerPitch);
-    const auto highPitch = std::max(selectionAnchorPitch, pointerPitch);
+    const auto lowLine = std::min(selectionAnchorLine, pointerLine);
+    const auto highLine = std::max(selectionAnchorLine, pointerLine);
     // The box is only what is drawn; what it catches is decided in steps and
     // pitches. A drag at the edge scrolls the grid, so measuring against
     // pixels would quietly drop every note that had left the panel - which is
     // exactly the material a drag past the edge is reaching for.
-    selectionBox = juce::Rectangle<float>({xForStep(selectionAnchorStep), yForPitch(selectionAnchorPitch)},
+    selectionBox = juce::Rectangle<float>({xForStep(selectionAnchorStep), yForLine(selectionAnchorLine)},
                                           dragPosition)
                        .getIntersection({labelWidth, headerHeight, gridWidth(), rowAreaHeight()});
     // Asked of the clip rather than of the rows on screen, for the same
     // reason: a note the pitch window has scrolled past is still inside the
-    // span the pointer has swept.
+    // span the pointer has swept. A note on a key with no row is in none.
     auto caught = selectionBase;
     for (const auto& note : session.editorNotes())
-        if (note.startSteps < lastStep && note.startSteps + note.lengthSteps > firstStep
-            && note.pitch < highPitch && note.pitch + 1.0 > lowPitch
+        if (const auto line = lineOfPitch(note.pitch);
+            line >= 0 && note.startSteps < lastStep && note.startSteps + note.lengthSteps > firstStep
+            && line < highLine && line + 1.0 > lowLine
             && std::find(caught.begin(), caught.end(), note.state) == caught.end())
             caught.push_back(note.state);
     setSelectedStates(std::move(caught));
@@ -878,7 +888,13 @@ void StepGrid::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWh
     // chop the selected notes, for anyone reaching for the zoom; the wheel
     // ends a chop now rather than driving it, which a drag does.
     finishSubdivision();
-    if (event.mods.isShiftDown() || isShortcutDown(event.mods))
+    // Alt and the wheel, anywhere over the editor: the rows a pixel taller a
+    // notch up and shorter a notch down, within rowHeightReach of their own
+    // height (the user's request). It used to scroll the pitch, as the plain
+    // wheel does.
+    if (event.mods.isAltDown())
+        nudgeRowHeight(wheelDelta > 0.0f ? 1 : -1, event.position.y);
+    else if (event.mods.isShiftDown() || isShortcutDown(event.mods))
     {
         // Keep whatever is below the pointer stable while the visible range
         // changes. Over the keys there is no timeline to zoom, only lanes.
@@ -899,8 +915,8 @@ void StepGrid::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWh
     }
     else
     {
-        const auto semitones = std::max(1, juce::roundToInt(std::abs(wheelDelta) * 8.0f));
-        scrollPitchBy(wheelDelta > 0.0f ? semitones : -semitones);
+        const auto rows = std::max(1, juce::roundToInt(std::abs(wheelDelta) * 8.0f));
+        scrollPitchBy(wheelDelta > 0.0f ? rows : -rows);
     }
     // The rows moved under a pointer that did not.
     setHoveredPitch(pitchNamedAt(event.position));

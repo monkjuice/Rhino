@@ -52,10 +52,10 @@
             // pointer under it.
             const auto lowest = grid.lowestVisiblePitch;
             const auto rows = grid.rowHeight();
-            const auto pitchUnder = grid.pitchAtY(from.y);
+            const auto pitchUnder = grid.lineAtY(from.y);
             pan(from, from.translated(0.0f, rows * 3.0f));
             require(grid.lowestVisiblePitch == lowest + 3, "Dragging down three rows brings three higher pitches into view");
-            require(close(grid.pitchAtY(from.y + rows * 3.0f), pitchUnder), "The pitch under the pointer stays under it");
+            require(close(grid.lineAtY(from.y + rows * 3.0f), pitchUnder), "The pitch under the pointer stays under it");
             require(grid.manualPitchScroll, "The pitch window stays where the pan left it");
             pan(from, from.translated(0.0f, -rows * 3.0f));
             require(grid.lowestVisiblePitch == lowest, "Dragging back up returns the rows");

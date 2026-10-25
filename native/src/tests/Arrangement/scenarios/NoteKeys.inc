@@ -121,10 +121,13 @@
             grid.mouseExit(eventAt({0.0f, 0.0f}, {0.0f, 0.0f}, juce::ModifierKeys()));
             require(grid.hoveredPitch < 0, "and leaving the editor puts the key out");
 
-            // Rows squeezed too thin to carry names: the key under the pointer
-            // is still named, on a tag taller than its row.
+            // Rows squeezed as thin as the zoom goes, five pixels short of their
+            // own height and shorter than a name: the key under the pointer is
+            // still named, on a tag taller than its row.
             grid.zoomPitchAt(8.0, StepGrid::headerHeight + grid.rowAreaHeight() * 0.5f);
-            require(grid.rowHeight() < StepGrid::octaveLabelRowHeight, "The rows are too thin for the keyboard's names");
+            require(grid.rowHeight() == StepGrid::baseRowHeight - StepGrid::rowHeightReach
+                        && grid.rowHeight() < StepGrid::keyTagHeight,
+                    "The zoom stops five pixels short of the rows' height, shorter than a name");
             const auto thin = grid.lowestVisiblePitch + 6;
             move(grid.cell(3, rowFor(thin)).getCentre());
             require(grid.hoveredPitch == thin && litDown(picture()) >= static_cast<int>(StepGrid::keyTagHeight) - 1,

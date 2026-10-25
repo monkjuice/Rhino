@@ -81,18 +81,23 @@ private:
     }
     // A row keeps one height whatever the panel's: a panel too short for the
     // pitches wanted is scrolled, or made taller to show more rows, on a piano
-    // clip and a drum clip alike. The height is baseRowHeight, made thinner or
-    // thicker only by the user's own zoom - the keys dragged sideways, Shift
-    // and the wheel over them - between the two bounds. Until 2026-10-25 the
-    // rows stretched to fill the panel, sixteen of them at the default zoom;
-    // they were 11 px when they stopped, and 13 since the user asked for 2 px
-    // more. maxPitchRows is the whole MIDI range: the most rows a panel can
-    // show, and the stride of the row-addressed caches below.
+    // clip and a drum clip alike. The height is baseRowHeight, and the user's
+    // own zoom moves it at most rowHeightReach either way: Alt and the wheel a
+    // pixel a notch anywhere over the editor, or the keys dragged sideways,
+    // Shift or Ctrl and the wheel over them. Until 2026-10-25 the rows
+    // stretched to fill the panel, sixteen of them at the default zoom; they
+    // were 11 px when they stopped and 13 since the user asked for 2 px more,
+    // and the zoom reached from 7 px to 33 until the user asked for five
+    // either way. maxPitchRows is the whole MIDI range: the most rows a panel
+    // can show, and the stride of the row-addressed caches below.
     static constexpr int maxPitchRows = 128;
-    static constexpr float minimumRowHeight = 7.0f, baseRowHeight = 13.0f, maximumRowHeight = 33.0f;
-    // The row height below which the keyboard stops naming octaves. Sixteen
-    // rows of it are also the least room the velocity lane leaves the rows: a
-    // pane too short for both folds the lane away.
+    static constexpr float baseRowHeight = 13.0f, rowHeightReach = 5.0f;
+    static constexpr float minimumRowHeight = baseRowHeight - rowHeightReach,
+                           maximumRowHeight = baseRowHeight + rowHeightReach;
+    // The row height below which the keyboard stops naming octaves, which is
+    // as thin as the zoom goes. Sixteen rows of it are also the least room the
+    // velocity lane leaves the rows: a pane too short for both folds the lane
+    // away.
     static constexpr float octaveLabelRowHeight = 8.0f;
     // The note names stand in a column of their own left of the keys, which
     // take the rest of labelWidth, as most piano rolls have it. A drum clip's
@@ -147,12 +152,38 @@ private:
     // Where row 0 begins. The rows stand on the bottom of their area, so the
     // row a panel cuts short is the top one, above the header's edge, and a
     // pane grown from its top uncovers the pitches above without moving a note.
+    // Once every row fits - a drum clip's few assigned keys, mostly - they
+    // hang from the header instead, the room to spare below them as at the
+    // end of any list.
     float rowsTop() const;
     int visiblePitchRows() const { return pitchRowCount; }
     int computePitchRowCount() const;
+    // Rows and pitches. A line is a place in the order the rows go: the pitch
+    // itself while every pitch is a row, else an index into shownPitches.
+    // lowestVisiblePitch stays a pitch, the bottom row's. Row 0 is the top one
+    // on screen, and a pitch scrolled out of the window has a row outside 0 to
+    // visiblePitchRows(). A pitch with no row, and a line or row past the
+    // ends, give -1.
+    int lineCount() const;
+    int lineOfPitch(int pitch) const;
+    int pitchOfLine(int line) const;
+    int bottomLine() const;
+    int pitchOfRow(int row) const;
+    int rowOfPitch(int pitch) const;
+    // Scrolls so this line is the bottom row, held where the rows reach.
+    void setBottomLine(int line);
+    // Reads shownPitches again, true when it changed. Only between gestures:
+    // a row that came or went under a drag - the last note leaving a key
+    // with no pad - would move every row under the pointer, so the release
+    // catches up instead.
+    bool updateShownPitches();
     bool isOverKeyboard(juce::Point<float>) const;
     void zoomPitchAt(double factor, float pointerY);
-    void scrollPitchBy(int semitones);
+    // Alt and the wheel: the rows so many pixels taller or shorter, a whole
+    // pixel each, the line under the pointer staying under it.
+    void nudgeRowHeight(int pixels, float pointerY);
+    // By rows: a semitone on a piano clip, a pad on a drum clip.
+    void scrollPitchBy(int rows);
     void paintKeyboard(juce::Graphics&);
     // What a row is called: its pad's sound on a drum clip, else its note.
     juce::String rowName(int pitch) const;
@@ -195,11 +226,12 @@ private:
     void addNoteOffTheGrid(double step, int pitch);
     // Pointer position to musical position and back. The marquee keeps its
     // anchor in these rather than in pixels: the view scrolls under a drag
-    // that reaches the edge, and a pixel anchor would slide with it.
+    // that reaches the edge, and a pixel anchor would slide with it. Up and
+    // down it is a continuous line, which is the pitch on a piano clip.
     double stepAtX(float x) const;
     float xForStep(double step) const;
-    double pitchAtY(float y) const;
-    float yForPitch(double pitch) const;
+    double lineAtY(float y) const;
+    float yForLine(double line) const;
     int cellHit(juce::Point<float>) const;
     int hit(juce::Point<float>) const;
     int resizeHit(juce::Point<float>) const;
@@ -224,7 +256,9 @@ private:
     void apply(int index);
     void toggleSelection(int index);
     bool selectAllNotes();
-    bool transposeSelection(int semitones);
+    // Up and Down: by semitones, or on a drum clip whose rows are its
+    // assigned keys, by rows, so a note goes from pad to pad.
+    bool transposeSelection(int amount);
     void clearSelection();
     void setStepSelection(double start, double end);
     void setStepInsertPoint(double step);
@@ -339,6 +373,15 @@ private:
     // The Drum Rack bank a drum clip's rows were last fitted to, -1 for a
     // piano clip. A scroll holds until the face pages to another bank.
     int shownDrumBank = -1;
+    // The pitches the rows are, lowest first, when they are not every pitch.
+    // A drum clip shows its rack's assigned keys, the pads that hold a sound,
+    // and the keys its notes are on, at the user's request (2026-10-25): an
+    // empty pad has no row unless notes are on it, and then its row reads as
+    // its pitch, so emptying a pad under notes keeps their row. Showing only
+    // the keys a clip's notes use, Live's Fold, would be a control of its own.
+    // Empty for a piano clip, and for a rack with no key assigned, whose rows
+    // are every pitch.
+    std::vector<int> shownPitches;
     std::vector<VisibleNote> visibleNotes;
     std::vector<juce::ValueTree> selectedNoteStates;
     NoteClipboard noteClipboard;
@@ -397,7 +440,7 @@ private:
     // so a pan that runs into the end of the clip and back returns exactly.
     juce::Point<float> panAnchor;
     double panStartStep = 0.0;
-    int panStartPitch = 0;
+    int panStartLine = 0;
     double dragStartStep = -1.0;
     double resizingStartStep = 0.0, resizeTarget = 0.0;
     juce::ValueTree movingNoteState, resizingNoteState;
@@ -455,10 +498,10 @@ private:
     int scaleHighlight = 1;
     float verticalAutoScroll = 0.0f;
     juce::Point<float> dragPosition {-1.0f, -1.0f};
-    // Where the marquee was started, in steps and in pitch rather than in
+    // Where the marquee was started, in steps and in lines rather than in
     // pixels, so the box keeps covering the same music while a drag at the
     // edge scrolls the view out from under it.
-    double selectionAnchorStep = 0.0, selectionAnchorPitch = 0.0;
+    double selectionAnchorStep = 0.0, selectionAnchorLine = 0.0;
     juce::Rectangle<float> selectionBox;
     // What a marquee begun with Ctrl or Shift is adding to. A plain marquee
     // starts from nothing, so this is empty.

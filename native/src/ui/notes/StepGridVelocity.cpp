@@ -228,7 +228,7 @@ void StepGrid::rebuildLaneNotes(const std::vector<Session::EditorNote>& all, int
         const auto step = static_cast<int>(std::floor(note.startSteps));
         if (step < 0 || step >= steps)
             continue;
-        const auto row = lowestVisiblePitch + rows - 1 - note.pitch;
+        const auto row = rowOfPitch(note.pitch);
         next.push_back({note.state, note.startSteps, note.lengthSteps, note.pitch, note.velocity, row >= 0 && row < rows});
     }
     if (next == laneNotes)

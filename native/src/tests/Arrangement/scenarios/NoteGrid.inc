@@ -160,6 +160,43 @@
             grid.changeListenerCallback(nullptr);
             shown = picture();
 
+            // Alt and the wheel, anywhere over the editor: the rows a pixel
+            // taller a notch up and shorter a notch down, never more than five
+            // pixels from their own height, the pitch under the pointer staying
+            // under it. It used to scroll the pitch, as the plain wheel does.
+            {
+                const auto overCell = grid.cell(6, rowFor(62)).getCentre();
+                const juce::Point<float> overLane {overCell.x, grid.velocityLaneBounds().getCentreY()};
+                juce::MouseWheelDetails notchUp, notchDown;
+                notchUp.deltaY = 0.25f;
+                notchDown.deltaY = -0.25f;
+                const auto altWheel = [&](juce::Point<float> at, const juce::MouseWheelDetails& notch)
+                {
+                    grid.mouseWheelMove(eventAt(at, at, juce::ModifierKeys(juce::ModifierKeys::altModifier)), notch);
+                };
+                const auto lowestBefore = grid.lowestVisiblePitch;
+                altWheel(overCell, notchUp);
+                require(grid.rowHeight() == StepGrid::baseRowHeight + 1.0f && grid.pitchNamedAt(overCell) == 62,
+                        "Alt and a notch up make the rows a pixel taller, the pitch under the pointer still under it");
+                altWheel(overLane, notchUp);
+                require(grid.rowHeight() == StepGrid::baseRowHeight + 2.0f, "and so does a notch over the velocity lane");
+                for (int notch = 0; notch < 8; ++notch)
+                    altWheel(overCell, notchUp);
+                require(grid.rowHeight() == StepGrid::baseRowHeight + StepGrid::rowHeightReach,
+                        "They stop five pixels taller than their own height");
+                for (int notch = 0; notch < 16; ++notch)
+                    altWheel(overCell, notchDown);
+                require(grid.rowHeight() == StepGrid::baseRowHeight - StepGrid::rowHeightReach,
+                        "and five shorter, a pixel a notch down");
+                for (int notch = 0; notch < 5; ++notch)
+                    altWheel(overCell, notchUp);
+                require(grid.rowHeight() == StepGrid::baseRowHeight, "Five notches up bring them back");
+                grid.manualPitchScroll = false;
+                grid.changeListenerCallback(nullptr);
+                require(grid.lowestVisiblePitch == lowestBefore, "and the pitch window with them");
+                shown = picture();
+            }
+
             // Snapped, a note's edge lands on a step's line; with Alt it follows
             // the pointer. Alt and a double-click put a note off the grid.
             const auto otherBounds = grid.boundsFor(*grid.noteForState(other));

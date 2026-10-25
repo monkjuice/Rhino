@@ -46,7 +46,7 @@ void StepGrid::paintKeyboard(juce::Graphics& g)
     const auto rowsStart = rowsTop();
     for (int row = 0; row < rows; ++row)
     {
-        const auto pitch = lowestVisiblePitch + rows - 1 - row;
+        const auto pitch = pitchOfRow(row);
         const auto top = rowsStart + static_cast<float>(row) * height;
         const auto key = juce::Rectangle<float>(keysLeft, top, width, height);
         // A name can stand a little taller than a squeezed row.
@@ -96,7 +96,7 @@ void StepGrid::paintKeyboard(juce::Graphics& g)
     // stands in the names' column, on a drum clip the pad's row lights with
     // its name. Last, so that on a thin row the name can stand over the rows
     // either side. The column is as wide as the longest name, C#-2, needs.
-    const auto hoveredRow = lowestVisiblePitch + rows - 1 - hoveredPitch;
+    const auto hoveredRow = rowOfPitch(hoveredPitch);
     if (hoveredPitch < 0 || hoveredRow < 0 || hoveredRow >= rows)
         return;
     const auto hoveredKey = juce::Rectangle<float>(keysLeft, rowsStart + static_cast<float>(hoveredRow) * height, width, height);
@@ -259,7 +259,7 @@ void StepGrid::paint(juce::Graphics& g)
     const auto& scale = minor ? naturalMinor : major;
     for (int row = 0; row < rows; ++row)
     {
-        const auto pitch = lowestVisiblePitch + rows - 1 - row;
+        const auto pitch = pitchOfRow(row);
         const auto pitchClass = pitchClassOf(pitch);
         const bool inScale = !scaleEnabled || std::find(scale.begin(), scale.end(), (pitchClass - root + 12) % 12) != scale.end();
         // Cells and notes stay inside their row's height, so a row the repaint

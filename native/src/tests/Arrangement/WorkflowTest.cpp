@@ -201,6 +201,8 @@ int runArrangementTest()
        #include "scenarios/NoteKeys.inc"
         scenario("note grid: bars and beats, black keys, velocity shades, snapping, key clicks and the preview");
        #include "scenarios/NoteGrid.inc"
+        scenario("note drum rows: a drum clip's rows are its assigned keys");
+       #include "scenarios/NoteDrumRows.inc"
         // Each builds a document of its own, so none leans on or disturbs the
         // shared clip.
         scenario("velocity lane: markers, drags and keys");

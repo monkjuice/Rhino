@@ -3,10 +3,19 @@
         // parts of it that are scrolled away must still be selectable and
         // still move.
         {
+            // A piano clip of its own, which the clipboard and gesture scenarios
+            // after this one go on using. The shared clip by now is on the lane
+            // a kit was dropped on, a drum clip whose rows are its rack's
+            // assigned keys, and these are about the piano roll.
+            int pianoLane = -1;
+            te::EditItemID pianoClip;
+            require(session.addTrack(Session::TrackType::midi, -1, &pianoLane).wasOk()
+                        && session.createClip(pianoLane, 0.0, &pianoClip).wasOk()
+                        && session.selectPatternClip(pianoClip).wasOk() && !session.isPatternDrums(),
+                    "The note editor opens a piano clip on a lane of its own");
             StepGrid transposeGrid(session);
-            // The open clip is a drum clip on the bank from 48: at the opening
-            // height its sixteen rows reach the high note, now that rows keep
-            // their height.
+            // Sixteen whole rows at the opening height reach the high note but
+            // not the low one.
             transposeGrid.setSize(1000, StepGrid::openingHeight);
             transposeGrid.changeListenerCallback(nullptr);
 

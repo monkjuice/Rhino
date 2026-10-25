@@ -72,11 +72,16 @@ juce::PopupMenu StepGrid::noteMenu() const
     menu.addItem(duplicateCommand, "Duplicate       Ctrl+D");
     menu.addItem(deleteCommand, "Delete       Del");
     menu.addSeparator();
+    // On a drum clip whose rows are its assigned keys, Up and Down go from pad
+    // to pad, and an octave of pads means nothing.
+    const auto byPads = !shownPitches.empty();
     juce::PopupMenu transpose;
-    transpose.addItem(octaveUpCommand, "Up an Octave       Shift+Up");
-    transpose.addItem(semitoneUpCommand, "Up a Semitone       Up");
-    transpose.addItem(semitoneDownCommand, "Down a Semitone       Down");
-    transpose.addItem(octaveDownCommand, "Down an Octave       Shift+Down");
+    if (!byPads)
+        transpose.addItem(octaveUpCommand, "Up an Octave       Shift+Up");
+    transpose.addItem(semitoneUpCommand, byPads ? "Up a Pad       Up" : "Up a Semitone       Up");
+    transpose.addItem(semitoneDownCommand, byPads ? "Down a Pad       Down" : "Down a Semitone       Down");
+    if (!byPads)
+        transpose.addItem(octaveDownCommand, "Down an Octave       Shift+Down");
     menu.addSubMenu("Transpose", transpose);
     // Each note where it stands, on any pitch: on the grid, as Ctrl+E chops,
     // or into so many equal parts.

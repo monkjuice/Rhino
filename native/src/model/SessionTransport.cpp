@@ -13,6 +13,7 @@ void releasePluginList(te::PluginList* list)
         if (plugin != nullptr)
             plugin->midiPanic();
 }
+}
 
 // Automation lanes hang off the track they are drawn under, or off the edit for
 // the master, and hold their points in seconds. They sweep alongside the clips,
@@ -34,7 +35,6 @@ void rescaleAutomationPoints(juce::ValueTree owner, double scale, juce::UndoMana
                 point.setProperty(automationTimeID, std::max(0.0, seconds * scale), undoManager);
         }
     }
-}
 }
 
 juce::Result Session::importAudio(const juce::File& file)

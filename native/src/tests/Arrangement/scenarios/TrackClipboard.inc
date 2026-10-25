@@ -168,3 +168,117 @@
             require(doc.trackCount() == starter + 2, "and one undo brings them all back");
             doc.releaseAudioDevice();
         }
+
+        // Into another document: copied in one, pasted after opening another,
+        // as Live carries a copy from one Set into the next. The copy finds
+        // its audio from the other document's folder, keeps its clips and its
+        // automation on their beats at the other tempo, and keeps no tie to a
+        // track it did not bring.
+        {
+            const auto folder = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                .getChildFile("Rhino track clipboard " + juce::String(juce::Time::getHighResolutionTicks()));
+            const auto first = folder.getChildFile("First"), second = folder.getChildFile("Second");
+            require(first.createDirectory().wasOk() && second.createDirectory().wasOk(), "Two project folders");
+            const auto loop = first.getChildFile("Loop.wav");
+            require(source.getFile().copyFileTo(loop), "and a sample beside the first");
+
+            // Written to disk and opened from it, as the app opens one: the
+            // engine names a file relative to a document that is not on disk
+            // yet as though the document were a folder.
+            const auto openFrom = [](Session& into, const juce::ValueTree& state, const juce::File& file)
+            {
+                const auto xml = state.createXml();
+                return xml != nullptr && xml->writeTo(file) && into.restoreProject(state, file).wasOk();
+            };
+
+            auto document = std::make_unique<Session>();
+            auto& doc = *document;
+            // The second document is the starter stack at 90 BPM; the first is
+            // the same at 120, opened from its file so that audio imported into
+            // it is named relative to it.
+            doc.setTempo(90.0);
+            const auto slower = doc.projectSnapshot();
+            doc.setTempo(120.0);
+            require(openFrom(doc, doc.projectSnapshot(), first.getChildFile("First.rhinoedit")),
+                    "The first document opens from its file");
+            const auto vocoderSlots = [&doc](int track)
+            {
+                std::vector<int> found;
+                for (const auto& slot : doc.deviceSlots(track))
+                    if (slot.type == VocoderDevice::xmlTypeName)
+                        found.push_back(slot.pluginIndex);
+                return found;
+            };
+
+            // [MIDI, Audio, MIDI, Audio]: a bar on the first track from beat 4,
+            // the sample on the second from the same beat, and on the second
+            // two vocoders, one played by the first track and one by the third.
+            require(doc.createClip(0, 2.0).wasOk(), "A clip on the MIDI track at beat 4");
+            require(doc.importAudioAt(loop, 1, 2.0).wasOk(), "the sample on the audio track at the same beat");
+            auto* sample = te::getAudioTracks(*doc.edit)[1]->getClips().getFirst();
+            require(sample != nullptr && !juce::File::isAbsolutePath(sample->state[te::IDs::source].toString()),
+                    "named relative to the document");
+            require(doc.addAudioEffect(Session::AudioEffect::Reverb, 0).wasOk(), "A reverb on the MIDI track");
+            auto reverb = -1;
+            for (const auto& slot : doc.deviceSlots(0))
+                if (slot.type == te::ReverbPlugin::xmlTypeName)
+                    reverb = slot.pluginIndex;
+            const Session::DeviceTarget lane {0, reverb, 0};
+            require(reverb > 0 && doc.showTrackAutomation(lane, false).wasOk()
+                        && doc.setTrackAutomationPoints(lane, {{2.0, 0.0f}, {4.0, 1.0f}}).wasOk(),
+                    "with a lane rising from beat 4 to beat 8");
+            require(doc.addDevice("RhinoVocoder", 1).wasOk() && doc.addDevice("RhinoVocoder", 1).wasOk()
+                        && vocoderSlots(1).size() == 2,
+                    "Two vocoders on the audio track");
+            require(doc.setDeviceSidechainSource(1, vocoderSlots(1)[0], 0).wasOk()
+                        && doc.setDeviceSidechainSource(1, vocoderSlots(1)[1], 2).wasOk(),
+                    "played by the MIDI track that is copied and by one that is not");
+            const auto copied = doc.copyTracks({0, 1});
+            require(copied.tracks.size() == 2, "The first two tracks are copied");
+
+            require(openFrom(doc, slower, second.getChildFile("Second.rhinoedit")) && doc.tempo() == 90.0,
+                    "and the second document opens in its place, at 90 BPM");
+            const auto starter = doc.trackCount();
+            std::vector<int> arrived;
+            require(doc.pasteTracks(copied, 0, &arrived).wasOk() && arrived == std::vector<int> {1, 2}
+                        && doc.trackCount() == starter + 2,
+                    "The copies paste into it, under its first track");
+
+            // The one clip a lane shows: a starter MIDI track also carries the
+            // hidden, empty Pattern 1.
+            const auto clipOf = [&doc](int track) -> te::Clip*
+            {
+                for (auto* clip : te::getAudioTracks(*doc.edit)[track]->getClips())
+                    if (doc.shouldShowClipInArrangement(*clip))
+                        return clip;
+                return nullptr;
+            };
+            auto* bar = clipOf(1);
+            require(bar != nullptr && close(doc.secondsToBeats(bar->getPosition().getStart().inSeconds()), 4.0)
+                        && close(doc.secondsToBeats(bar->getPosition().getEnd().inSeconds()), 8.0),
+                    "The MIDI clip keeps its beats at the new tempo, as a tempo change would keep them");
+            auto* pastedSample = dynamic_cast<te::WaveAudioClip*>(clipOf(2));
+            require(pastedSample != nullptr, "The sample comes along");
+            require(pastedSample->getSourceFileReference().getFile() == loop,
+                    ("and is still found, from the other document's folder: "
+                     + pastedSample->state[te::IDs::source].toString() + " is "
+                     + pastedSample->getSourceFileReference().getFile().getFullPathName()).toRawUTF8());
+            require(close(doc.secondsToBeats(pastedSample->getPosition().getStart().inSeconds()), 4.0)
+                        && close(pastedSample->getPosition().getLength().inSeconds(), 1.0),
+                    "and starts on its beat, still a second long, as an unwarped clip is after a tempo change");
+            const auto lanes = doc.trackAutomations(1);
+            require(lanes.size() == 1 && lanes.front().points.size() == 2
+                        && close(doc.secondsToBeats(lanes.front().points[0].timeSeconds), 4.0)
+                        && close(doc.secondsToBeats(lanes.front().points[1].timeSeconds), 8.0),
+                    "The lane keeps its beats too");
+            const auto vocoders = vocoderSlots(2);
+            require(vocoders.size() == 2 && doc.deviceSidechainSource(2, vocoders[0]) == 1,
+                    "A vocoder played by a copied track is played by its copy");
+            require(doc.deviceSidechainSource(2, vocoders[1]) == -1,
+                    "and one played by a track left behind is played by nothing, not by whatever has its id here");
+            doc.undo();
+            require(doc.trackCount() == starter, "One undo takes the paste back");
+            doc.releaseAudioDevice();
+            document.reset();
+            folder.deleteRecursively();
+        }

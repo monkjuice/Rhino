@@ -11,6 +11,11 @@
 // two tracks rather than one track reached twice. Rhino's own names for things
 // are renewed with them: a device's key, which its automation lanes name it
 // by, and a group's id, which its members name their bus by.
+//
+// The clipboard outlives opening another document, so a paste can land in a
+// document the copy knows nothing of. A copy names its audio in full, keeps
+// its beats at the tempo it lands at, and there lets go of every track it
+// did not bring.
 
 namespace rhino
 {
@@ -69,18 +74,55 @@ void renewDeviceKeys(juce::ValueTree track)
                 found != renewed.end())
                 child.setProperty(automationDeviceID, found->second, nullptr);
 }
+
+// Every device on a copied track that is played by another track, with the
+// track it names.
+void collectSidechains(juce::ValueTree node, std::vector<std::pair<juce::ValueTree, te::EditItemID>>& found)
+{
+    if (const auto named = te::EditItemID::fromString(node[te::IDs::sidechainSourceID].toString()); named.isValid())
+        found.emplace_back(node, named);
+    for (auto child : node)
+        collectSidechains(child, found);
+}
+
+// What the engine does to a clip when the tempo changes
+// (EditTimecodeRemapperSnapshot::remapEdit at 4536d8a), done to a copy made at
+// another tempo; with one tempo either side, keeping a beat scales its time.
+// A clip that follows the tempo moves and stretches, an unwarped audio clip
+// plays at its own speed so only its start moves, and one pinned to absolute
+// time stays where it is.
+void keepOnItsBeats(te::Clip& clip, double scale)
+{
+    if (clip.getSyncType() == te::Clip::syncAbsolute)
+        return;
+    const auto position = clip.getPosition();
+    const auto start = tracktion::core::TimePosition::fromSeconds(position.time.getStart().inSeconds() * scale);
+    if (auto* audio = dynamic_cast<te::WaveAudioClip*>(&clip); audio != nullptr && !audio->getAutoTempo())
+    {
+        clip.setStart(start, false, true);
+        return;
+    }
+    clip.setPosition({{start, tracktion::core::TimePosition::fromSeconds(position.time.getEnd().inSeconds() * scale)},
+                      tracktion::core::TimeDuration::fromSeconds(position.offset.inSeconds() * scale)});
+}
 }
 
 Session::TrackClipboard Session::copyTracks(const std::vector<int>& chosen) const
 {
     TrackClipboard copied;
+    copied.document = documentSerial;
+    copied.tempo = tempo();
     const auto tracks = audioTracks();
     for (const auto track : wholeGroupsOf(*this, chosen))
     {
         // A hosted plugin keeps its settings to itself until asked, so the
         // state is brought up to date before it is copied.
         tracks[track]->flushStateToValueTree();
-        copied.tracks.push_back(tracks[track]->state.createCopy());
+        auto state = tracks[track]->state.createCopy();
+        // A file beside this document is named relative to it, which beside
+        // another one names nothing.
+        nameSourcesFor(state, *edit, {});
+        copied.tracks.push_back(state);
     }
     return copied;
 }
@@ -129,18 +171,33 @@ juce::Result Session::insertTrackCopies(const TrackClipboard& clipboard, int bel
     for (const auto& group : trackGroups())
         nextGroupId = std::max(nextGroupId, group.id + 1);
 
-    auto& undoManager = edit->getUndoManager();
-    undoManager.beginNewTransaction(action);
+    // From another document, a copy names other tracks by ids that mean
+    // nothing here or mean another track. At another tempo, its clips and
+    // lanes are in seconds that would leave their beats.
+    const auto elsewhere = clipboard.document != documentSerial;
+    const auto scale = clipboard.tempo > 0.0 ? clipboard.tempo / tempo() : 1.0;
+    const auto retimed = std::abs(scale - 1.0) > 1.0e-9;
+    const auto opened = edit->editFileRetriever ? edit->editFileRetriever() : juce::File();
+
+    // Every copy is made ready before any lands: a sidechain on one may name
+    // another, whose new id is known only once it has been given one.
     std::map<int, int> copiedGroups;
-    std::vector<te::EditItemID> made;
-    te::Track* preceding = nullptr;
-    if (const auto tracks = audioTracks(); juce::isPositiveAndBelow(after, tracks.size()))
-        preceding = tracks[after];
+    std::map<juce::uint64, te::EditItemID> copiedTracks;
+    std::vector<std::pair<juce::ValueTree, te::EditItemID>> sidechains;
+    std::vector<juce::ValueTree> copies;
     for (const auto& source : clipboard.tracks)
     {
         auto state = source.createCopy();
+        if (elsewhere)
+            collectSidechains(state, sidechains);
         te::EditItemID::remapIDs(state, nullptr, *edit);
+        copiedTracks[te::EditItemID::fromString(source[te::IDs::id].toString()).getRawID()]
+            = te::EditItemID::fromString(state[te::IDs::id].toString());
         renewDeviceKeys(state);
+        // As an import into this document would name them.
+        nameSourcesFor(state, *edit, opened);
+        if (retimed)
+            rescaleAutomationPoints(state, scale, nullptr);
         // A copy that recorded the moment it landed would be a surprise, and
         // two tracks armed on one input record the same take twice.
         state.removeProperty(trackArmedID, nullptr);
@@ -159,7 +216,27 @@ juce::Result Session::insertTrackCopies(const TrackClipboard& clipboard, int bel
             state.setProperty(trackGroupMemberID, joining, nullptr);
         else
             state.removeProperty(trackGroupMemberID, nullptr);
+        copies.push_back(state);
+    }
+    // A device played by a track that came along is played by its copy, and
+    // one played by a track left in the other document by nothing.
+    for (auto& [device, named] : sidechains)
+    {
+        if (const auto found = copiedTracks.find(named.getRawID()); found != copiedTracks.end())
+            device.setProperty(te::IDs::sidechainSourceID, found->second.toString(), nullptr);
+        else
+            device.removeProperty(te::IDs::sidechainSourceID, nullptr);
+    }
 
+    auto& undoManager = edit->getUndoManager();
+    undoManager.beginNewTransaction(action);
+    std::vector<te::EditItemID> made;
+    std::vector<te::AudioTrack*> landed;
+    te::Track* preceding = nullptr;
+    if (const auto tracks = audioTracks(); juce::isPositiveAndBelow(after, tracks.size()))
+        preceding = tracks[after];
+    for (const auto& state : copies)
+    {
         const auto at = preceding != nullptr ? te::TrackInsertPoint(nullptr, preceding)
                                              : te::TrackInsertPoint::getEndOfTracks(*edit);
         auto track = edit->insertTrack(at, state, nullptr);
@@ -172,12 +249,37 @@ juce::Result Session::insertTrackCopies(const TrackClipboard& clipboard, int bel
             return juce::Result::fail("The document cannot take any more tracks.");
         }
         made.push_back(track->itemID);
+        if (auto* audio = dynamic_cast<te::AudioTrack*>(track.get()))
+            landed.push_back(audio);
         preceding = track.get();
+    }
+    if (retimed)
+    {
+        for (auto* track : landed)
+        {
+            for (auto* clip : track->getClips())
+                keepOnItsBeats(*clip, scale);
+            for (auto* slot : track->getClipSlotList().getClipSlots())
+                if (auto* clip = slot->getClip())
+                    keepOnItsBeats(*clip, scale);
+        }
+        // A repitched clip keeps its beats by its speed, as setTempo makes it.
+        updateRepitchedClips();
+    }
+    // A copy from a document with more scenes may hold a cell past this one's
+    // last, where nothing would show it.
+    auto scenes = defaultScenes;
+    for (auto* track : landed)
+    {
+        const auto slots = track->getClipSlotList().getClipSlots();
+        for (int scene = 0; scene < slots.size(); ++scene)
+            if (slots[scene]->getClip() != nullptr)
+                scenes = std::max(scenes, scene + 1);
     }
     // The copies carry their originals' routing, which names a bus by its
     // place in the stack; reconciling points each one where it now sits.
     reconcileTrackGroups();
-    ensureSceneSlots();
+    ensureSceneSlots(scenes);
     ensureTrackMixers();
     undoManager.beginNewTransaction();
     if (inserted != nullptr)

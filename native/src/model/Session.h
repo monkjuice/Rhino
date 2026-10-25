@@ -509,8 +509,13 @@ public:
     // removeAudioTrack still does that for a bus it is handed.
     struct TrackClipboard
     {
-        // In stack order, each group's bus directly before its members.
+        // In stack order, each group's bus directly before its members, every
+        // audio file named in full so the copy finds it from any document.
         std::vector<juce::ValueTree> tracks;
+        // Where and when they were copied: the document (documentSerial) and
+        // its tempo then. A copy outlives opening another document.
+        juce::uint64 document = 0;
+        double tempo = 0.0;
         bool isEmpty() const { return tracks.empty(); }
     };
     TrackClipboard copyTracks(const std::vector<int>& tracks) const;
@@ -520,6 +525,11 @@ public:
     // cannot go inside another, always goes below the whole group. Nothing
     // named lands them at the foot of the stack. One undo step; `pasted`
     // receives the new tracks' indices, top to bottom.
+    //
+    // The copies may come from another document, or from this one at another
+    // tempo. Their clips and lanes keep their beats, as a tempo change keeps
+    // them, and a copy from elsewhere keeps no sidechain to a track it did
+    // not bring: that track's id means nothing here, or another track.
     juce::Result pasteTracks(const TrackClipboard&, int below, std::vector<int>* pasted = nullptr);
     // A copy of the tracks lands directly under the last of them, as one
     // block, by the same rule.
@@ -1901,6 +1911,10 @@ private:
     const AutomationRuntime* findAutomationRuntime(const juce::String& deviceKey, int parameter) const;
     te::MidiClip* patternClip = nullptr; // owned by edit
     te::EditItemID patternClipID;
+    // Which document is open: a new number, unique in the process, whenever
+    // the edit is replaced, so a track clipboard can tell that it was copied
+    // from another document - whose track ids may be this one's too.
+    juce::uint64 documentSerial = 0;
     // Engine initialization also changes its edit flag asynchronously. Track
     // user commands separately so startup cannot dirty an untouched document.
     juce::int64 changeRevision = 0, savedRevision = 0;

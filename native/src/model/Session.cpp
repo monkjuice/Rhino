@@ -4,6 +4,7 @@
 #include "CountInClick.h"
 #include "SessionDjInternal.h"
 #include <algorithm>
+#include <atomic>
 #include <set>
 
 namespace rhino
@@ -74,9 +75,14 @@ juce::String sourceNameFor(const juce::File& file, const juce::File& document, b
     return relative ? file.getRelativePathFrom(document.getParentDirectory()) : file.getFullPathName();
 }
 
-// Every audio file a document's state names - each audio clip's, on the
-// timeline or in a cell, and each of its takes' - resolved as the live edit
-// resolves it and named again for `document`.
+// Unique across every Session in the process, so two documents never share one.
+juce::uint64 nextDocumentSerial()
+{
+    static std::atomic<juce::uint64> last {0};
+    return ++last;
+}
+}
+
 void nameSourcesFor(juce::ValueTree node, te::Edit& live, const juce::File& document)
 {
     if (node.hasType(te::IDs::AUDIOCLIP) || node.hasType(te::IDs::TAKE))
@@ -85,7 +91,6 @@ void nameSourcesFor(juce::ValueTree node, te::Edit& live, const juce::File& docu
                 node.setProperty(te::IDs::source, sourceNameFor(file, document, live.alwaysUseRelativePaths.get()), nullptr);
     for (auto child : node)
         nameSourcesFor(child, live, document);
-}
 }
 
 void Session::setCommandLineTestMode(bool enabled)
@@ -159,6 +164,7 @@ Session::~Session()
 void Session::buildStarterEdit()
 {
     edit = te::createEmptyEdit(engine, {});
+    documentSerial = nextDocumentSerial();
     watchEditTree();
     edit->state.setProperty("rhinoFormatVersion", 1, nullptr);
     edit->clickTrackEnabled = false;
@@ -465,6 +471,7 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
     releaseMeterTaps();
     unwatchEdit();
     edit = std::move(candidate);
+    documentSerial = nextDocumentSerial();
     watchEditTree();
     // The automation that was being played by hand belonged to the outgoing
     // document's tracks, and is keyed by their indices.

@@ -144,6 +144,17 @@ bool hasMappedParameters(const te::Plugin&);
 int mappedParameterCount(te::Plugin&);
 te::AutomatableParameter* mappedParameterAt(te::Plugin&, int index);
 
+// Every audio file a document's state names - each audio clip's, on the
+// timeline or in a cell, and each of its takes' - resolved as `live` resolves
+// it and named again for `document`: relative to it where the engine would
+// store it so, in full otherwise, and in full for no document at all.
+// Session.cpp.
+void nameSourcesFor(juce::ValueTree node, te::Edit& live, const juce::File& document);
+// Multiplies the time of every point on the lanes stored on `owner` by
+// `scale`, which is what a tempo change does to them: they are kept in
+// seconds. SessionTransport.cpp.
+void rescaleAutomationPoints(juce::ValueTree owner, double scale, juce::UndoManager*);
+
 // Engine and model helpers (SessionInternal.cpp)
 // An edit made from a document's state, given the document's file and its
 // role before it is built. A clip resolves its source file while the edit is

@@ -4,7 +4,7 @@ type: component
 summary: A pad on every MIDI note, addressed by note, each a sample or one of eight synthesised drums with six automatable controls; the face shows a bank of sixteen beside a map of all 128 and opens 1024 x 720 in a window of its own that floats above the main window, and kits (.rdk), drum presets (.rdp) or dropped samples fill it.
 tags: [rhino, devices, drums, dsp, library]
 sources: []
-updated: 2026-10-14
+updated: 2026-10-25
 ---
 
 # Drum Rack
@@ -21,7 +21,7 @@ Rhino's drum instrument since 2026-10-06 (branch `feat/drum-rack`). It replaced 
 ## A pad on every note
 
 - **128 pads** (`DrumRackEngine::padCount`), one per MIDI note, as in Live. A pad is addressed by its note everywhere: engine, device, kit files and every `Session` call that takes a pad. Messages name it with `padNoteName` (`core/content/DrumKitFile.h`), where middle C is C3, so 48 is C2.
-- **A bank of sixteen on the face**: four rows of four, lowest note bottom left, from `firstShownNote()`, a multiple of 4, default 48. It and the selected pad are view state on the device (`firstNote`, `selPad`, both default 48), written without undo. The note editor's sixteen drum rows follow the bank ([Note editor (StepGrid)](note-editor.md)).
+- **A bank of sixteen on the face**: four rows of four, lowest note bottom left, from `firstShownNote()`, a multiple of 4, default 48. It and the selected pad are view state on the device (`firstNote`, `selPad`, both default 48), written without undo. The note editor's drum rows open on the bank, its first pad on the bottom row, and follow it as it pages; since commit `d872f0b` (2026-10-25) they keep the editor's fixed row height and scroll, so the pane's height decides how many pads show, and a scroll holds until the bank changes ([Note editor (StepGrid)](note-editor.md#drum-rows)).
 - **Kits still sit on C2 up**, where the drum patterns are written, not at Live's C1. A controller sending notes 36-51 therefore plays below the default bank, and the map shows the keys arriving there.
 - **A sample or a synth.** The synths (`DrumModel`) are small 808-style models: Kick, Snare, Tom, ClosedHat, OpenHat, Clap, Rim and Cowbell. `DrumModelInfo` gives each a file `id` (never renamed), a name, the browser drum kind it files under, and its starting Decay and Tone.
 - **Six controls.** Tune (±24 semitones); Decay (seconds to fall 60 dB; at its 10 s top it reads "Full" and a sample plays to its end); Tone (a low-pass from 120 Hz to 20 kHz on a sample, off at the top; brightness on a synth); Velocity (how much quieter a soft note is); Level (dB, the -48 bottom is silence); Pan (a balance, unity on both sides at centre).

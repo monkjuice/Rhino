@@ -50,8 +50,9 @@ every scenario of `DjLiveChain.inc`).
    names a source relative to a document that does not exist as though the document were a folder (`..\Loop.wav`; the
    quirk `sourceNameFor` in `Session.cpp` notes for Save As), so any check of where a source resolves writes the
    document before `restoreProject(state, file)`, as `ProjectFileMedia.inc` and `TrackClipboard.inc` do.
-2. **Allocate anything big.** Every scenario shares the runner's one stack frame. A `StepGrid` carries about 200 KB of
-   caches, and the third one declared by value overflowed the old 1 MB stack inside an unrelated scenario; twice more in
+2. **Allocate anything big.** Every scenario shares the runner's one stack frame. A `StepGrid` carried about 200 KB of
+   caches inline (its float caches have been on the heap since commit `d872f0b`, 2026-10-25, when 128 rows made them
+   256 KB each), and the third one declared by value overflowed the old 1 MB stack inside an unrelated scenario; twice more in
    the week of 2026-10-05 a scenario that added two panels did the same. `RhinoDAW.exe` now reserves 8 MB on Windows
    (commit `3f6bb4e`), but declare a `StepGrid`, an `Arrangement`, a `Session` or anything that size with
    `std::make_unique` all the same ([A CTest SegFault may be a stack overflow](stack-overflow-reports-as-segfault.md)).
@@ -164,6 +165,26 @@ every scenario of `DjLiveChain.inc`).
     the items, submenus and headers included, with `PopupMenu::MenuItemIterator`, chooses by command id, and resets
     `presentMenu` before its block ends. Give a new panel's menu the same seam to test it
     ([Note editor](note-editor.md#gestures)).
+19. **Log what a component repaints, without a window.** Give it a `juce::CachedComponentImage` whose
+    `invalidate(area)` records the area and returns false, whose `invalidateAll` records the whole, and whose `paint`
+    and `releaseResources` do nothing: `Component::internalRepaintUnchecked` hands every repaint of a visible
+    component to its cached image, and false stops it there. Make the component visible (a hidden one repaints
+    nothing), install the image, then clear the log just before the action: `setVisible(true)` and
+    `setCachedComponentImage` each repaint everything, and a log holding the whole component passes any containment
+    check. The DJ scenarios clear `region` (the `recordDamage` helper of `UiCost.inc`) before every action. Also
+    require what must stay untouched, and see the check fail without the fix. `setCachedComponentImage(nullptr)`
+    deletes the image. `NoteGrid.inc` checks the marquee's repaint on release this way (commit `d872f0b`): a first
+    draft that cleared nothing passed whatever `mouseUp` did, and with the release's repaint taken out the committed
+    check fails at "and letting go repaints where it stood, so it disappears" ([Note editor](note-editor.md#pitfalls)).
+20. **Size a note editor for the rows a scenario presses, and press only whole rows.** Since commit `d872f0b` rows keep
+    their height, so the editor's height decides which pitches have rows, and the top row may be cut short with its
+    centre inside the ruler (y < `headerHeight`), where a press seeks the transport and starts a loop drag instead of
+    a marquee or a note
+    ([Note editor](note-editor.md#drawing)). By `NoteSelection.inc` the shared `Session`'s open clip is a drum clip on
+    the bank from 48: a 250 px editor shows only pads 48..59, so that scenario's editor, like `NoteEditor.inc`'s, is
+    300 px. In `NoteGestures.inc` the clip is 48 steps long, so the scrollbar shows and a 300 px editor's rows ran
+    48..63 with 63 the sliver; it is 320 px, where 48..64 are all whole. A press aimed at `cell(step, row).getCentre()`
+    needs a row whose top is at or below `headerHeight`.
 
 ## Timing, not checking
 

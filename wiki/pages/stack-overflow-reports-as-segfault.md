@@ -4,7 +4,7 @@ type: gotcha
 summary: CTest reports a Windows stack overflow (0xC00000FD) as a bare SegFault; so far the cause was large objects on the stack in both test binaries and, once, a runaway recursion.
 tags: [both, testing, windows]
 sources: []
-updated: 2026-10-23
+updated: 2026-10-25
 ---
 
 # A CTest SegFault may be a stack overflow
@@ -18,7 +18,7 @@ CTest reports a case as `***Exception: SegFault` and shows no output at all. The
 When a thread overflows its stack, Windows ends the process with `0xC00000FD` (`STATUS_STACK_OVERFLOW`, exit code -1073741571), and CTest reports that as "SegFault". The overflow usually happens before anything is printed. Both test binaries build large objects as local variables:
 
 - **Forge.** A `Processor` holds a `Core` by value. A `Core` holds sixteen voices (`std::array<Voice, 16>` in `core/ForgeCore.h`), and each voice carries real state. `oscillatorSuite()` in `tests/ForgeTestsOscillator.cpp` keeps eight `Processor`s alive on one stack frame to compare their measurements. That sat a few kilobytes under the 1 MB stack a Windows console app gets, until the filter's per-voice state pushed it over. The plugin was never at risk, because a host allocates the `Processor`.
-- **Rhino.** Every workflow scenario shares its runner function's stack frame. A `StepGrid` carries about 200 KB of note caches. The third one declared across the scenarios crashed the runner partway through `Rendering.inc`, far from the scenario that added it (`native/src/tests/README.md`). In the week of 2026-10-05 a scenario that added two panels overflowed the 1 MB main thread twice more.
+- **Rhino.** Every workflow scenario shares its runner function's stack frame. A `StepGrid` carried about 200 KB of note caches inline, until commit `d872f0b` (2026-10-25) moved its float caches to the heap, when 128 rows would have made them 512 KB; the object itself is now tens of kilobytes. The third one declared across the scenarios crashed the runner partway through `Rendering.inc`, far from the scenario that added it (`native/src/tests/README.md`). In the week of 2026-10-05 a scenario that added two panels overflowed the 1 MB main thread twice more.
 
 The other cause so far is a **runaway recursion**, which gives the same code and the same empty output from every runner at once. On 2026-10-23 a bulk replace of `te::getAudioTracks(*edit)` by `audioTracks()` also rewrote the track cache's own rebuild into a call back into the cache, and every CTest case died with 0xC00000FD before it printed a line. When all runners fail alike right after a mechanical edit, read what it did to the function it was meant to leave alone ([Session, the model](session-model.md#reading-the-document)).
 

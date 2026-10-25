@@ -87,6 +87,13 @@ private:
     // The row height below which the keyboard stops naming octaves. The
     // velocity lane folds away rather than squeeze sixteen rows under it.
     static constexpr float octaveLabelRowHeight = 8.0f;
+    // The rows the editor opens with: two pixels taller than the names need,
+    // at the user's request, so a pitch reads as a lane rather than a line.
+    static constexpr float openingRowHeight = octaveLabelRowHeight + 2.0f;
+    // The note names stand in a column of their own left of the keys, which
+    // take the rest of labelWidth, as most piano rolls have it. A drum clip's
+    // rows are pads, named across the whole strip.
+    static constexpr float keyLabelWidth = 28.0f;
     struct CopiedNote { double step = 0.0; int pitch = 0; double length = 1.0; int velocity = 100; };
     // What a copy takes and a paste puts down: each note from the region's
     // start and from its lowest pitch, and how wide the region was, which is
@@ -448,9 +455,9 @@ private:
     juce::VBlankAttachment vblank;
     static constexpr float labelWidth = 54.0f, headerHeight = 26.0f, scrollHeight = 14.0f, footerHeight = 24.0f;
 public:
-    // Sixteen rows that keep their octave names, the velocity lane at its
-    // default height and a scrollbar: the shell opens the editor this tall.
-    static constexpr int openingHeight = static_cast<int>(headerHeight + Session::pitches * octaveLabelRowHeight
+    // Sixteen rows of the opening height, the velocity lane at its default
+    // height and a scrollbar: the shell opens the editor this tall.
+    static constexpr int openingHeight = static_cast<int>(headerHeight + Session::pitches * openingRowHeight
         + velocitylane::dividerHeight + velocitylane::defaultHeight + scrollHeight + footerHeight);
 };
 }

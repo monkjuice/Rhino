@@ -131,6 +131,28 @@
             }
             require(barFree, "Nothing is drawn over the right edge of the rows");
 
+            // The keyboard: narrow keys, and the names in a column of their
+            // own left of them, the octaves' Cs only however tall the rows.
+            grid.setSize(1000, 600);
+            require(grid.rowHeight() >= 15.0f, "Tall rows, which used to name every key");
+            shown = picture();
+            const auto rowY = [&grid, &rowFor](int pitch) { return grid.cell(0, rowFor(pitch)).getCentreY(); };
+            const auto namedAt = [&shown](float y)
+            {
+                int lit = 0;
+                for (int x = 0; x < juce::roundToInt(StepGrid::keyLabelWidth); ++x)
+                    for (int dy = -3; dy <= 3; ++dy)
+                        if (shown.getPixelAt(x, juce::roundToInt(y) + dy).getBrightness() > 0.3f) ++lit;
+                return lit;
+            };
+            require(namedAt(rowY(60)) > 0 && namedAt(rowY(62)) == 0 && namedAt(rowY(59)) == 0,
+                    "Only the octave's C is named, in the column left of the keys");
+            require(pixel(shown, {StepGrid::keyLabelWidth + 10.0f, rowY(62)}) == juce::Colour(0xffcdd3c8)
+                        && pixel(shown, {6.0f, rowY(62)}) == palette::sideSurface,
+                    "and the keys begin past the column");
+            grid.setSize(1000, 300);
+            shown = picture();
+
             // Snapped, a note's edge lands on a step's line; with Alt it follows
             // the pointer. Alt and a double-click put a note off the grid.
             const auto otherBounds = grid.boundsFor(*grid.noteForState(other));

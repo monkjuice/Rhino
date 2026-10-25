@@ -146,7 +146,8 @@
             grid.setSize(1000, 300);
             require(grid.velocityLaneHeight() == 64.0f && grid.velocityButton.getAlpha() == 1.0f,
                     "and with room it is its own height again");
-            require(StepGrid::openingHeight == 261, "The shell opens the editor tall enough for the lane and sixteen named rows");
+            require(StepGrid::openingHeight == 293,
+                    "The shell opens the editor tall enough for the lane and sixteen rows two pixels taller than names need");
             for (const auto zoom : {1.0, 2.0})
             {
                 grid.stepZoom = zoom;

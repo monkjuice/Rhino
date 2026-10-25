@@ -17,28 +17,35 @@ juce::Rectangle<float> StepGrid::repaintArea(const juce::Graphics& g) const
 // The lanes are one row per semitone, so the keys are drawn the way a piano
 // looks from directly above rather than in true piano geometry: a black key
 // keeps its own full-height row and is only narrower than its neighbours.
+//
+// The keys are narrow, and the names stand in a column of their own to their
+// left, the octaves' Cs only, so a run of keys reads at a glance; the key
+// under the pointer is named there too. Until 2026-10-25 the names were drawn
+// on keys twice as wide, every one of them once a row was 15 px tall. A drum
+// clip's rows are pads, and each is named across the whole strip.
 void StepGrid::paintKeyboard(juce::Graphics& g)
 {
     const auto rows = visiblePitchRows();
     const auto height = rowHeight();
-    const auto width = labelWidth - 4.0f;
     const auto drums = session.isPatternDrums();
+    const auto keysLeft = drums ? 0.0f : keyLabelWidth;
+    const auto width = labelWidth - 2.0f - keysLeft;
     const auto blackKeyWidth = std::floor(width * 0.6f);
-    // A name needs a row tall enough to hold it. Once the lanes are squeezed
-    // past that only the octaves stay named, and past that nothing does.
-    const auto labelEvery = height >= 15.0f ? 1 : height >= octaveLabelRowHeight ? 12 : 0;
+    // A name needs a row tall enough to hold it.
+    const auto named = height >= octaveLabelRowHeight;
     // Rounded to a whole pixel per em rather than following the row height
     // continuously: a lane height dragged between two integers would otherwise
-    // rasterise every key name at a fractional em, which is the one thing
-    // uiFont exists to avoid.
-    g.setFont(uiFont(std::round(std::clamp(height - 3.0f, 7.5f, 11.0f) * 0.825f)));
+    // rasterise every pad name at a fractional em, which is the one thing
+    // uiFont exists to avoid. The octaves' names keep one size.
+    g.setFont(drums ? uiFont(std::round(std::clamp(height - 3.0f, 7.5f, 11.0f) * 0.825f)) : uiFont(9.0f));
     const auto dirty = repaintArea(g);
     for (int row = 0; row < rows; ++row)
     {
         const auto pitch = lowestVisiblePitch + rows - 1 - row;
-        const auto key = juce::Rectangle<float>(0.0f, headerHeight + row * height, width, height);
-        // A key's name can stand a little taller than a squeezed row.
-        if (!dirty.intersects(key.expanded(0.0f, height)))
+        const auto top = headerHeight + static_cast<float>(row) * height;
+        const auto key = juce::Rectangle<float>(keysLeft, top, width, height);
+        // A name can stand a little taller than a squeezed row.
+        if (!dirty.intersects(juce::Rectangle<float>(0.0f, top, labelWidth, height).expanded(0.0f, height)))
             continue;
         const bool black = juce::MidiMessage::isMidiNoteBlack(pitch);
         if (drums)
@@ -49,7 +56,7 @@ void StepGrid::paintKeyboard(juce::Graphics& g)
             const bool namedDrum = padName.has_value();
             g.setColour(juce::Colour(namedDrum ? 0xff3a3325 : black ? 0xff15191e : 0xff30373e));
             g.fillRect(key.reduced(0.0f, 1.0f));
-            if (labelEvery > 0)
+            if (named)
             {
                 g.setColour(juce::Colour(namedDrum ? 0xffffc16a : 0xffbac2ca));
                 drawSnappedText(g, padName.value_or(pitchName(pitch)), key.toNearestInt(),
@@ -70,32 +77,38 @@ void StepGrid::paintKeyboard(juce::Graphics& g)
         // into a black one, which is what the eye expects from above.
         g.setColour(juce::Colour(0xff2b3138));
         g.fillRect(key.withTop(key.getBottom() - 1.0f));
-        if (labelEvery == 0 || black || (labelEvery == 12 && pitchClassOf(pitch) != 0))
+        if (!named || pitchClassOf(pitch) != 0)
             continue;
-        g.setColour(juce::Colour(pitchClassOf(pitch) == 0 ? 0xff2f353c : 0xff70767d));
         // Middle C is C3 here, matching the drum rows and Forge's keyboard —
         // see StepGridInternal.h for why they have to agree.
-        drawSnappedText(g, pitchName(pitch), key.reduced(3.0f, 0.0f).toNearestInt(), juce::Justification::centredRight);
+        g.setColour(palette::textDim);
+        drawSnappedText(g, pitchName(pitch), juce::Rectangle<float>(0.0f, top, keyLabelWidth - 3.0f, height).toNearestInt(),
+                        juce::Justification::centredRight);
     }
     // The key under the pointer, or of the note in hand, is lit in the note
     // colour and named however squeezed the rows are, so the pitch of any
-    // cell is read by pointing at it. Last, so that on a thin row the name can
-    // stand over the keys either side.
+    // cell is read by pointing at it: on the piano the key lights and its name
+    // stands in the names' column, on a drum clip the pad's row lights with
+    // its name. Last, so that on a thin row the name can stand over the rows
+    // either side. The column is as wide as the longest name, C#-2, needs.
     const auto hoveredRow = lowestVisiblePitch + rows - 1 - hoveredPitch;
     if (hoveredPitch < 0 || hoveredRow < 0 || hoveredRow >= rows)
         return;
-    const auto tag = juce::Rectangle<float>(0.0f, headerHeight + hoveredRow * height, width, height)
-                         .withSizeKeepingCentre(width, std::max(height, keyTagHeight));
-    if (!dirty.intersects(tag))
+    const auto hoveredKey = juce::Rectangle<float>(keysLeft, headerHeight + static_cast<float>(hoveredRow) * height, width, height);
+    const auto tag = (drums ? hoveredKey : hoveredKey.withX(0.0f).withWidth(keyLabelWidth - 1.0f))
+                         .withSizeKeepingCentre(drums ? width : keyLabelWidth - 1.0f, std::max(height, keyTagHeight));
+    if (!dirty.intersects(tag.getUnion(hoveredKey)))
         return;
     juce::Graphics::ScopedSaveState scope(g);
     g.reduceClipRegion(juce::Rectangle<float>(0.0f, headerHeight, labelWidth, rowAreaHeight()).getSmallestIntegerContainer());
     g.setColour(palette::noteBody);
+    if (!drums)
+        g.fillRect(hoveredKey);
     g.fillRect(tag);
     g.setColour(palette::keyHoverText);
     g.setFont(uiFontBold(9.0f));
-    drawSnappedText(g, rowName(hoveredPitch), tag.reduced(3.0f, 0.0f).toNearestInt(),
-                    juce::Justification::centredRight, true);
+    drawSnappedText(g, rowName(hoveredPitch), tag.reduced(2.0f, 0.0f).toNearestInt(),
+                    drums ? juce::Justification::centred : juce::Justification::centredRight, true);
 }
 
 juce::String StepGrid::rowName(int pitch) const

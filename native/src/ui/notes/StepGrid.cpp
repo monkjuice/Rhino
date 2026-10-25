@@ -14,7 +14,8 @@ StepGrid::StepGrid(Session& s) : session(s), vblank(this, [this] { updatePlayhea
     setWantsKeyboardFocus(true);
     setTitle("Pattern notes");
     setDescription("Step editor. Drag to select, double-click a cell for a note, right-click for options, "
-                   "B for draw mode. Drag the piano keys sideways to resize the lanes, up and down to scroll them. "
+                   "B for draw mode, Alt to move or resize off the grid. Click a piano key to select its notes; "
+                   "drag the keys sideways to resize the lanes, up and down to scroll them. "
                    "The velocity lane under the notes: drag a marker to change its note's velocity.");
     drawButton.setButtonText("Draw");
     drawButton.setTooltip("Draw mode (B). Drag to paint notes, and press a note to erase it; with it off, drag "
@@ -30,7 +31,8 @@ StepGrid::StepGrid(Session& s) : session(s), vblank(this, [this] { updatePlayhea
     };
     addAndMakeVisible(drawButton);
     loopButton.setButtonText(juce::String::charToString(0x27f3));
-    loopButton.setTooltip("Loop the entire edited clip (Ctrl+L). Drag on the ruler to draw a loop; right-click to clear it.");
+    loopButton.setTooltip("Loop the entire edited clip (Ctrl+L). Drag on the ruler to draw a loop; right-click the "
+                          "ruler to double the loop or clear it.");
     loopButton.setWantsKeyboardFocus(false);
     loopButton.onClick = [this]
     {
@@ -38,6 +40,19 @@ StepGrid::StepGrid(Session& s) : session(s), vblank(this, [this] { updatePlayhea
         grabKeyboardFocus();
     };
     addAndMakeVisible(loopButton);
+    // Live's Preview switch. Its state is the session's, a preference of the
+    // machine, and the change listener keeps the button showing it.
+    previewButton.setTooltip("Preview notes: hear a note through the clip's instrument as you draw, move or click "
+                             "it, or press a key.");
+    previewButton.setWantsKeyboardFocus(false);
+    previewButton.setColour(juce::TextButton::buttonColourId, palette::noteEditorButton);
+    previewButton.setColour(juce::TextButton::buttonOnColourId, palette::noteEditorButtonOn);
+    previewButton.onClick = [this]
+    {
+        session.setNoteAuditionEnabled(!session.noteAuditionEnabled());
+        grabKeyboardFocus();
+    };
+    addAndMakeVisible(previewButton);
     setUpVelocityLane();
     horizontalScroll.addListener(this);
     addAndMakeVisible(horizontalScroll);
@@ -47,6 +62,7 @@ StepGrid::StepGrid(Session& s) : session(s), vblank(this, [this] { updatePlayhea
 
 StepGrid::~StepGrid()
 {
+    session.stopNoteAudition();
     finishSubdivision();
     finishVelocityAdjustment();
     if (holdsVelocityGesture(gesture)) session.endNoteVelocityGesture();
@@ -237,7 +253,8 @@ void StepGrid::setDrawMode(bool shouldDraw)
         ? "Step editor, draw mode. Drag to paint notes, or velocities in the velocity lane; "
           "press a note to erase it, B to go back to selecting."
         : "Step editor. Drag to select, double-click a cell for a note, right-click for options, "
-          "B for draw mode. Drag the piano keys sideways to resize the lanes, up and down to scroll them. "
+          "B for draw mode, Alt to move or resize off the grid. Click a piano key to select its notes; "
+          "drag the keys sideways to resize the lanes, up and down to scroll them. "
           "The velocity lane under the notes: drag a marker to change its note's velocity.");
     repaint(footerBounds().getSmallestIntegerContainer());
 }
@@ -409,12 +426,12 @@ bool StepGrid::keyPressed(const juce::KeyPress& key)
         return copySelection();
     if (command && key.getKeyCode() == 'X')
         return cutSelection();
-    // Always the editor's own: here it divides notes, and a refusal must not
+    // Always the editor's own: here it chops notes, and a refusal must not
     // fall through to the shell, where Ctrl+E splits the arrangement's clip.
     if (command && key.getKeyCode() == 'E')
     {
         if (!subdivisionActive && !beginSubdivision())
-            report("Select a note, or notes on one pitch, to divide");
+            report("Select notes to chop");
         return true;
     }
     if (command && key.getKeyCode() == 'V')
@@ -530,6 +547,13 @@ void StepGrid::changeListenerCallback(juce::ChangeBroadcaster*)
         insertStep = -1.0;
         repaint();
     }
+    previewButton.setToggleState(session.noteAuditionEnabled(), juce::dontSendNotification);
+    if (const auto beat = stepsPerBeat(), bar = stepsPerBar(); beat != shownStepsPerBeat || bar != shownStepsPerBar)
+    {
+        shownStepsPerBeat = beat;
+        shownStepsPerBar = bar;
+        repaint();
+    }
     syncHorizontalScroll();
     const auto previousLowestPitch = lowestVisiblePitch;
     if (session.isPatternDrums())
@@ -592,6 +616,20 @@ void StepGrid::rebuildVisibleNotes()
     const auto changed = next ^ notes;
     const auto lengthsChanged = nextLengths != noteLengths;
     const auto offsetsChanged = nextStartOffsets != noteStartOffsets;
+    // A note whose velocity changed wears another shade, and nothing the
+    // cells compare noticed. Both lists keep the clip's order, so walking them
+    // side by side finds it, looking a few notes ahead past any added or taken
+    // away; a note not found is new, and its cell is repainted with the rest.
+    std::vector<juce::Rectangle<int>> recoloured;
+    for (size_t from = 0, at = 0; at < nextVisible.size(); ++at)
+        for (auto look = from; look < std::min(visibleNotes.size(), from + 8); ++look)
+            if (visibleNotes[look].state == nextVisible[at].state)
+            {
+                if (visibleNotes[look].velocity != nextVisible[at].velocity)
+                    recoloured.push_back(boundsFor(nextVisible[at]).getSmallestIntegerContainer());
+                from = look + 1;
+                break;
+            }
     notes = next;
     noteLengths = nextLengths;
     noteStartOffsets = nextStartOffsets;
@@ -631,6 +669,8 @@ void StepGrid::rebuildVisibleNotes()
         const auto index = row * Session::steps + step;
         if (changed.test(static_cast<size_t>(index))) repaint(cell(step, row).getSmallestIntegerContainer());
     }
+    for (const auto& area : recoloured)
+        repaint(area);
 }
 
 void StepGrid::updatePlayhead()
@@ -694,7 +734,10 @@ void StepGrid::scrollBarMoved(juce::ScrollBar* bar, double start)
 
 void StepGrid::resized()
 {
-    loopButton.setBounds(4, 2, static_cast<int>(labelWidth) - 8, static_cast<int>(headerHeight) - 4);
+    // The two switches over the keys, the loop's and the preview's.
+    const auto switchSide = static_cast<int>(headerHeight) - 4;
+    loopButton.setBounds(4, 2, switchSide, switchSide);
+    previewButton.setBounds(static_cast<int>(labelWidth) - 4 - switchSide, 2, switchSide, switchSide);
     // In the footer beside the velocity readout: it is a mode the pointer is
     // in, so it belongs where the editor's own state is reported rather than
     // in the shell's toolbar above it.

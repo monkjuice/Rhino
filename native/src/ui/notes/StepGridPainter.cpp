@@ -103,6 +103,89 @@ juce::String StepGrid::rowName(int pitch) const
     return session.isPatternDrums() ? session.patternNoteName(pitch).value_or(pitchName(pitch)) : pitchName(pitch);
 }
 
+// A beat is the signature's own note value - a quarter in 4/4, an eighth in
+// 6/8 - and the resolution is steps to a whole note, a power of two from 16,
+// so it always divides by a denominator of up to 16.
+int StepGrid::stepsPerBeat() const
+{
+    return std::max(1, session.editorStepResolution() / std::max(1, session.timeSignature().denominator));
+}
+
+int StepGrid::stepsPerBar() const
+{
+    return stepsPerBeat() * std::max(1, session.timeSignature().numerator);
+}
+
+// Bars and beats, counted from the clip's own start as Live's clip ruler is:
+// a bar's number at its line, its beats as bar.beat while each has room for
+// one, and a tick under every beat, taller at a bar. Bars are numbered every
+// one, two, four... as the zoom closes them up. Zoomed in until a beat is
+// wider than half the view, the steps between are named as bar.beat.step too,
+// so the ruler never stands empty. A label either edge would cut is left out,
+// because the tail of a number reads as another number.
+void StepGrid::paintRuler(juce::Graphics& g, juce::Rectangle<float> dirty)
+{
+    const auto steps = session.editorStepCount();
+    const auto perBeat = stepsPerBeat();
+    const auto beatsInBar = std::max(1, session.timeSignature().numerator);
+    const auto beatWidth = cellWidth() * static_cast<float>(perBeat);
+    auto barStride = 1;
+    while (beatWidth * static_cast<float>(beatsInBar * barStride) < 30.0f && barStride < 4096)
+        barStride *= 2;
+    const auto beatsNamed = beatWidth >= 36.0f;
+    const auto stepsNamed = perBeat > 1 && beatWidth > gridWidth() * 0.5f && cellWidth() >= 36.0f;
+    const auto stride = stepsNamed ? 1 : perBeat;
+    const auto firstStep = std::max(0, static_cast<int>(std::floor(stepScroll / stride)) * stride);
+    const auto lastStep = std::min(steps, static_cast<int>(std::ceil(stepScroll + visibleStepSpan())));
+    g.setFont(uiFont(10.0f));
+    for (int step = firstStep; step <= lastStep; step += stride)
+    {
+        // Rounded as the grid's own lines are, so a tick stands on its line.
+        const auto x = static_cast<float>(juce::roundToInt(xForStep(static_cast<double>(step))));
+        const auto beat = step / perBeat;
+        const auto bar = beat / beatsInBar;
+        const auto onBeat = step % perBeat == 0;
+        const auto onBar = onBeat && beat % beatsInBar == 0;
+        const auto tickTop = headerHeight - (onBar ? 8.0f : onBeat ? 4.0f : 2.0f);
+        if (dirty.intersects(juce::Rectangle<float>(x - 1.0f, tickTop, 3.0f, headerHeight - tickTop)))
+        {
+            g.setColour(onBar ? juce::Colour(0xff78818a) : palette::border);
+            g.fillRect(juce::Rectangle<float>(x, tickTop, 1.0f, headerHeight - tickTop));
+        }
+        if (onBar ? bar % barStride != 0 : onBeat && !beatsNamed)
+            continue;
+        const auto text = onBar ? juce::String(bar + 1)
+                        : juce::String(bar + 1) + "." + juce::String(beat % beatsInBar + 1)
+                              + (onBeat ? juce::String() : "." + juce::String(step % perBeat + 1));
+        const juce::Rectangle<float> label {x + 3.0f, 0.0f,
+                                            juce::GlyphArrangement::getStringWidth(g.getCurrentFont(), text) + 1.0f,
+                                            headerHeight - 6.0f};
+        if (label.getX() < labelWidth || label.getRight() > gridRight() || !dirty.intersects(label))
+            continue;
+        g.setColour(juce::Colour(onBar ? 0xffd4dacd : 0xff78818a));
+        drawSnappedText(g, text, label.toNearestInt(), juce::Justification::centredLeft);
+    }
+}
+
+// The loop button's box, as a TextButton paints it, with headphones in place
+// of its text: a band over two cups, in the colour the box's text would take.
+void StepGrid::PreviewButton::paintButton(juce::Graphics& g, bool highlighted, bool down)
+{
+    getLookAndFeel().drawButtonBackground(g, *this, findColour(getToggleState() ? buttonOnColourId : buttonColourId),
+                                          highlighted, down);
+    const auto box = getLocalBounds().toFloat();
+    const auto side = std::min(box.getWidth(), box.getHeight()) * 0.58f;
+    const auto area = box.withSizeKeepingCentre(side, side);
+    const auto centreX = area.getCentreX(), centreY = area.getY() + side * 0.55f, radius = side * 0.42f;
+    juce::Path band;
+    band.addCentredArc(centreX, centreY, radius, radius, 0.0f,
+                       -juce::MathConstants<float>::halfPi, juce::MathConstants<float>::halfPi, true);
+    g.setColour(findColour(getToggleState() ? textColourOnId : textColourOffId));
+    g.strokePath(band, juce::PathStrokeType(1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    for (const auto cup : {centreX - radius, centreX + radius})
+        g.fillRoundedRectangle({cup - side * 0.13f, centreY - side * 0.04f, side * 0.26f, side * 0.45f}, side * 0.08f);
+}
+
 void StepGrid::paint(juce::Graphics& g)
 {
     g.fillAll(palette::sideSurface);
@@ -142,24 +225,10 @@ void StepGrid::paint(juce::Graphics& g)
     g.reduceClipRegion(juce::Rectangle<float>(labelWidth, 0.0f, gridWidth(), timeAreaBottom())
                            .getSmallestIntegerContainer());
     if (dirty.getY() < headerHeight)
-        for (int step = 0; step < steps; ++step)
-        {
-            const auto headerCell = cellAt(step, 0).withY(0).withHeight(headerHeight);
-            if (headerCell.getRight() < labelWidth || headerCell.getX() > gridRight())
-                continue;
-            // A number is centred on its cell and may be wider than it.
-            if (!dirty.intersects(headerCell.expanded(16.0f, 0.0f)))
-                continue;
-            // One cut by either edge reads as another number - the tail of 21
-            // is a 1 beside the loop button - so a step whose number does not
-            // fit whole between the keys and the panel's edge goes without.
-            const auto number = juce::String(step + 1);
-            const auto half = juce::GlyphArrangement::getStringWidth(g.getCurrentFont(), number) * 0.5f;
-            if (headerCell.getCentreX() - half < labelWidth || headerCell.getCentreX() + half > gridRight())
-                continue;
-            g.setColour(juce::Colour(step % 4 == 0 ? 0xffd4dacd : 0xff78818a));
-            drawSnappedText(g, number, headerCell.toNearestInt(), juce::Justification::centred);
-        }
+        paintRuler(g, dirty);
+    const auto perBeat = stepsPerBeat();
+    const auto perBar = stepsPerBar();
+    const auto drums = session.isPatternDrums();
     const auto scaleIndex = scaleHighlight - 2;
     const bool scaleEnabled = !session.isPatternDrums() && scaleIndex >= 0;
     const auto root = scaleEnabled ? scaleIndex % 12 : 0;
@@ -177,12 +246,16 @@ void StepGrid::paint(juce::Graphics& g)
         const auto rowTop = headerHeight + row * laneHeight;
         if (rowTop + laneHeight < dirty.getY() || rowTop > dirty.getBottom())
             continue;
+        // A black key's row is darker, as the keys beside it are; a drum
+        // clip's rows are pads, not keys.
+        const auto blackKey = !drums && juce::MidiMessage::isMidiNoteBlack(pitch);
         for (int step = dirtyFirstStep; step <= dirtyLastStep; ++step)
         {
             const auto bounds = cellAt(step, row);
             if (!dirty.intersects(bounds)) continue;
-            const auto barColour = step / 4 % 2 == 0 ? juce::Colour(0xff46515a) : juce::Colour(0xff3b4650);
-            g.setColour(barColour);
+            const auto lit = step / perBeat % 2 == 0;
+            g.setColour(blackKey ? (lit ? palette::noteCellBlackKey : palette::noteCellBlackKeyAlternate)
+                                 : (lit ? palette::noteCell : palette::noteCellAlternate));
             g.fillRect(bounds);
             if (scaleEnabled && inScale)
             {
@@ -199,11 +272,16 @@ void StepGrid::paint(juce::Graphics& g)
                 continue;
 
             const auto selected = isSelected(note.state);
-            g.setColour(selected ? palette::noteSelected : palette::noteBody);
+            // Live's velocity shading: a quieter note sinks towards the cells,
+            // so a phrase's dynamics read without opening the lane; 127 is the
+            // full colour, and 1 still stands clear of the grid.
+            const auto quiet = 0.6f * (1.0f - static_cast<float>(std::clamp(note.velocity, 1, 127) - 1) / 126.0f);
+            const auto shade = [quiet](juce::Colour colour) { return colour.interpolatedWith(palette::noteCell, quiet); };
+            g.setColour(shade(selected ? palette::noteSelected : palette::noteBody));
             g.fillRect(bounds);
             g.setColour(selected ? juce::Colour(0x77482d15) : juce::Colour(0x55363f46));
             g.fillRect(bounds.withWidth(1.0f));
-            g.setColour(selected ? juce::Colour(0xffffe3a3) : juce::Colour(0xffe8f2aa));
+            g.setColour(shade(selected ? juce::Colour(0xffffe3a3) : juce::Colour(0xffe8f2aa)));
             g.fillRect(bounds.withX(bounds.getRight() - 2.0f).withWidth(2.0f));
             if (selected)
             {
@@ -254,7 +332,8 @@ void StepGrid::paint(juce::Graphics& g)
             if (step >= dirtyFirstStep && sustainedNotes == 0)
             {
                 const auto x = cellAt(step, 0).getX();
-                g.setColour(juce::Colour(step % 4 == 0 ? 0xff252d35 : 0xff303941));
+                g.setColour(step % perBar == 0 ? palette::noteBarLine
+                          : step % perBeat == 0 ? palette::noteBeatLine : palette::noteStepLine);
                 g.drawVerticalLine(juce::roundToInt(x), rowTop, rowBottom);
             }
         }
@@ -294,19 +373,6 @@ void StepGrid::paint(juce::Graphics& g)
             g.drawVerticalLine(juce::roundToInt(right), 0.0f, headerHeight);
         }
     }
-    if (!session.isPatternDrums())
-    {
-        const auto maxLowest = 127 - rows + 1;
-        const auto thumbHeight = std::max(18.0f, rowAreaHeight() * (static_cast<float>(rows) / 128.0f));
-        const auto thumbTravel = std::max(1.0f, rowAreaHeight() - thumbHeight);
-        const auto thumbY = headerHeight + (maxLowest - lowestVisiblePitch) / static_cast<float>(maxLowest) * thumbTravel;
-        const auto right = gridRight();
-        const juce::Rectangle<float> thumb(right - 5.0f, thumbY, 3.0f, thumbHeight);
-        g.setColour(juce::Colour(0x55313b44));
-        g.fillRect(juce::Rectangle<float>(right - 6.0f, headerHeight + 2.0f, 4.0f, rowAreaHeight() - 4.0f));
-        g.setColour(juce::Colour(0xaa8cc5d2));
-        g.fillRoundedRectangle(thumb, 1.5f);
-    }
     if (playhead >= 0)
     {
         g.setColour(playheadColour);
@@ -325,7 +391,7 @@ void StepGrid::paint(juce::Graphics& g)
         g.drawDashedLine(juce::Line<float>(selectionBox.getBottomRight(), selectionBox.getBottomLeft()), dash, 2, 1.0f);
         g.drawDashedLine(juce::Line<float>(selectionBox.getBottomLeft(), selectionBox.getTopLeft()), dash, 2, 1.0f);
     }
-    if (subdivisionActive && subdivisionCount >= 2)
+    if (subdivisionActive && subdivisionCount >= 1)
     {
         // Over the note, but never over the keys when the note starts off the
         // left of the view.

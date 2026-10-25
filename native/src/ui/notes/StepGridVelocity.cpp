@@ -262,7 +262,13 @@ void StepGrid::refreshNoteVelocities()
             rebuildVisibleNotes();
             break;
         }
-        visible.velocity = all[from++].velocity;
+        // The note's shade follows its velocity.
+        if (const auto velocity = all[from++].velocity; velocity != visible.velocity)
+        {
+            visible.velocity = velocity;
+            if (getHeight() > 0)
+                repaint(boundsFor(visible).getSmallestIntegerContainer());
+        }
     }
     if (getHeight() > 0)
         repaint(footerBounds().getSmallestIntegerContainer());

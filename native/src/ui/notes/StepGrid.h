@@ -53,14 +53,21 @@ private:
     friend int runUiProfile();
     enum class Gesture { none, draw, move, resize, select, keyboard, pan,
                          velocityDrag, velocityDraw, velocitySelect, laneResize };
-    // What the right button's menus offer, StepGridMenu.cpp. A divide into n
-    // parts is divideCommand + n.
+    // What the right button's menus offer, StepGridMenu.cpp. A chop into n
+    // equal parts is chopCommand + n, and chopCommand alone chops on the grid.
     enum MenuCommand
     {
         cutCommand = 1, copyCommand, pasteCommand, duplicateCommand, deleteCommand, fillCommand,
         selectAllCommand, addNoteCommand, drawModeCommand, velocityLaneCommand, loopCommand,
         octaveUpCommand, semitoneUpCommand, semitoneDownCommand, octaveDownCommand,
-        divideCommand = 100
+        clearLoopCommand, doubleLoopCommand,
+        chopCommand = 100
+    };
+    // The preview switch beside the loop button: the loop button's box with
+    // headphones drawn on it, which StepGridPainter.cpp paints.
+    struct PreviewButton final : juce::TextButton
+    {
+        void paintButton(juce::Graphics&, bool highlighted, bool down) override;
     };
     static constexpr bool isVelocityLaneGesture(Gesture g)
     {
@@ -134,6 +141,16 @@ private:
     void paintKeyboard(juce::Graphics&);
     // What a row is called: its pad's sound on a drum clip, else its note.
     juce::String rowName(int pitch) const;
+    // The ruler counts the clip in bars and beats of the song's time
+    // signature; a beat is the signature's note value, so many steps of the
+    // editor's resolution.
+    int stepsPerBeat() const;
+    int stepsPerBar() const;
+    void paintRuler(juce::Graphics&, juce::Rectangle<float> dirty);
+    // A click on a key: every note of that pitch in the clip, as in Live.
+    // Shift adds them to the selection and Ctrl takes them out again when
+    // they are all in it already.
+    void selectPitch(int pitch, const juce::ModifierKeys&);
     // What a paint has to cover, as the arrangement has it: the clip, or with
     // cullRepaints off the whole panel, for a test to compare against.
     juce::Rectangle<float> repaintArea(const juce::Graphics&) const;
@@ -155,6 +172,8 @@ private:
     // stays there.
     void panView(juce::Point<float> pointer);
     void moveDraggedNotesAt(juce::Point<float>);
+    // Alt and a double-click: a note where the pointer is, off the grid.
+    void addNoteOffTheGrid(double step, int pitch);
     // Pointer position to musical position and back. The marquee keeps its
     // anchor in these rather than in pixels: the view scrolls under a drag
     // that reaches the edge, and a pixel anchor would slide with it.
@@ -170,9 +189,13 @@ private:
     std::vector<juce::ValueTree> selectedStates() const;
     bool isSelected(const juce::ValueTree&) const;
     void setSelectedStates(std::vector<juce::ValueTree>);
+    // Ctrl+E, the chop: every selected note cut on the grid, and while Ctrl is
+    // held the mouse moving up adds a part to each and down takes one away,
+    // as Ctrl+Up and Ctrl+Down do. StepGridEditing.cpp.
     void finishSubdivision();
     bool beginSubdivision();
     bool adjustSubdivision(int delta);
+    void chopByMouse(float y);
     bool beginVelocityAdjustment();
     bool adjustVelocity(int delta);
     void finishVelocityAdjustment();
@@ -207,7 +230,10 @@ private:
     // Left and Right: the selected notes along the clip, by a step or with Alt
     // by a sixteenth of one.
     bool nudgeSelection(double steps);
-    bool divideSelection(int parts);
+    // The menu's chop, in one go: on the grid with parts 0, else that many
+    // equal parts a note.
+    bool chopSelection(int parts);
+    std::vector<Session::NoteChop> chopsOfSelection(std::vector<juce::ValueTree>& originals) const;
     void report(const juce::String&) const;
     juce::Result moveCurrentNotesBy(double stepDelta, int pitchDelta);
     juce::Result resizeCurrentNoteTo(int index);
@@ -226,6 +252,7 @@ private:
     void openContextMenu(juce::Point<float>);
     juce::PopupMenu noteMenu() const;
     juce::PopupMenu gridMenu() const;
+    juce::PopupMenu rulerMenu() const;
     void presentContextMenu(juce::PopupMenu);
     void performMenuCommand(int command);
     void beginMarquee(const juce::MouseEvent&);
@@ -303,6 +330,9 @@ private:
     // The clip the editor last showed. A line in one clip means nothing in
     // the next.
     te::EditItemID shownClip;
+    // The beat and bar the ruler and the shading were last drawn for: a new
+    // time signature moves every line and label without moving a note.
+    int shownStepsPerBeat = 0, shownStepsPerBar = 0;
     std::vector<MovingNote> movingNotes;
     Gesture gesture = Gesture::none;
     bool adding = true, showingDrumLabels = false, noteMoved = false, manualPitchScroll = false, movingGroup = false, resizingFromLeft = false;
@@ -333,6 +363,12 @@ private:
     int pitchRowCount = Session::pitches;
     juce::Point<float> keyboardDragPosition {-1.0f, -1.0f};
     double keyboardScrollRemainder = 0.0;
+    // The key a press on the keyboard landed on, which a click selects the
+    // notes of and the preview sounds while the button is down.
+    int keyboardPressPitch = -1;
+    // A move snaps the grabbed note to the grid unless Alt is held. The pointer
+    // events and the gesture clock must agree on it, as they do for a resize.
+    bool moveFreely = false;
     // Where a pan began. The anchors are absolute, as the arrangement's are,
     // so a pan that runs into the end of the clip and back returns exactly.
     juce::Point<float> panAnchor;
@@ -342,8 +378,18 @@ private:
     double resizingStartStep = 0.0, resizeTarget = 0.0;
     juce::ValueTree movingNoteState, resizingNoteState;
     bool subdivisionActive = false;
+    // The parts the first chopped note is in, which the badge over it shows.
     int subdivisionCount = 0;
     juce::Rectangle<float> subdivisionSourceBounds;
+    // The notes as they were when Ctrl+E went down, chopped again from these
+    // at every new count; the pieces the last chop made, which the next one
+    // replaces; and how many parts each note has gained or lost.
+    std::vector<Session::NoteChop> chopSources;
+    std::vector<juce::ValueTree> chopPieces;
+    int chopDelta = 0;
+    // Where the mouse was when it last changed the count, -1 until it moves.
+    float chopMouseY = -1.0f;
+    static constexpr float chopPixelsPerPart = 12.0f;
     bool velocityAdjustActive = false;
     std::vector<LaneNote> laneNotes;
     bool velocityLaneShown = true, dividerHot = false;
@@ -397,6 +443,7 @@ private:
     bool loopDragActive = false;
     double loopAnchorStep = 0.0, loopPreviewStartStep = 0.0, loopPreviewEndStep = 0.0;
     juce::TextButton loopButton, drawButton, velocityButton;
+    PreviewButton previewButton;
     juce::ScrollBar horizontalScroll {false};
     juce::VBlankAttachment vblank;
     static constexpr float labelWidth = 54.0f, headerHeight = 26.0f, scrollHeight = 14.0f, footerHeight = 24.0f;

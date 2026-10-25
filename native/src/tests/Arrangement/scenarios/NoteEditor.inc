@@ -61,9 +61,29 @@
         require(close(session.edit->getTransport().getLoopRange().getStart().inSeconds(), expectedLoopStart)
                 && close(session.edit->getTransport().getLoopRange().getEnd().inSeconds(), expectedLoopEnd),
                 "Dragging the note-editor ruler draws a snapped loop inside the clip");
-        selectionGrid.mouseDown(gridEvent(loopStartPoint, loopStartPoint, false,
-            juce::ModifierKeys(juce::ModifierKeys::rightButtonModifier)));
-        require(!session.hasManualLoopRange(), "Right-clicking the note-editor ruler clears its manual loop");
+        // A right-click on the ruler offers the loop's options, caught here
+        // before a menu reaches the screen, rather than clearing it on the spot.
+        {
+            std::function<void(int)> chooseRulerOption;
+            selectionGrid.presentMenu = [&chooseRulerOption](juce::PopupMenu, std::function<void(int)> choose)
+            {
+                chooseRulerOption = std::move(choose);
+            };
+            const auto rightOnRuler = gridEvent(loopStartPoint, loopStartPoint, false,
+                                                juce::ModifierKeys(juce::ModifierKeys::rightButtonModifier));
+            const auto loopBefore = session.loopRange();
+            selectionGrid.mouseDown(rightOnRuler);
+            require(chooseRulerOption != nullptr && session.hasManualLoopRange(),
+                    "Right-clicking the note-editor ruler offers the loop's options and keeps the loop");
+            chooseRulerOption(StepGrid::doubleLoopCommand);
+            require(close(session.loopRange().getStart().inSeconds(), loopBefore.getStart().inSeconds())
+                        && close(session.loopRange().getLength().inSeconds(), 2.0 * loopBefore.getLength().inSeconds()),
+                    "Double Loop Length keeps where the loop starts and makes it twice as long");
+            selectionGrid.mouseDown(rightOnRuler);
+            chooseRulerOption(StepGrid::clearLoopCommand);
+            require(!session.hasManualLoopRange(), "Clear Loop clears the note-editor ruler's manual loop");
+            selectionGrid.presentMenu = nullptr;
+        }
         const auto rowForPitch = [&selectionGrid](int pitch)
         {
             return selectionGrid.lowestVisiblePitch + selectionGrid.visiblePitchRows() - 1 - pitch;
@@ -127,17 +147,38 @@
         const auto* blockedNote = selectionGrid.noteForState(sustainedState);
         require(blockedNote != nullptr && close(blockedNote->start, 4.0) && close(blockedNote->length, 4.0),
                 "A blocked sustained note comes to rest against its neighbour at its full length");
+        // Snapping is on unless Alt is held: a drag of under half a step leaves
+        // a note on its step, Alt lets it settle between two columns, and a
+        // plain drag puts it back on a step's line.
+        const auto altPress = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::altModifier);
         const auto fineGrab = selectionGrid.cell(5, rowForPitch(49)).getCentre();
-        const auto fineTarget = fineGrab.translated(-selectionGrid.cellWidth() * 0.5f, 0.0f);
+        const auto shortTarget = fineGrab.translated(-selectionGrid.cellWidth() * 0.4f, 0.0f);
         selectionGrid.mouseDown(gridEvent(fineGrab, fineGrab, false));
-        selectionGrid.mouseDrag(gridEvent(fineGrab, fineTarget, true));
-        selectionGrid.mouseUp(gridEvent(fineGrab, fineTarget, true));
+        selectionGrid.mouseDrag(gridEvent(fineGrab, shortTarget, true));
+        selectionGrid.mouseUp(gridEvent(fineGrab, shortTarget, true));
+        selectionGrid.changeListenerCallback(nullptr);
+        require(selectionGrid.noteForState(sustainedState) != nullptr
+                    && close(selectionGrid.noteForState(sustainedState)->start, 4.0),
+                "A drag of under half a step leaves a snapped note on its step");
+        const auto fineTarget = fineGrab.translated(-selectionGrid.cellWidth() * 0.5f, 0.0f);
+        selectionGrid.mouseDown(gridEvent(fineGrab, fineGrab, false, altPress));
+        selectionGrid.mouseDrag(gridEvent(fineGrab, fineTarget, true, altPress));
+        selectionGrid.mouseUp(gridEvent(fineGrab, fineTarget, true, altPress));
         selectionGrid.changeListenerCallback(nullptr);
         const auto* unsnappedNote = selectionGrid.noteForState(sustainedState);
         require(unsnappedNote != nullptr && close(unsnappedNote->start, 3.5),
-                "A sustained note settles between two columns instead of snapping to one");
+                "With Alt a sustained note settles between two columns instead of snapping to one");
+        const auto offTheGrid = selectionGrid.boundsFor(*unsnappedNote).getCentre();
+        const auto pastHalfAStep = offTheGrid.translated(selectionGrid.cellWidth() * 0.6f, 0.0f);
+        selectionGrid.mouseDown(gridEvent(offTheGrid, offTheGrid, false));
+        selectionGrid.mouseDrag(gridEvent(offTheGrid, pastHalfAStep, true));
+        selectionGrid.mouseUp(gridEvent(offTheGrid, pastHalfAStep, true));
+        selectionGrid.changeListenerCallback(nullptr);
+        require(selectionGrid.noteForState(sustainedState) != nullptr
+                    && close(selectionGrid.noteForState(sustainedState)->start, 4.0),
+                "A plain drag of more than half a step lands a note between columns on a step's line");
         require(session.removeNotes({obstacleState}), "Can clear the obstacle again");
-        require(session.moveNotes({sustainedState}, -1.5, 0).wasOk(),
+        require(session.moveNotes({sustainedState}, -2.0, 0).wasOk(),
                 "Can return the sustained note to its original column");
         selectionGrid.changeListenerCallback(nullptr);
         require(session.hasNote(2, 49) && session.noteLengthSteps(2, 49) == 4,
@@ -150,21 +191,21 @@
         require(halfNote != nullptr, "The half-cell note appears in the editor");
         const auto halfNoteFrom = selectionGrid.boundsFor(*halfNote).getCentre();
         const auto halfNoteRight = halfNoteFrom.translated(selectionGrid.cellWidth() * 0.5f, 0.0f);
-        selectionGrid.mouseDown(gridEvent(halfNoteFrom, halfNoteFrom, false));
-        selectionGrid.mouseDrag(gridEvent(halfNoteFrom, halfNoteRight, true));
-        selectionGrid.mouseUp(gridEvent(halfNoteFrom, halfNoteRight, true));
+        selectionGrid.mouseDown(gridEvent(halfNoteFrom, halfNoteFrom, false, altPress));
+        selectionGrid.mouseDrag(gridEvent(halfNoteFrom, halfNoteRight, true, altPress));
+        selectionGrid.mouseUp(gridEvent(halfNoteFrom, halfNoteRight, true, altPress));
         selectionGrid.changeListenerCallback(nullptr);
         const auto* movedHalfNote = selectionGrid.noteForState(halfNoteState);
         require(movedHalfNote != nullptr && close(movedHalfNote->start, 6.5),
-                "A half-cell note can be dragged into the second half of the same cell");
+                "With Alt a half-cell note can be dragged into the second half of the same cell");
         const auto halfNoteLeft = halfNoteRight.translated(-selectionGrid.cellWidth() * 0.5f, 0.0f);
-        selectionGrid.mouseDown(gridEvent(halfNoteRight, halfNoteRight, false));
-        selectionGrid.mouseDrag(gridEvent(halfNoteRight, halfNoteLeft, true));
-        selectionGrid.mouseUp(gridEvent(halfNoteRight, halfNoteLeft, true));
+        selectionGrid.mouseDown(gridEvent(halfNoteRight, halfNoteRight, false, altPress));
+        selectionGrid.mouseDrag(gridEvent(halfNoteRight, halfNoteLeft, true, altPress));
+        selectionGrid.mouseUp(gridEvent(halfNoteRight, halfNoteLeft, true, altPress));
         selectionGrid.changeListenerCallback(nullptr);
         movedHalfNote = selectionGrid.noteForState(halfNoteState);
         require(movedHalfNote != nullptr && close(movedHalfNote->start, 6.0),
-                "A half-cell note can be dragged back from the second half of a cell");
+                "and dragged back from the second half of a cell");
         require(session.removeNotes({halfNoteState}), "Can remove the fractional drag fixture");
         selectionGrid.changeListenerCallback(nullptr);
         selectionGrid.selectedNotes.reset();

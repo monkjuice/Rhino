@@ -62,6 +62,38 @@ bool StepGrid::selectAllNotes()
     return !selectedNoteStates.empty();
 }
 
+// Every note of the pitch in the clip, not only the ones on screen. Plain, they
+// become the selection; Shift adds them, and Ctrl adds them or, when every one
+// is selected already, takes them back out - the grid's own modifiers, which
+// for Live's Shift-click on the piano ruler are Ctrl here.
+void StepGrid::selectPitch(int pitch, const juce::ModifierKeys& mods)
+{
+    std::vector<juce::ValueTree> row;
+    for (const auto& note : session.editorNotes())
+        if (note.pitch == pitch)
+            row.push_back(note.state);
+    if (!isMultiSelectModifier(mods))
+    {
+        setSelectedStates(std::move(row));
+        return;
+    }
+    auto current = selectedStates();
+    const auto selected = [&current](const juce::ValueTree& state)
+    {
+        return std::find(current.begin(), current.end(), state) != current.end();
+    };
+    if (isToggleSelectionModifier(mods) && !row.empty() && std::all_of(row.begin(), row.end(), selected))
+        std::erase_if(current, [&row](const juce::ValueTree& state)
+        {
+            return std::find(row.begin(), row.end(), state) != row.end();
+        });
+    else
+        for (const auto& state : row)
+            if (!selected(state))
+                current.push_back(state);
+    setSelectedStates(std::move(current));
+}
+
 // Session::moveNotes clamps the shift so no note leaves 0-127 and refuses a
 // lane that is already taken, so both edges are its business rather than ours.
 bool StepGrid::transposeSelection(int semitones)
@@ -434,13 +466,21 @@ bool StepGrid::nudgeSelection(double steps)
     return true;
 }
 
-// The menu's divide: the parts chosen outright, where Ctrl+E starts from the
-// note's length in steps and is adjusted from there.
-bool StepGrid::divideSelection(int parts)
+// The menu's chop, the parts chosen outright: on the grid, or so many a note.
+bool StepGrid::chopSelection(int parts)
 {
-    std::vector<juce::ValueTree> replacements;
-    session.beginNoteGesture("Divide note");
-    const auto result = session.redistributeNotes(selectedStates(), parts, replacements);
+    std::vector<juce::ValueTree> originals;
+    auto chops = chopsOfSelection(originals);
+    if (chops.empty())
+    {
+        report("Select notes to chop");
+        return false;
+    }
+    for (auto& chop : chops)
+        chop.parts = parts;
+    std::vector<juce::ValueTree> pieces;
+    session.beginNoteGesture("Chop notes");
+    const auto result = session.chopNotes(originals, chops, pieces);
     session.endNoteGesture();
     if (result.failed())
     {
@@ -448,8 +488,25 @@ bool StepGrid::divideSelection(int parts)
         return false;
     }
     rebuildVisibleNotes();
-    setSelectedStates(std::move(replacements));
+    setSelectedStates(std::move(pieces));
     return true;
+}
+
+// The selected notes as a chop takes them: where the editor shows each, with
+// its pitch, velocity and colour, beside the states it replaces.
+std::vector<Session::NoteChop> StepGrid::chopsOfSelection(std::vector<juce::ValueTree>& originals) const
+{
+    std::vector<Session::NoteChop> chops;
+    const auto all = session.editorNotes();
+    for (const auto& state : selectedStates())
+        for (const auto& note : all)
+            if (note.state == state)
+            {
+                chops.push_back({note.startSteps, note.lengthSteps, note.pitch, note.velocity, note.colour, 0});
+                originals.push_back(state);
+                break;
+            }
+    return chops;
 }
 
 bool StepGrid::deleteSelection()
@@ -465,60 +522,105 @@ bool StepGrid::deleteSelection()
     return true;
 }
 
+// Ctrl+E, Live's Chop Note(s) on Grid: every selected note, on any pitch, cut
+// at the step lines inside it, as one undo step that stays open while Ctrl is
+// held. Until 2026-10-25 it spread one pitch's span into equal retriggers, and
+// Ctrl with the wheel opened it too, which chopped the selection for anyone
+// reaching for the zoom; the wheel no longer touches it.
 bool StepGrid::beginSubdivision()
 {
-    const auto states = selectedStates();
-    if (states.empty()) return false;
-    auto start = std::numeric_limits<double>::max();
-    auto end = 0.0;
-    auto pitch = -1;
-    for (const auto& state : states)
-        if (const auto* note = noteForState(state))
-        {
-            if (pitch >= 0 && pitch != note->pitch) return false;
-            pitch = note->pitch;
-            start = std::min(start, note->start);
-            end = std::max(end, note->start + note->length);
-        }
-    if (pitch < 0 || end <= start + 0.0001) return false;
-    subdivisionCount = juce::jlimit(2, 32, juce::roundToInt(end - start));
-    const auto row = lowestVisiblePitch + visiblePitchRows() - 1 - pitch;
-    subdivisionSourceBounds = cell(static_cast<int>(std::floor(start)), row);
-    subdivisionSourceBounds.translate(static_cast<float>(start - std::floor(start)) * cellWidth(), 0.0f);
-    subdivisionSourceBounds.setWidth(static_cast<float>(end - start) * cellWidth());
-    session.beginNoteGesture("Divide note");
+    std::vector<juce::ValueTree> originals;
+    chopSources = chopsOfSelection(originals);
+    if (chopSources.empty())
+        return false;
+    // The badge stands over the first note.
+    const auto& first = chopSources.front();
+    const auto row = lowestVisiblePitch + visiblePitchRows() - 1 - first.pitch;
+    subdivisionSourceBounds = {xForStep(first.startSteps), headerHeight + static_cast<float>(row) * rowHeight(),
+                               static_cast<float>(first.lengthSteps) * cellWidth(), rowHeight()};
+    session.beginNoteGesture("Chop notes");
     subdivisionActive = true;
-    std::vector<juce::ValueTree> replacements;
-    if (session.redistributeNotes(states, subdivisionCount, replacements).failed())
+    chopDelta = 0;
+    chopMouseY = -1.0f;
+    std::vector<juce::ValueTree> pieces;
+    if (session.chopNotes(originals, chopSources, pieces).failed())
     {
         finishSubdivision();
         return false;
     }
+    chopPieces = pieces;
+    subdivisionCount = Session::gridChopParts(first.startSteps, first.lengthSteps);
     rebuildVisibleNotes();
-    setSelectedStates(std::move(replacements));
+    setSelectedStates(std::move(pieces));
     startTimerHz(30);
     repaint();
     return true;
 }
 
+// Every note gains or loses parts together, none going below one or past 32,
+// chopped afresh from the notes as they were. At a count of the grid's own the
+// cut is at the step lines; any other count cuts each note into equal parts.
+// A change no note can follow is not taken, so the way back down is never
+// longer than the way up.
 bool StepGrid::adjustSubdivision(int delta)
 {
     if (!subdivisionActive || delta == 0) return false;
-    const auto next = juce::jlimit(2, 32, subdivisionCount + delta);
-    if (next == subdivisionCount) return true;
-    std::vector<juce::ValueTree> replacements;
-    if (session.redistributeNotes(selectedNoteStates, next, replacements).failed()) return false;
-    subdivisionCount = next;
+    const auto partsAt = [](const Session::NoteChop& chop, int change)
+    {
+        return change == 0 ? 0 : std::clamp(Session::gridChopParts(chop.startSteps, chop.lengthSteps) + change, 1, 32);
+    };
+    const auto countOf = [](const Session::NoteChop& chop, int parts)
+    {
+        return parts == 0 ? Session::gridChopParts(chop.startSteps, chop.lengthSteps) : parts;
+    };
+    const auto next = chopDelta + delta;
+    auto chops = chopSources;
+    auto changes = false;
+    for (auto& chop : chops)
+    {
+        chop.parts = partsAt(chop, next);
+        changes = changes || countOf(chop, chop.parts) != countOf(chop, partsAt(chop, chopDelta));
+    }
+    if (!changes)
+        return true;
+    std::vector<juce::ValueTree> pieces;
+    if (session.chopNotes(chopPieces, chops, pieces).failed())
+        return false;
+    chopDelta = next;
+    chopPieces = pieces;
+    subdivisionCount = countOf(chops.front(), chops.front().parts);
     rebuildVisibleNotes();
-    setSelectedStates(std::move(replacements));
+    setSelectedStates(std::move(pieces));
     repaint();
     return true;
+}
+
+// Ctrl+E held and the mouse moving up adds a part to every chopped note, down
+// takes one away, a part every chopPixelsPerPart: Live chops by dragging, and
+// the user asked for it without the button. The first move sets where it
+// counts from.
+void StepGrid::chopByMouse(float y)
+{
+    if (!subdivisionActive)
+        return;
+    if (chopMouseY < 0.0f)
+    {
+        chopMouseY = y;
+        return;
+    }
+    const auto parts = static_cast<int>((chopMouseY - y) / chopPixelsPerPart);
+    if (parts == 0)
+        return;
+    chopMouseY -= static_cast<float>(parts) * chopPixelsPerPart;
+    adjustSubdivision(parts);
 }
 
 void StepGrid::finishSubdivision()
 {
     if (!subdivisionActive) return;
     subdivisionActive = false;
+    chopSources.clear();
+    chopPieces.clear();
     session.endNoteGesture();
     // Only with nothing else on the clock: a stroke or a marquee carries on
     // autoscrolling after a modal tool ends.

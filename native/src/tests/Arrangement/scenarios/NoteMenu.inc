@@ -81,7 +81,7 @@
                     "Right-clicking a note opens a menu and erases nothing");
             require(selectionIs({held}), "and takes the note it landed on");
             require(offers("C3") && offers("Cut") && offers("Copy") && offers("Duplicate") && offers("Delete")
-                        && offers("Divide") && offers("2 Parts") && offers("Up an Octave") && offers("Fill to Clip End"),
+                        && offers("Chop") && offers("On Grid") && offers("2 Parts") && offers("Up an Octave") && offers("Fill to Clip End"),
                     "The note's menu is named for its note and offers the note commands");
             require(offers("Paste", false), "and no paste before anything was copied");
             grid.setDrawMode(true);
@@ -95,7 +95,7 @@
             grid.setSelectedStates({held, high});
             rightClickAt(on(high));
             require(selectionIs({held, high}) && offers("2 NOTES"), "Right-clicking inside a selection keeps it");
-            require(offers("Divide", false), "and notes on two pitches cannot be divided");
+            require(offers("Chop"), "and notes on two pitches can be chopped, each where it stands");
             choose(StepGrid::octaveUpCommand);
             require(pitchOf(held) == 72 && pitchOf(high) == 76, "Transposing from the menu moves the whole selection");
             undoOnce();
@@ -108,10 +108,10 @@
             require(count() == 3, "and one undo brings it back");
 
             rightClickAt(on(held));
-            require(offers("Divide") && selectionIs({held}), "One note can be divided");
-            choose(StepGrid::divideCommand + 4);
+            require(offers("Chop") && selectionIs({held}), "One note can be chopped");
+            choose(StepGrid::chopCommand + 4);
             require(count() == 6 && grid.selectedStates().size() == 4 && stack.hasNote(0, 60) && stack.hasNote(3, 60),
-                    "Divide into four parts makes four selected notes in the note's place");
+                    "Chop into four parts makes four selected notes in the note's place");
             undoOnce();
             require(count() == 3 && pitchOf(held) == 60, "and one undo puts the note back whole");
 
@@ -148,14 +148,14 @@
             rightClickAt({StepGrid::labelWidth * 0.5f, grid.cell(0, rowFor(60)).getCentreY()});
             require(menus == menusBefore, "The keys open no menu");
 
-            // Ctrl+E is the editor's even when it cannot divide anything: a
+            // Ctrl+E is the editor's even when it cannot chop anything: a
             // refusal fell through to the shell, where Ctrl+E splits the
             // arrangement's clip at its line.
             grid.clearSelection();
             require(grid.keyPressed(juce::KeyPress('E', juce::ModifierKeys::commandModifier, 0)) && count() == 3,
                     "Ctrl+E with nothing selected is answered by the note editor, not passed on");
 
-            // Ctrl and the wheel zoom; they opened a divide of their own, which
+            // Ctrl and the wheel zoom; they opened a chop of their own, which
             // chopped the selection for anyone reaching for the zoom.
             grid.setSelectedStates({held});
             const auto zoomBefore = grid.stepZoom;
@@ -164,7 +164,7 @@
             grid.mouseWheelMove(eventAt(grid.cell(2, rowFor(60)).getCentre(), juce::ModifierKeys(juce::ModifierKeys::commandModifier)),
                                 notch);
             require(count() == 3 && !grid.subdivisionActive && grid.stepZoom > zoomBefore,
-                    "Ctrl and the wheel zoom in and divide nothing");
+                    "Ctrl and the wheel zoom in and chop nothing");
             // A sideways wheel travels along the clip rather than through the
             // pitches.
             juce::MouseWheelDetails sideways;

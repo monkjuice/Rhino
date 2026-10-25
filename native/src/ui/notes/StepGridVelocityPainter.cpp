@@ -57,13 +57,14 @@ void StepGrid::paintVelocityLane(juce::Graphics& g, juce::Rectangle<float> dirty
         juce::Graphics::ScopedSaveState scope(g);
         g.reduceClipRegion(juce::Rectangle<float>(labelWidth, lane.getY(), right - labelWidth, lane.getHeight())
                                .getSmallestIntegerContainer());
-        // The bars shade as the cells above them do, a little darker.
+        // The beats shade as the cells above them do, a little darker.
+        const auto perBeat = stepsPerBeat();
         for (int step = firstStep; step <= lastStep; ++step)
         {
             const juce::Rectangle<float> column {xFor(step), lane.getY(), stepWidth, lane.getHeight()};
             if (!dirty.intersects(column))
                 continue;
-            g.setColour(step / 4 % 2 == 0 ? palette::velocityLane : palette::velocityLaneAlternate);
+            g.setColour(step / perBeat % 2 == 0 ? palette::velocityLane : palette::velocityLaneAlternate);
             g.fillRect(column);
         }
         for (int step = firstStep; step <= lastStep + 1; ++step)
@@ -71,7 +72,7 @@ void StepGrid::paintVelocityLane(juce::Graphics& g, juce::Rectangle<float> dirty
             const auto x = juce::roundToInt(xFor(step));
             if (x < dirty.getX() - 1.0f || x > dirty.getRight() + 1.0f)
                 continue;
-            g.setColour(step % 4 == 0 ? palette::velocityLaneBarRule : palette::velocityLaneStepRule);
+            g.setColour(step % perBeat == 0 ? palette::velocityLaneBarRule : palette::velocityLaneStepRule);
             g.drawVerticalLine(x, lane.getY(), lane.getBottom());
         }
         g.setColour(palette::velocityGuide);

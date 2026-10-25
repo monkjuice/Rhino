@@ -266,6 +266,19 @@ public:
     bool isPreviewing() const;
     bool previewEnabled() const { return browserPreview; }
     void setPreviewEnabled(bool enabled);
+    // The note editor's preview, Live's Preview switch: with it on, a note the
+    // editor draws, carries or clicks, or a key pressed on its keyboard, is
+    // heard through the open clip's track, armed or not. One note at a time;
+    // a preference of the machine, off until switched on.
+    // SessionNoteAudition.cpp.
+    bool noteAuditionEnabled() const { return noteAudition; }
+    void setNoteAuditionEnabled(bool enabled);
+    // Ends the note sounding before it starts this one. Does nothing with the
+    // preview off.
+    void startNoteAudition(int pitch, int velocity);
+    void stopNoteAudition();
+    // The pitch sounding, or -1.
+    int auditionedPitch() const { return auditionPitch; }
     void togglePlayback();
     void stop();
     // The way back to the top of the song without first clicking there. It
@@ -955,6 +968,24 @@ public:
     juce::Result moveNotes(const std::vector<juce::ValueTree>&, double stepDelta, int pitchDelta);
     juce::Result redistributeNotes(const std::vector<juce::ValueTree>&, int divisions,
                                    std::vector<juce::ValueTree>& replacementStates);
+    // Chopping, Ctrl+E in the note editor: each note cut where it stands, on
+    // any pitch, Live's Chop Note(s) on Grid. A chop of parts 0 cuts a note at
+    // every step line inside it; parts n cuts it into n equal parts. The notes
+    // named in `current` go first - the originals, or the pieces of the chop
+    // before - so a chop adjusted again and again is one edit, in one undo
+    // step when the caller brackets it. Positions are the editor's, as
+    // editorNotes reports them, so a note shown from the clip's start is cut
+    // from there. Announced once. SessionNoteChop.cpp.
+    struct NoteChop
+    {
+        double startSteps = 0.0, lengthSteps = 1.0;
+        int pitch = 0, velocity = 100, colour = 0, parts = 0;
+    };
+    juce::Result chopNotes(const std::vector<juce::ValueTree>& current, const std::vector<NoteChop>& chops,
+                           std::vector<juce::ValueTree>& pieces);
+    // How many pieces a chop on the grid cuts a note into: one more than the
+    // step lines inside it.
+    static int gridChopParts(double startSteps, double lengthSteps);
     // movingWith names the other clips travelling in the same gesture, so a
     // clip carried onto ground another selected clip is still vacating cannot
     // delete it on the way past.
@@ -1846,6 +1877,8 @@ private:
     void detachCountIn();
     // SessionPreview.cpp
     static bool readPreviewPreference();
+    // SessionNoteAudition.cpp
+    static bool readNoteAuditionPreference();
     void ensurePreviewAttached();
     void releasePreview();
     // Plays a sound through the preview, in place of whatever it was playing.
@@ -2020,6 +2053,10 @@ private:
     std::unique_ptr<juce::PositionableAudioSource> previewSource;
     bool browserPreview = readPreviewPreference();
     bool previewAttached = false;
+    // The note editor's preview, and the note it is sounding on which track.
+    bool noteAudition = readNoteAuditionPreference();
+    int auditionPitch = -1;
+    te::EditItemID auditionTrack;
     // Built on first use and, like the preview, detached before the device it
     // is registered with goes.
     std::unique_ptr<CountInClick> countIn;

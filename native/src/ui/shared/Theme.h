@@ -53,6 +53,15 @@ inline const juce::Colour barGrid          {0xff121212};  // bars, and the rules
 // is a darker ground than the cells so it never reads as one more pitch row.
 inline const juce::Colour noteBody             {0xffc6d58c};  // a note, and its velocity marker
 inline const juce::Colour noteSelected         {0xffe9a84a};  // a selected note, and its marker
+// The cells shade by beat, and a black key's row is a step darker than either
+// shade of a white key's, so a pitch can be read across the whole grid.
+inline const juce::Colour noteCell             {0xff46515a};  // a white key's row, on the beats that shade lighter
+inline const juce::Colour noteCellAlternate    {0xff3f4a53};  // and on the beats between them
+inline const juce::Colour noteCellBlackKey     {0xff38424b};  // a black key's row
+inline const juce::Colour noteCellBlackKeyAlternate {0xff323c45};
+inline const juce::Colour noteBarLine          {0xff1b2127};  // the grid's line at a bar
+inline const juce::Colour noteBeatLine         {0xff252d35};  // at a beat
+inline const juce::Colour noteStepLine         {0xff303941};  // at any other step
 inline const juce::Colour noteEditorButton     {0xff30373e};  // the editor's own toggles, off
 inline const juce::Colour noteEditorButtonOn   {0xff397f94};  // and on
 inline const juce::Colour keyHoverText         {0xff1d2226};  // a key's name, lit in noteBody under the pointer

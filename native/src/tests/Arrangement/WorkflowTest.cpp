@@ -199,6 +199,8 @@ int runArrangementTest()
        #include "scenarios/NoteMenu.inc"
         scenario("note keys: the keyboard stays clear of the grid and names the key under the pointer");
        #include "scenarios/NoteKeys.inc"
+        scenario("note grid: bars and beats, black keys, velocity shades, snapping, key clicks and the preview");
+       #include "scenarios/NoteGrid.inc"
         // Each builds a document of its own, so none leans on or disturbs the
         // shared clip.
         scenario("velocity lane: markers, drags and keys");

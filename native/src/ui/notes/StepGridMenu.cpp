@@ -6,7 +6,8 @@
 // would - a note that is not selected becomes the selection, one inside the
 // selection keeps it - and opens a menu of what can be done with that: the
 // notes' commands over a note or its marker in the velocity lane, the grid's
-// over empty cells or empty lane. Nothing is edited until an item is chosen.
+// over empty cells or empty lane, the loop's over the ruler. Nothing is edited
+// until an item is chosen.
 // It replaced an eraser, which cost a note to every right-click meant as a
 // question. Each item is a command the editor already has, labelled with the
 // key it already answers to, so the menu is also where those keys are learnt.
@@ -59,13 +60,9 @@ juce::PopupMenu StepGrid::noteMenu() const
 {
     const auto states = selectedStates();
     auto pitch = -1;
-    auto onePitch = !states.empty();
     for (const auto& state : states)
         if (const auto* note = laneNoteFor(state))
-        {
-            onePitch = onePitch && (pitch < 0 || note->pitch == pitch);
             pitch = note->pitch;
-        }
     juce::PopupMenu menu;
     menu.addSectionHeader(states.size() == 1 && pitch >= 0 ? rowName(pitch).toUpperCase()
                                                            : juce::String(static_cast<int>(states.size())) + " NOTES");
@@ -81,11 +78,13 @@ juce::PopupMenu StepGrid::noteMenu() const
     transpose.addItem(semitoneDownCommand, "Down a Semitone       Down");
     transpose.addItem(octaveDownCommand, "Down an Octave       Shift+Down");
     menu.addSubMenu("Transpose", transpose);
-    juce::PopupMenu divide;
+    // Each note where it stands, on any pitch: on the grid, as Ctrl+E chops,
+    // or into so many equal parts.
+    juce::PopupMenu chop;
+    chop.addItem(chopCommand, "On Grid       Ctrl+E");
     for (const auto parts : {2, 3, 4, 6, 8})
-        divide.addItem(divideCommand + parts, juce::String(parts) + " Parts");
-    // One pitch at a time, as Ctrl+E divides.
-    menu.addSubMenu("Divide       Ctrl+E", divide, onePitch);
+        chop.addItem(chopCommand + parts, juce::String(parts) + " Parts");
+    menu.addSubMenu("Chop", chop, !states.empty());
     menu.addItem(fillCommand, "Fill to Clip End       F");
     menu.addSeparator();
     menu.addItem(selectAllCommand, "Select All       Ctrl+A");
@@ -113,6 +112,19 @@ juce::PopupMenu StepGrid::gridMenu() const
     return menu;
 }
 
+// The ruler's: the loop's options rather than the loop's removal, which a
+// right-click there used to do on the spot.
+juce::PopupMenu StepGrid::rulerMenu() const
+{
+    const auto looping = session.hasManualLoopRange();
+    juce::PopupMenu menu;
+    menu.addSectionHeader("LOOP");
+    menu.addItem(loopCommand, "Loop Clip       Ctrl+L");
+    menu.addItem(doubleLoopCommand, "Double Loop Length", looping);
+    menu.addItem(clearLoopCommand, "Clear Loop", looping);
+    return menu;
+}
+
 void StepGrid::presentContextMenu(juce::PopupMenu menu)
 {
     std::function<void(int)> chosen = [safe = juce::Component::SafePointer<StepGrid>(this)](int command)
@@ -132,9 +144,9 @@ void StepGrid::presentContextMenu(juce::PopupMenu menu)
 // here can land inside a gesture's undo step.
 void StepGrid::performMenuCommand(int command)
 {
-    if (command > divideCommand && command <= divideCommand + 32)
+    if (command >= chopCommand && command <= chopCommand + 32)
     {
-        divideSelection(command - divideCommand);
+        chopSelection(command - chopCommand);
         return;
     }
     switch (command)
@@ -148,7 +160,20 @@ void StepGrid::performMenuCommand(int command)
         case selectAllCommand:    selectAllNotes(); break;
         case drawModeCommand:     toggleDrawMode(); break;
         case velocityLaneCommand: setVelocityLaneShown(!velocityLaneShown); break;
-        case loopCommand:         loopEditedClip(); break;
+        case loopCommand:         loopEditedClip(); repaint(); break;
+        case clearLoopCommand:    session.clearManualLoopRange(); repaint(); break;
+        case doubleLoopCommand:
+        {
+            // From where it starts, twice as long, past the clip if need be:
+            // the loop is the song's, and runs on into the next clip.
+            const auto range = session.loopRange();
+            const auto start = range.getStart().inSeconds();
+            if (const auto result = session.setLoopRange(start, start + 2.0 * range.getLength().inSeconds());
+                result.failed())
+                report(result.getErrorMessage());
+            repaint();
+            break;
+        }
         case octaveUpCommand:     transposeSelection(12); break;
         case semitoneUpCommand:   transposeSelection(1); break;
         case semitoneDownCommand: transposeSelection(-1); break;

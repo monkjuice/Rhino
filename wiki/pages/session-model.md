@@ -1,10 +1,10 @@
 ---
 title: Session, the model
 type: component
-summary: The message-thread facade over one Tracktion engine and edit, the one door the views and the shell reach the engine through, one class split across 37 files, where every rule and refusal lives.
+summary: The message-thread facade over one Tracktion engine and edit, the one door the views and the shell reach the engine through, one class split across 39 files, where every rule and refusal lives.
 tags: [rhino, model, tracktion, undo]
 sources: []
-updated: 2026-10-23
+updated: 2026-10-25
 ---
 
 # Session, the model
@@ -13,14 +13,14 @@ updated: 2026-10-23
 
 ## One class, many files
 
-`Session` is one class defined across 37 translation units, all in `native/src/model/` (the `src/model/Session*.cpp` lines under `# Session` in `native/CMakeLists.txt`, as of 2026-10-23; [The source tree mirrors the layers](source-tree-mirrors-the-layers.md)), split by caller as [Keeping files small](keeping-files-small.md) describes:
+`Session` is one class defined across 39 translation units, all in `native/src/model/` (the `src/model/Session*.cpp` lines under `# Session` in `native/CMakeLists.txt`, as of 2026-10-25; [The source tree mirrors the layers](source-tree-mirrors-the-layers.md)), split by caller as [Keeping files small](keeping-files-small.md) describes:
 
 - `Session.cpp`: construction, the starter edit, `restoreProject`, `projectSnapshot`, undo and redo, `markModified`, the track cache and the relays of the engine's own announcements (`watchEditTree`).
-- Notes and patterns: `SessionNotes`, `SessionPatternPresets`, `SessionPatches`.
+- Notes and patterns: `SessionNotes`, `SessionNoteChop` (since commit `f2ae477`: `chopNotes`, which removes the notes it is given and cuts each `NoteChop` on its own pitch, at the step lines inside it or into equal parts, announced once and opening no transaction of its own, so the note editor's bracket makes a chop adjusted many times one undo step; `gridChopParts`; [Note editor](note-editor.md#gestures)), `SessionPatternPresets`, `SessionPatches`.
 - Tracks and mixing: `SessionTracks`, `SessionTrackClipboard` (copying, pasting, duplicating and removing whole tracks; [Track clipboard](track-clipboard.md)), `SessionGroups`, `SessionMixer`, `SessionMeters` (`takeOutputLevels`, what the card meters read; [Track level meters](level-meters.md)), `SessionAutomation`, `SessionTransport`.
 - Devices: `SessionDevices`, `SessionDevicePresets`, `SessionDrums` (the [Drum Rack](drum-rack.md)'s kits, pads, banks, slices and drops), `SessionSidechain`, `SessionExternalPlugins`, `SessionDeviceMacros` (the rack's curated knobs, 4OSC only; `DeviceMacros.cpp` until 2026-10-13), `SessionMappedParameters` (an external plugin's chosen knobs and mapping more from its window; [Mapped parameters](mapped-parameters.md)).
 - Clips: `SessionClips`, `SessionRegion` (copy, clear and paste of a region), `SessionRegionMove` (`moveClipRegion`, a selection carried by a clip header or nudged; split off on 2026-10-23 when it took `SessionRegion.cpp` to 630 lines; [Region editing](region-editing.md#moving-a-selection)), `SessionAudioClips`, `SessionWarp`, `SessionMerge`, `SessionBounce` ([Bounce to New Track](bounce-to-new-track.md)), `SessionExport` (Export WAV, stepped like the bounce; [Project files](project-files.md#wav-export)), `SessionSamples`, `SessionSlots`.
-- Input and audition: `SessionRecording`, `SessionMidiInput`, `SessionAudioInput`, `SessionPreview`, `SessionControllers` (the ports a controller Rhino drives itself reserves, the Push's own input, `sendControllerMidi` and the controller's per-machine settings; [Ableton Push 1](ableton-push.md)), `SessionKeyboards` (a keyboard port's velocity curve, the port Rhino reads to apply it and its stand-in device; [Keyboard velocity curves](keyboard-velocity-curves.md)).
+- Input and audition: `SessionRecording`, `SessionMidiInput`, `SessionAudioInput`, `SessionPreview`, `SessionNoteAudition` (since commit `f2ae477`, the note editor's preview: one note at a time injected into the open clip's track on the message thread, its note-off sent to the same track by id; [Note editor](note-editor.md#preview)), `SessionControllers` (the ports a controller Rhino drives itself reserves, the Push's own input, `sendControllerMidi` and the controller's per-machine settings; [Ableton Push 1](ableton-push.md)), `SessionKeyboards` (a keyboard port's velocity curve, the port Rhino reads to apply it and its stand-in device; [Keyboard velocity curves](keyboard-velocity-curves.md)).
 - The DJ booth: `SessionDj` (decks, transport, mixer, what the document saves) and `SessionDjSources` (file and audio-cell reads, MIDI cells made into notes, a deck bound to its track, Live, what an edit leaves a deck to do), sharing `SessionDjInternal.h` ([DJ view and the booth](dj-view.md)). The booth comes off the audio device in `releaseAudioDevice` and the destructor; the destructor and `djReset` unbind every deck from its track first, and `djReset` drains the worker. `ensureTrackMixers` (`SessionMixer`) gives every track the booth's two hidden ends beside its fader ([DJ decks play live through the track's chain](dj-decks-play-live-through-the-track.md)).
 - `SessionInternal.h/.cpp`: property identifiers and helpers private to these files, among them `splitClipAt`, `regionTolerance` and `resumePlaybackAfterClipEdit` (promoted from anonymous namespaces on 2026-10-23 when `SessionRegionMove.cpp` needed them) and the render helpers `stopRenderWhenStalled` and `renderTaskOutcome` (the guard that gives up a render with no progress for a given time; the stepped bounce and export call them around their slices), `runRenderTask` (those two around one blocking loop; only `renderTimelineWav`, which only tests call) and `nextRenderFile` (`<track> <kind> N.wav`; the merge and the bounce).
 
@@ -50,7 +50,7 @@ Added 2026-10-23 ([The 120-track stress audit](stress-audit-2026-10.md)).
 
 ## Pitfalls
 
-- `isCommandLineTestMode()` suppresses machine preferences (browser preview, last track kind, the Push's scale and octave, keyboard velocity curves) and makes `pickTrackColour` deterministic, so a developer's settings cannot change what the suite sees.
+- `isCommandLineTestMode()` suppresses machine preferences (browser preview, the note editor's preview, last track kind, the Push's scale and octave, keyboard velocity curves) and makes `pickTrackColour` deterministic, so a developer's settings cannot change what the suite sees.
 - `RhinoEngineBehaviour` is the only thing Rhino tells the engine: where a recording goes, that recording mutes what it covers, and, since 2026-10-12, that a muted track still runs its devices (`shouldProcessMutedTracks`), so the song's mute and solo leave a DJ deck its track ([Mixer](mixer.md)).
 - The note editor's clip, `patternClip` kept beside `patternClipID`, is the one long-lived pointer. `repairPatternClip` re-finds it after anything that can take it, and a document with no MIDI track has none, so ask `hasPatternClip()` before `pattern()`. The rest of the positional state from the original pattern-track layout was retired in commit `a04b407` ([No track is special for being first](pattern-track.md)).
 - Hold clip ids, not `te::Clip*` ([Hold ids, not pointers](ids-not-pointers.md)).

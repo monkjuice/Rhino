@@ -56,11 +56,11 @@ These came out of a multi-agent review on 2026-10-16. Each is fixed and tested.
 
 ## Drawing
 
-Every note of the clip has a marker. Notes scrolled out of the pitch window are dimmed, their colour moved 0.55 of the way towards the lane's. Hovering a note in the grid lights its marker, which is Live's way of finding a marker inside a stack; the other way round, hovering a marker lights and names its note's key on the keyboard (commit `4783232`). The gutter shows the hovered or dragged value and its note name, the pad name on a drum clip; in a lane under 44 px it shows only the 127 and 1 labels and the value without the name. Markers are drawn with whole-pixel `fillRect` only: an octagonal dot built from five rectangles, plus a bar for the note's length. That keeps partial repaints identical to full ones ([JUCE's rasteriser is not clip-invariant](juce-rasteriser-not-clip-invariant.md)). The lane's colours are `palette` tokens ([Colours and typography](colours-and-typography.md)).
+Every note of the clip has a marker. Notes scrolled out of the pitch window are dimmed, their colour moved 0.55 of the way towards the lane's. Hovering a note in the grid lights its marker, which is Live's way of finding a marker inside a stack; the other way round, hovering a marker lights and names its note's key on the keyboard (commit `4783232`). The gutter shows the hovered or dragged value and its note name, the pad name on a drum clip; in a lane under 44 px it shows only the 127 and 1 labels and the value without the name. Markers are drawn with whole-pixel `fillRect` only: an octagonal dot built from five rectangles, plus a bar for the note's length. That keeps partial repaints identical to full ones ([JUCE's rasteriser is not clip-invariant](juce-rasteriser-not-clip-invariant.md)). The lane's colours are `palette` tokens ([Colours and typography](colours-and-typography.md)). Since commit `f2ae477` its columns alternate per beat, as the cells above do, with the darker rule (`velocityLaneBarRule`) on every beat; both used to alternate every 4 steps whatever the resolution ([Note editor](note-editor.md#drawing)). The markers do not take the grid's velocity shading, since their height already shows it.
 
 ## Not done yet
 
-Live's Randomize, Ramp and Deviation controls, the Chance lane, typed values, Alt-drag in the grid, note colour saturation by velocity, and saving the lane's visibility and height.
+Live's Randomize, Ramp and Deviation controls, the Chance lane, typed values, Alt-drag in the grid (Alt now moves and resizes notes off the grid there, since commit `f2ae477`), and saving the lane's visibility and height. Note colour by velocity is done, in the grid (`f2ae477`).
 
 ## Related
 

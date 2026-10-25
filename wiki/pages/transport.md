@@ -4,7 +4,7 @@ type: component
 summary: Play and stop, the loop that is always on, the single tempo and the time signature, and what Rhino rescales by hand when the tempo moves.
 tags: [rhino, transport, tempo]
 sources: []
-updated: 2026-10-24
+updated: 2026-10-25
 ---
 
 # Transport, tempo and loop
@@ -58,6 +58,8 @@ change. The arrangement's bar ruler subdivides a bar into the numerator's counts
 bar's position and loop readings and the bar a paste reports: `musicalPosition` (`ArrangementGrid.h`) turns the engine's
 quarter-note beats into bar, count and sixteenth, each from one, so 6/8 reads six eighths of two sixteenths and 7/8
 seven equal eighths. A position a hair short of a bar line, as a tempo-map round trip leaves one, reads as that bar.
+Since commit `f2ae477` the note editor's ruler and shading count the same beat, `StepGrid::stepsPerBeat` being the
+step resolution over the denominator, from the clip's own start ([Note editor](note-editor.md#drawing)).
 
 The click's on/off, bar emphasis and level are the edit's own `clickTrack*` properties. `clickTrackGain` converts:
 Rhino speaks decibels, the engine stores a linear gain and clamps it to 0.2-1.0, and writing decibels straight in put

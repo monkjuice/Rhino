@@ -45,6 +45,9 @@ grid and the deepest zoom - from `BrowserDrops.inc` in the same case, deleting a
 scrolled half a step in, its rows under 8 px and one key named on its tag, from `NoteKeys.inc` in the same case,
 deleting any old file first
 ([Note editor](note-editor.md#pitfalls)).
+`RHINO_NOTE_GRID_SNAPSHOT` writes the note editor at 1000 x 300 partway through `NoteGrid.inc`, in the same case,
+with the preview switched on: the bars-and-beats ruler, black-key rows and notes shaded by velocity, deleting any old
+file first ([Note editor](note-editor.md#drawing)).
 
 A `juce::TreeView` cannot be seen this way opened: it lays out its rows asynchronously, so a snapshot shows an opened
 folder with no children, even after `setOpen`, `resized()` or a rebuild at a new width. Test the browser's rows and drag

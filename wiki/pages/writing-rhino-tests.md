@@ -46,7 +46,10 @@ every scenario of `DjLiveChain.inc`).
    `GroupBusReload.inc` and `Recording.inc`, whose arming allocates a playback context. From `GroupBusReload.inc` on, a
    clip imported onto a newly added track never renders, so a scenario that imports onto a new track and renders it
    belongs before it, or works in a document of its own. A document a scenario reopens and then renders is written to disk first: reopened from a path that was never
-   written, a file imported after it resolves one folder too high and the render waits for it for good.
+   written, a file imported after it resolves one folder too high and the render waits for it for good. The engine
+   names a source relative to a document that does not exist as though the document were a folder (`..\Loop.wav`; the
+   quirk `sourceNameFor` in `Session.cpp` notes for Save As), so any check of where a source resolves writes the
+   document before `restoreProject(state, file)`, as `ProjectFileMedia.inc` and `TrackClipboard.inc` do.
 2. **Allocate anything big.** Every scenario shares the runner's one stack frame. A `StepGrid` carries about 200 KB of
    caches, and the third one declared by value overflowed the old 1 MB stack inside an unrelated scenario; twice more in
    the week of 2026-10-05 a scenario that added two panels did the same. `RhinoDAW.exe` now reserves 8 MB on Windows

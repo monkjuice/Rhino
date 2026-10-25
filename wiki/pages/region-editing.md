@@ -47,6 +47,8 @@ Dragging any clip header the region runs across carries the whole region: the cl
 
 The clipboard holds values (`Session::ClipSnapshot`): position, offset and `rhinoClipColour`, plus, for a MIDI clip, the whole note list and its track's instrument as a catalog id. For an audio clip it holds the source file and speed, and since commit `b5d17e0` also the clip's gain, pan, pitch, fades, mute, reverse and warp (mode, clip tempo in beats, markers). Before that a copy played the raw file at speed one instead of what the original played. The paste writes reverse only for a clip that was reversed, and before anything else: writing it at all mirrors the new clip's window into its file, which made trimmed copies quieter until commit `50d87d5` ([Writing a clip's reverse switch moves its window](writing-reverse-moves-a-clips-window.md)). A cut deletes its sources, and an undo between copy and paste can too, so a clipboard of ids would paste nothing ([Hold ids, not pointers](ids-not-pointers.md)).
 
+The clipboard also survives opening another document. Its files are full paths, so audio still resolves, but its clips are seconds from the region's corner, so pasted at another tempo they leave their beats. Open as of `c790287`, which fixed the same problem for the [Track clipboard](track-clipboard.md#into-another-document).
+
 ## In the note editor
 
 `StepGridEditing.cpp` applies the same rule in steps: the marquee's span, the selected notes rounded out to whole steps, or the whole clip after Ctrl+A. One difference: a note paste clears only the pitches and steps it writes, not the whole rectangle.

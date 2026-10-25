@@ -1124,3 +1124,11 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - source: the change's brief, checked against native/src/ui/notes/StepGridGestures.cpp (`Gesture::pan`, `panView`), StepGrid.h, StepGrid.cpp; commit 0725daa
 - updated: pages/note-editor.md (Gestures: the middle-button pan, steps by the pixel and rows by whole rows, absolute anchors, drums sideways only, answers first in `mouseDown` and why, opens no note gesture and is never autoscrolled, `NotePan.inc`)
 - updated: pages/pointer-and-selection.md (the middle button pans the note editor too)
+
+## [2026-10-24] update | Paste tracks into another project (c790287)
+- source: the change's brief, checked against native/src/model/SessionTrackClipboard.cpp (`insertTrackCopies`, `keepOnItsBeats`), Session.h (`TrackClipboard`, `documentSerial`), Session.cpp (`nextDocumentSerial`, `nameSourcesFor`), SessionInternal.h, SessionTransport.cpp; commit c790287
+- updated: pages/track-clipboard.md (summary; a copy records `document` and `tempo` and names sources in full; new section "Into another document": the clipboard survives an open, the document serial, audio named for the destination, sidechains repointed or removed and the starter-stack id collision, the tempo rule restated from `remapEdit` and why, scenes, every copy prepared before any lands and why that is safe, the open items; the test line)
+- updated: pages/transport.md (pasted tracks follow the same tempo rules by hand)
+- updated: pages/region-editing.md (the region clipboard survives an open and leaves its beats at another tempo; open)
+- updated: pages/writing-rhino-tests.md (rule 1: why an unwritten document names an import one folder too high, and to write the document before any check of where a source resolves)
+- updated: index.md (Track clipboard's summary)

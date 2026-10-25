@@ -4,7 +4,7 @@ type: component
 summary: Play and stop, the loop that is always on, the single tempo and the time signature, and what Rhino rescales by hand when the tempo moves.
 tags: [rhino, transport, tempo]
 sources: []
-updated: 2026-10-23
+updated: 2026-10-24
 ---
 
 # Transport, tempo and loop
@@ -39,7 +39,9 @@ The edit has a single tempo entry, clamped to 40-240 BPM (`minimumTempo`, `maxim
 tempo map. The engine anchors clips to beats and moves them itself when the tempo changes. Rhino's own timeline state
 is not part of that, so `setTempo` rescales it by the same factor: automation points, which are stored in seconds
 ([Track automation](automation.md)), and the dragged loop span. Repitched warp clips get a new speed ratio from
-`updateRepitchedClips` ([Time warp](time-warp.md)).
+`updateRepitchedClips` ([Time warp](time-warp.md)). Tracks pasted from a document at another tempo are put back on
+their beats by the same rules, the engine's clip rule restated by hand because no engine call remaps only some clips
+([Track clipboard](track-clipboard.md#into-another-document), commit `c790287`).
 
 A drag on the tempo or signature field is one undo step. `beginTempoGesture` and `endTempoGesture` count their
 nesting, so one caller cannot close a bracket another opened. A tempo drag step costs
@@ -79,3 +81,4 @@ audio callbacks on that device. The test runners call it, and no offline render 
 - [Recording and the count-in](recording.md)
 - [Time warp](time-warp.md)
 - [Track automation](automation.md)
+- [Track clipboard (cards)](track-clipboard.md)

@@ -70,12 +70,12 @@ float StepGrid::xForStep(double step) const
 // lets a marquee say which lanes it touches without rounding twice.
 double StepGrid::pitchAtY(float y) const
 {
-    return lowestVisiblePitch + visiblePitchRows() - (y - headerHeight) / rowHeight();
+    return lowestVisiblePitch + visiblePitchRows() - (y - rowsTop()) / rowHeight();
 }
 
 float StepGrid::yForPitch(double pitch) const
 {
-    return headerHeight + static_cast<float>(lowestVisiblePitch + visiblePitchRows() - pitch) * rowHeight();
+    return rowsTop() + static_cast<float>(lowestVisiblePitch + visiblePitchRows() - pitch) * rowHeight();
 }
 
 bool StepGrid::isOverKeyboard(juce::Point<float> point) const
@@ -92,9 +92,9 @@ int StepGrid::cellHit(juce::Point<float> point) const
     const auto step = static_cast<int>(stepScroll + (point.x - labelWidth) / cellWidth());
     if (step < 0 || step >= steps)
         return -1;
-    const auto rows = visiblePitchRows();
-    const auto row = std::clamp(static_cast<int>((point.y - headerHeight) / rowAreaHeight() * rows), 0, rows - 1);
-    return row * Session::steps + step;
+    // Below the top only on a panel taller than all 128 rows.
+    const auto row = std::min(visiblePitchRows() - 1, static_cast<int>(std::floor((point.y - rowsTop()) / rowHeight())));
+    return row < 0 ? -1 : row * Session::steps + step;
 }
 
 int StepGrid::hit(juce::Point<float> point) const
@@ -543,7 +543,7 @@ void StepGrid::autoScrollDrag()
     stepScroll = nextStepScroll;
     // A stroke or a marquee in the velocity lane is below the rows the whole
     // time, and would otherwise scroll pitch at the gesture clock's rate.
-    if (!session.isPatternDrums() && !isVelocityLaneGesture(gesture))
+    if (!isVelocityLaneGesture(gesture))
     {
         // Upwards on screen is a higher pitch, so the sign flips here: the
         // lanes move the opposite way to the view along the timeline.
@@ -551,7 +551,7 @@ void StepGrid::autoScrollDrag()
         const auto pitchSteps = static_cast<int>(verticalAutoScroll);
         if (pitchSteps != 0)
         {
-            const auto nextLowest = juce::jlimit(0, 127 - visiblePitchRows() + 1, lowestVisiblePitch + pitchSteps);
+            const auto nextLowest = juce::jlimit(0, 128 - visiblePitchRows(), lowestVisiblePitch + pitchSteps);
             changed = changed || nextLowest != lowestVisiblePitch;
             lowestVisiblePitch = nextLowest;
             verticalAutoScroll -= static_cast<float>(pitchSteps);
@@ -569,25 +569,21 @@ void StepGrid::autoScrollDrag()
 
 // The view follows the pointer: the steps move the pixels the mouse did, and
 // the rows move by the whole rows it did, so the note that was under the
-// cursor stays under it. Drum rows are the Drum Rack's bank and stay put, as
-// they do for the wheel and the keys.
+// cursor stays under it. A drum clip's rows pan too, now that they scroll.
 void StepGrid::panView(juce::Point<float> pointer)
 {
     const auto maximumStart = std::max(0.0, static_cast<double>(session.editorStepCount()) - visibleStepSpan());
     stepScroll = std::clamp(panStartStep - (pointer.x - panAnchor.x) / cellWidth(), 0.0, maximumStart);
     horizontalScroll.setCurrentRange(stepScroll, visibleStepSpan(), juce::dontSendNotification);
-    if (!session.isPatternDrums())
+    // Dragging down carries the notes down and brings the pitches above them
+    // into view, so the lowest row on show climbs by the rows travelled.
+    const auto next = juce::jlimit(0, 128 - visiblePitchRows(),
+                                   panStartPitch + juce::roundToInt((pointer.y - panAnchor.y) / rowHeight()));
+    if (next != lowestVisiblePitch)
     {
-        // Dragging down carries the notes down and brings the pitches above
-        // them into view, so the lowest row on show climbs by the rows travelled.
-        const auto next = juce::jlimit(0, 127 - visiblePitchRows() + 1,
-                                       panStartPitch + juce::roundToInt((pointer.y - panAnchor.y) / rowHeight()));
-        if (next != lowestVisiblePitch)
-        {
-            lowestVisiblePitch = next;
-            manualPitchScroll = true;
-            rebuildVisibleNotes();
-        }
+        lowestVisiblePitch = next;
+        manualPitchScroll = true;
+        rebuildVisibleNotes();
     }
     updatePlayhead();
     repaint();
@@ -798,6 +794,10 @@ void StepGrid::mouseUp(const juce::MouseEvent& event)
     // until Ctrl comes up.
     else if (gesture != Gesture::none && gesture != Gesture::keyboard && gesture != Gesture::chop)
         session.endNoteGesture();
+    // The marquee goes with the button. Nothing else repaints where it stood,
+    // so it used to stay drawn until something else did.
+    if (gesture == Gesture::select && !selectionBox.isEmpty())
+        repaint(selectionBox.getSmallestIntegerContainer().expanded(2));
     chopMouseY = -1.0f;
     gesture = Gesture::none;
     collapseSelectionOnRelease = false;

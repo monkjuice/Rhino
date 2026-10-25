@@ -39,10 +39,15 @@ void StepGrid::paintKeyboard(juce::Graphics& g)
     // uiFont exists to avoid. The octaves' names keep one size.
     g.setFont(drums ? uiFont(std::round(std::clamp(height - 3.0f, 7.5f, 11.0f) * 0.825f)) : uiFont(9.0f));
     const auto dirty = repaintArea(g);
+    // The top row, cut short, reaches up behind the loop and preview buttons,
+    // and a hovered key's name past the rows either side of it.
+    juce::Graphics::ScopedSaveState scope(g);
+    g.reduceClipRegion(juce::Rectangle<float>(0.0f, headerHeight, labelWidth, rowAreaHeight()).getSmallestIntegerContainer());
+    const auto rowsStart = rowsTop();
     for (int row = 0; row < rows; ++row)
     {
         const auto pitch = lowestVisiblePitch + rows - 1 - row;
-        const auto top = headerHeight + static_cast<float>(row) * height;
+        const auto top = rowsStart + static_cast<float>(row) * height;
         const auto key = juce::Rectangle<float>(keysLeft, top, width, height);
         // A name can stand a little taller than a squeezed row.
         if (!dirty.intersects(juce::Rectangle<float>(0.0f, top, labelWidth, height).expanded(0.0f, height)))
@@ -94,13 +99,11 @@ void StepGrid::paintKeyboard(juce::Graphics& g)
     const auto hoveredRow = lowestVisiblePitch + rows - 1 - hoveredPitch;
     if (hoveredPitch < 0 || hoveredRow < 0 || hoveredRow >= rows)
         return;
-    const auto hoveredKey = juce::Rectangle<float>(keysLeft, headerHeight + static_cast<float>(hoveredRow) * height, width, height);
+    const auto hoveredKey = juce::Rectangle<float>(keysLeft, rowsStart + static_cast<float>(hoveredRow) * height, width, height);
     const auto tag = (drums ? hoveredKey : hoveredKey.withX(0.0f).withWidth(keyLabelWidth - 1.0f))
                          .withSizeKeepingCentre(drums ? width : keyLabelWidth - 1.0f, std::max(height, keyTagHeight));
     if (!dirty.intersects(tag.getUnion(hoveredKey)))
         return;
-    juce::Graphics::ScopedSaveState scope(g);
-    g.reduceClipRegion(juce::Rectangle<float>(0.0f, headerHeight, labelWidth, rowAreaHeight()).getSmallestIntegerContainer());
     g.setColour(palette::noteBody);
     if (!drums)
         g.fillRect(hoveredKey);
@@ -217,10 +220,11 @@ void StepGrid::paint(juce::Graphics& g)
     // arithmetic on sizes read once gives the same rectangles.
     const auto stepWidth = cellWidth();
     const auto laneHeight = rowHeight();
-    const auto cellAt = [this, stepWidth, laneHeight](int step, int row)
+    const auto top = rowsTop();
+    const auto cellAt = [this, stepWidth, laneHeight, top](int step, int row)
     {
         return juce::Rectangle<float> {labelWidth + static_cast<float>(step - stepScroll) * stepWidth,
-                                       headerHeight + row * laneHeight, stepWidth, laneHeight};
+                                       top + row * laneHeight, stepWidth, laneHeight};
     };
     // The steps whose cells can touch the repainted columns, one either side
     // to be sure of a cell the rounding puts on the boundary.
@@ -239,6 +243,10 @@ void StepGrid::paint(juce::Graphics& g)
                            .getSmallestIntegerContainer());
     if (dirty.getY() < headerHeight)
         paintRuler(g, dirty);
+    // And the rows are cut at the ruler, which the top one reaches up behind
+    // when the panel cuts it short.
+    g.reduceClipRegion(juce::Rectangle<float>(labelWidth, headerHeight, gridWidth(), rowAreaHeight())
+                           .getSmallestIntegerContainer());
     const auto perBeat = stepsPerBeat();
     const auto perBar = stepsPerBar();
     const auto drums = session.isPatternDrums();
@@ -256,7 +264,7 @@ void StepGrid::paint(juce::Graphics& g)
         const bool inScale = !scaleEnabled || std::find(scale.begin(), scale.end(), (pitchClass - root + 12) % 12) != scale.end();
         // Cells and notes stay inside their row's height, so a row the repaint
         // misses has nothing to draw.
-        const auto rowTop = headerHeight + row * laneHeight;
+        const auto rowTop = top + row * laneHeight;
         if (rowTop + laneHeight < dirty.getY() || rowTop > dirty.getBottom())
             continue;
         // A black key's row is darker, as the keys beside it are; a drum
@@ -308,13 +316,14 @@ void StepGrid::paint(juce::Graphics& g)
     g.setColour(juce::Colour(0xff202930));
     for (int row = 0; row <= rows; ++row)
     {
-        const auto y = headerHeight + row * laneHeight;
+        // A top row cut short keeps its line at the ruler's edge.
+        const auto y = std::max(headerHeight, top + row * laneHeight);
         g.fillRect(juce::Rectangle<float>(labelWidth, std::floor(y), gridWidth(), 1.0f));
     }
     for (int row = 0; row < rows; ++row)
     {
-        const auto rowTop = headerHeight + row * laneHeight;
-        const auto rowBottom = headerHeight + (row + 1) * laneHeight;
+        const auto rowTop = top + row * laneHeight;
+        const auto rowBottom = top + (row + 1) * laneHeight;
         if (rowBottom < dirty.getY() || rowTop > dirty.getBottom())
             continue;
         std::array<int, Session::steps + 2> sustainedBoundaryDeltas {};

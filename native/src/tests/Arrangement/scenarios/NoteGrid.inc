@@ -133,7 +133,11 @@
 
             // The keyboard: narrow keys, and the names in a column of their
             // own left of them, the octaves' Cs only however tall the rows.
+            // A taller panel shows more rows rather than taller ones, so the
+            // rows are zoomed.
             grid.setSize(1000, 600);
+            require(grid.rowHeight() == StepGrid::baseRowHeight, "A taller panel leaves the rows their height");
+            grid.zoomPitchAt(StepGrid::baseRowHeight / 16.0, StepGrid::headerHeight + grid.rowAreaHeight() * 0.5f);
             require(grid.rowHeight() >= 15.0f, "Tall rows, which used to name every key");
             shown = picture();
             const auto rowY = [&grid, &rowFor](int pitch) { return grid.cell(0, rowFor(pitch)).getCentreY(); };
@@ -150,7 +154,10 @@
             require(pixel(shown, {StepGrid::keyLabelWidth + 10.0f, rowY(62)}) == juce::Colour(0xffcdd3c8)
                         && pixel(shown, {6.0f, rowY(62)}) == palette::sideSurface,
                     "and the keys begin past the column");
+            grid.pitchZoom = 1.0;
+            grid.manualPitchScroll = false;
             grid.setSize(1000, 300);
+            grid.changeListenerCallback(nullptr);
             shown = picture();
 
             // Snapped, a note's edge lands on a step's line; with Alt it follows
@@ -249,6 +256,41 @@
             grid.mouseUp(eventAt(keyFrom, keyTo, left));
             require(selectionIs({high}), "Dragging the keys scrolls them and selects nothing");
             grid.changeListenerCallback(nullptr);
+
+            // A marquee is gone when the button comes up: the release repaints
+            // where it stood, which nothing else did, so it stayed drawn until
+            // something happened to paint over it. A cached image is told of
+            // every repaint, so one standing in logs them; the grid is made
+            // visible first, since a hidden component repaints nothing. With
+            // the release's repaint taken out, this check fails.
+            {
+                struct RepaintLog final : juce::CachedComponentImage
+                {
+                    juce::RectangleList<int> areas;
+                    void paint(juce::Graphics&) override {}
+                    bool invalidateAll() override { areas.add({0, 0, 1 << 16, 1 << 16}); return false; }
+                    bool invalidate(const juce::Rectangle<int>& area) override { areas.add(area); return false; }
+                    void releaseResources() override {}
+                };
+                const auto boxFrom = grid.cell(1, rowFor(62)).getCentre();
+                const auto boxTo = grid.cell(6, rowFor(58)).getCentre();
+                grid.mouseDown(eventAt(boxFrom, boxFrom, left));
+                grid.mouseDrag(eventAt(boxFrom, boxTo, left));
+                const auto box = grid.selectionBox.getSmallestIntegerContainer();
+                require(grid.gesture == StepGrid::Gesture::select && !box.isEmpty(), "A drag across empty cells draws a marquee");
+                grid.setVisible(true);
+                auto* repaintLog = new RepaintLog();
+                grid.setCachedComponentImage(repaintLog);
+                // Installing it repaints everything; only the release counts.
+                repaintLog->areas.clear();
+                grid.mouseUp(eventAt(boxFrom, boxTo, left));
+                const auto repainted = repaintLog->areas;
+                grid.setCachedComponentImage(nullptr);
+                grid.setVisible(false);
+                require(grid.selectionBox.isEmpty() && repainted.containsRectangle(box),
+                        "and letting go repaints where it stood, so it disappears");
+                grid.clearSelection();
+            }
 
             // The preview: off until switched on, and then a key sounds while it
             // is held and a note while it is carried, to each pitch it reaches.

@@ -25,7 +25,7 @@
             // unwinds through ~StepGrid, whose end of the gesture announces.
             Count everyone;
             stack.addChangeListener(&everyone);
-            // On the heap: a StepGrid carries about 200 KB of note caches.
+            // On the heap, as every scenario's StepGrid is; see tests/README.md.
             auto owned = std::make_unique<StepGrid>(stack);
             auto& grid = *owned;
             grid.setSize(1000, 300);
@@ -86,9 +86,10 @@
             // Under the rows and over the scrollbar's place, on the same time
             // axis, and nothing in the grid reaches into it.
             require(!grid.horizontalScroll.isVisible() && grid.velocityLaneHeight() == 64.0f
-                        && grid.rowAreaHeight() == 181.0f && grid.visiblePitchRows() == 16,
-                    "The lane takes its default height from under the rows, which keep all sixteen");
-            require(grid.lowestVisiblePitch == 52, "The fixture's pitch window is 52 to 67");
+                        && grid.rowAreaHeight() == 181.0f && grid.visiblePitchRows() == 17
+                        && grid.rowHeight() == StepGrid::baseRowHeight,
+                    "The lane takes its default height from under the rows, which keep theirs: sixteen whole and one cut short");
+            require(grid.lowestVisiblePitch == 52, "The fixture's pitch window is 52 to 67, and 68 cut short above it");
             require(grid.laneDividerBounds().getY() == 207.0f && grid.velocityLaneBounds().getY() == 212.0f
                         && grid.velocityLaneBounds().getBottom() == grid.footerBounds().getY(),
                     "The divider sits under the rows and the lane runs down to the footer");

@@ -3,11 +3,14 @@
         // puts one note down, and painting a run of them is what draw mode is
         // for. Plus the scroll that lets a drag reach past the panel.
         {
-            // On the heap deliberately. Every scenario shares one stack frame,
-            // and a StepGrid carries about 200 KB of row-addressed note caches.
+            // On the heap deliberately: every scenario shares one stack frame.
+            // See tests/README.md.
             auto owned = std::make_unique<StepGrid>(session);
             auto& grid = *owned;
-            grid.setSize(1000, 250);
+            // The open clip is a drum clip on the bank from 48, and its rows
+            // keep their height: tall enough for 64 to be a whole row even with
+            // the scrollbar, so no press lands on the row cut short above it.
+            grid.setSize(1000, 320);
             grid.changeListenerCallback(nullptr);
 
             std::vector<juce::ValueTree> previous;

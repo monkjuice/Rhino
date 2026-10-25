@@ -49,8 +49,9 @@ void StepGrid::toggleSelectionOf(const juce::ValueTree& state)
 }
 
 // Every note in the clip, not every note on screen. The pitch window shows
-// sixteen rows by default and a pattern is routinely taller than that, so
-// selecting what happens to be visible would quietly select a fragment.
+// what rows the panel has room for and a pattern is routinely taller than
+// that, so selecting what happens to be visible would quietly select a
+// fragment.
 bool StepGrid::selectAllNotes()
 {
     const auto allNotes = session.editorNotes();
@@ -536,7 +537,7 @@ bool StepGrid::beginSubdivision()
     // The badge stands over the first note.
     const auto& first = chopSources.front();
     const auto row = lowestVisiblePitch + visiblePitchRows() - 1 - first.pitch;
-    subdivisionSourceBounds = {xForStep(first.startSteps), headerHeight + static_cast<float>(row) * rowHeight(),
+    subdivisionSourceBounds = {xForStep(first.startSteps), rowsTop() + static_cast<float>(row) * rowHeight(),
                                static_cast<float>(first.lengthSteps) * cellWidth(), rowHeight()};
     session.beginNoteGesture("Chop notes");
     subdivisionActive = true;

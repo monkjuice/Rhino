@@ -79,17 +79,20 @@ private:
     {
         return g == Gesture::velocityDrag || g == Gesture::velocityDraw;
     }
-    // The visible pitch range is a zoom, not a constant: Session::pitches is
-    // only where it starts. These bound how far the lanes may be squeezed, and
-    // maxPitchRows is the stride the row-addressed caches below are built for.
-    static constexpr int minPitchRows = 8, maxPitchRows = 48;
-    static constexpr float minimumRowHeight = 7.0f;
-    // The row height below which the keyboard stops naming octaves. The
-    // velocity lane folds away rather than squeeze sixteen rows under it.
+    // A row keeps one height whatever the panel's: a panel too short for the
+    // pitches wanted is scrolled, or made taller to show more rows, on a piano
+    // clip and a drum clip alike. The height is baseRowHeight, made thinner or
+    // thicker only by the user's own zoom - the keys dragged sideways, Shift
+    // and the wheel over them - between the two bounds. Until 2026-10-25 the
+    // rows stretched to fill the panel, sixteen of them at the default zoom.
+    // maxPitchRows is the whole MIDI range: the most rows a panel can show,
+    // and the stride of the row-addressed caches below.
+    static constexpr int maxPitchRows = 128;
+    static constexpr float minimumRowHeight = 7.0f, baseRowHeight = 11.0f, maximumRowHeight = 33.0f;
+    // The row height below which the keyboard stops naming octaves. Sixteen
+    // rows of it are also the least room the velocity lane leaves the rows: a
+    // pane too short for both folds the lane away.
     static constexpr float octaveLabelRowHeight = 8.0f;
-    // The rows the editor opens with: two pixels taller than the names need,
-    // at the user's request, so a pitch reads as a lane rather than a line.
-    static constexpr float openingRowHeight = octaveLabelRowHeight + 2.0f;
     // The note names stand in a column of their own left of the keys, which
     // take the rest of labelWidth, as most piano rolls have it. A drum clip's
     // rows are pads, named across the whole strip.
@@ -140,6 +143,10 @@ private:
     float timeAreaBottom() const;
     float rowAreaHeight() const;
     float rowHeight() const;
+    // Where row 0 begins. The rows stand on the bottom of their area, so the
+    // row a panel cuts short is the top one, above the header's edge, and a
+    // pane grown from its top uncovers the pitches above without moving a note.
+    float rowsTop() const;
     int visiblePitchRows() const { return pitchRowCount; }
     int computePitchRowCount() const;
     bool isOverKeyboard(juce::Point<float>) const;
@@ -321,7 +328,13 @@ private:
     // when it is shown. See UiVisibility.h.
     bool staleWhileHidden = false;
     std::bitset<Session::steps * maxPitchRows> notes, visited, selectedNotes;
-    std::array<float, Session::steps * maxPitchRows> noteLengths {}, noteStartOffsets {};
+    // On the heap: a float for every step of every pitch is a quarter of a
+    // megabyte, too much for a component a test builds on the stack. The next
+    // pair is what a rebuild fills, kept so a rebuild allocates nothing.
+    std::vector<float> noteLengths, noteStartOffsets, nextLengths, nextStartOffsets;
+    // The Drum Rack bank a drum clip's rows were last fitted to, -1 for a
+    // piano clip. A scroll holds until the face pages to another bank.
+    int shownDrumBank = -1;
     std::vector<VisibleNote> visibleNotes;
     std::vector<juce::ValueTree> selectedNoteStates;
     NoteClipboard noteClipboard;
@@ -455,9 +468,9 @@ private:
     juce::VBlankAttachment vblank;
     static constexpr float labelWidth = 54.0f, headerHeight = 26.0f, scrollHeight = 14.0f, footerHeight = 24.0f;
 public:
-    // Sixteen rows of the opening height, the velocity lane at its default
-    // height and a scrollbar: the shell opens the editor this tall.
-    static constexpr int openingHeight = static_cast<int>(headerHeight + Session::pitches * openingRowHeight
+    // Sixteen rows, the velocity lane at its default height and a scrollbar:
+    // the shell opens the editor this tall.
+    static constexpr int openingHeight = static_cast<int>(headerHeight + Session::pitches * baseRowHeight
         + velocitylane::dividerHeight + velocitylane::defaultHeight + scrollHeight + footerHeight);
 };
 }

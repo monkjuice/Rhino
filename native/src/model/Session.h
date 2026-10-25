@@ -405,9 +405,10 @@ public:
     // names it: a Drum Rack names each of its pads after its sound. The note
     // editor labels its drum rows with it.
     std::optional<juce::String> patternNoteName(int pitch) const;
-    // The lowest of the note editor's drum rows: the first note of the bank
-    // of sixteen pads the open clip's Drum Rack shows, so the rows are the
-    // pads on its face. lowestNote when it plays no rack.
+    // The lowest of the note editor's drum rows until they are scrolled: the
+    // first note of the bank of sixteen pads the open clip's Drum Rack shows,
+    // so the rows open on the pads on its face. lowestNote when it plays no
+    // rack.
     int patternDrumLowestNote() const;
     // Adding a device by its catalog id is the general form; the three enum
     // overloads below are shorthand for the devices that had an enum before

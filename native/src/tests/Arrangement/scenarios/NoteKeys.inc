@@ -65,7 +65,7 @@
             // and how tall the lit run at the key's left edge stands.
             const auto litAcross = [&grid, &rowFor](const juce::Image& image, int pitch)
             {
-                const auto y = static_cast<int>(StepGrid::headerHeight + (static_cast<float>(rowFor(pitch)) + 0.5f) * grid.rowHeight());
+                const auto y = static_cast<int>(grid.cell(0, rowFor(pitch)).getCentreY());
                 int lit = 0;
                 for (int x = 0; x < static_cast<int>(StepGrid::labelWidth); ++x)
                     if (image.getPixelAt(x, y) == palette::noteBody) ++lit;

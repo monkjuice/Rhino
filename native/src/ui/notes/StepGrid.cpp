@@ -10,6 +10,8 @@ namespace rhino
 
 StepGrid::StepGrid(Session& s) : session(s), vblank(this, [this] { updatePlayhead(); })
 {
+    for (auto* cells : {&noteLengths, &noteStartOffsets, &nextLengths, &nextStartOffsets})
+        cells->assign(static_cast<size_t>(Session::steps * maxPitchRows), 0.0f);
     setOpaque(true);
     setWantsKeyboardFocus(true);
     setTitle("Pattern notes");
@@ -77,7 +79,7 @@ juce::Rectangle<float> StepGrid::cell(int step, int row) const
 {
     const auto width = cellWidth();
     const auto height = rowHeight();
-    return {labelWidth + static_cast<float>(step - stepScroll) * width, headerHeight + row * height, width, height};
+    return {labelWidth + static_cast<float>(step - stepScroll) * width, rowsTop() + row * height, width, height};
 }
 
 juce::Rectangle<float> StepGrid::boundsFor(const VisibleNote& note) const
@@ -209,33 +211,37 @@ void StepGrid::zoomAt(double factor, float pointerX)
     repaint();
 }
 
+// The user's own zoom, the one thing that changes a row's height. A larger
+// pitchZoom is a thinner row, so dragging the keys left still thins them.
 void StepGrid::zoomPitchAt(double factor, float pointerY)
 {
-    const auto anchor = std::clamp((pointerY - headerHeight) / rowAreaHeight(), 0.0f, 1.0f);
-    const auto before = visiblePitchRows();
-    // The pitch under the pointer, as a continuous position in the row area.
-    // Holding it still is what makes the lanes grow out from the pointer
-    // rather than from the top of the grid.
-    const auto held = lowestVisiblePitch + before * (1.0 - anchor) - 1.0;
-    pitchZoom = std::clamp(pitchZoom * factor,
-                           static_cast<double>(minPitchRows) / Session::pitches,
-                           static_cast<double>(maxPitchRows) / Session::pitches);
-    const auto after = computePitchRowCount();
-    if (after == before)
+    // The pitch under the pointer, as a continuous position. Holding it still
+    // is what makes the lanes grow out from the pointer rather than from the
+    // top of the grid.
+    const auto rowsBottom = headerHeight + rowAreaHeight();
+    const auto y = std::clamp(pointerY, headerHeight, rowsBottom);
+    const auto held = pitchAtY(y);
+    const auto heightBefore = rowHeight();
+    pitchZoom = std::clamp(pitchZoom * factor, static_cast<double>(baseRowHeight / maximumRowHeight),
+                           static_cast<double>(baseRowHeight / minimumRowHeight));
+    if (rowHeight() == heightBefore)
         return;
-    pitchRowCount = after;
-    lowestVisiblePitch = juce::jlimit(0, 127 - after + 1,
-                                      juce::roundToInt(held - after * (1.0 - anchor) + 1.0));
-    manualPitchScroll = !session.isPatternDrums();
+    pitchRowCount = computePitchRowCount();
+    // The rows stand on the bottom, so a pitch sits (its height above the
+    // lowest) rows up from it.
+    lowestVisiblePitch = juce::jlimit(0, 128 - pitchRowCount,
+                                      juce::roundToInt(held - (rowsBottom - y) / rowHeight()));
+    manualPitchScroll = true;
     rebuildVisibleNotes();
     repaint();
 }
 
+// A drum clip's rows scroll as a piano's do: they no longer always fit.
 void StepGrid::scrollPitchBy(int semitones)
 {
-    if (semitones == 0 || session.isPatternDrums())
+    if (semitones == 0)
         return;
-    const auto next = juce::jlimit(0, 127 - visiblePitchRows() + 1, lowestVisiblePitch + semitones);
+    const auto next = juce::jlimit(0, 128 - visiblePitchRows(), lowestVisiblePitch + semitones);
     if (next == lowestVisiblePitch)
         return;
     lowestVisiblePitch = next;
@@ -291,20 +297,23 @@ float StepGrid::rowAreaHeight() const
     return std::max(1.0f, timeAreaHeight() - velocityLaneBlockHeight());
 }
 
+// The panel never decides it: baseRowHeight, and the user's zoom.
 float StepGrid::rowHeight() const
 {
-    return rowAreaHeight() / static_cast<float>(visiblePitchRows());
+    return static_cast<float>(std::clamp(static_cast<double>(baseRowHeight) / pitchZoom,
+                                         static_cast<double>(minimumRowHeight), static_cast<double>(maximumRowHeight)));
 }
 
+// Every row that reaches into the area, the top one perhaps only in part, up
+// to the whole MIDI range.
 int StepGrid::computePitchRowCount() const
 {
-    // Zoom asks for a row count; the panel's height caps how thin a row is
-    // allowed to get. The default range always fits, however short the panel,
-    // so a small editor shows the same sixteen lanes it always did.
-    const auto ceiling = std::max(Session::pitches,
-                                  std::clamp(static_cast<int>(rowAreaHeight() / minimumRowHeight),
-                                             minPitchRows, maxPitchRows));
-    return std::clamp(juce::roundToInt(Session::pitches * pitchZoom), minPitchRows, ceiling);
+    return std::clamp(static_cast<int>(std::ceil(rowAreaHeight() / rowHeight() - 0.001f)), 1, maxPitchRows);
+}
+
+float StepGrid::rowsTop() const
+{
+    return headerHeight + rowAreaHeight() - static_cast<float>(visiblePitchRows()) * rowHeight();
 }
 
 juce::Rectangle<float> StepGrid::footerBounds() const
@@ -500,9 +509,11 @@ void StepGrid::focusLost(juce::Component::FocusChangeType)
 
 int StepGrid::automaticLowestPitch() const
 {
-    // A Drum Rack's rows are the bank of pads its face shows.
+    const auto rows = visiblePitchRows();
+    // A Drum Rack's rows start at the bank of pads its face shows, its first
+    // pad on the bottom row, which is always a whole one.
     if (session.isPatternDrums())
-        return juce::jlimit(0, 127 - visiblePitchRows() + 1, session.patternDrumLowestNote());
+        return juce::jlimit(0, 128 - rows, session.patternDrumLowestNote());
     if (!session.hasPatternClip())
         return Session::lowestNote;
 
@@ -516,11 +527,12 @@ int StepGrid::automaticLowestPitch() const
     if (minPitch > maxPitch)
         return Session::lowestNote;
 
-    const auto rows = visiblePitchRows();
+    // The highest note goes on the top whole row, not on a sliver above it.
+    const auto wholeRows = std::max(1, static_cast<int>(rowAreaHeight() / rowHeight() + 0.001f));
     auto base = std::min(Session::lowestNote, minPitch);
-    if (maxPitch >= base + rows)
-        base = maxPitch - rows + 1;
-    return juce::jlimit(0, 127 - rows + 1, base);
+    if (maxPitch >= base + wholeRows)
+        base = maxPitch - wholeRows + 1;
+    return juce::jlimit(0, 128 - rows, base);
 }
 
 void StepGrid::visibilityChanged()
@@ -556,8 +568,14 @@ void StepGrid::changeListenerCallback(juce::ChangeBroadcaster*)
     }
     syncHorizontalScroll();
     const auto previousLowestPitch = lowestVisiblePitch;
-    if (session.isPatternDrums())
+    // The rows follow the notes, or a drum clip's the bank its rack's face
+    // shows, until they are scrolled; a drum clip's follow again when the face
+    // pages to another bank. They used to be pinned to the bank, never scrolled.
+    if (const auto bank = session.isPatternDrums() ? session.patternDrumLowestNote() : -1; bank != shownDrumBank)
+    {
+        shownDrumBank = bank;
         manualPitchScroll = false;
+    }
     if (!manualPitchScroll)
         lowestVisiblePitch = automaticLowestPitch();
     rebuildVisibleNotes();
@@ -593,9 +611,10 @@ void StepGrid::rebuildVisibleNotes()
     const auto previousRows = pitchRowCount;
     pitchRowCount = computePitchRowCount();
     const auto rows = pitchRowCount;
-    lowestVisiblePitch = juce::jlimit(0, 127 - rows + 1, lowestVisiblePitch);
+    lowestVisiblePitch = juce::jlimit(0, 128 - rows, lowestVisiblePitch);
     std::bitset<Session::steps * maxPitchRows> next;
-    std::array<float, Session::steps * maxPitchRows> nextLengths {}, nextStartOffsets {};
+    std::fill(nextLengths.begin(), nextLengths.end(), 0.0f);
+    std::fill(nextStartOffsets.begin(), nextStartOffsets.end(), 0.0f);
     const auto nextDrumLabels = session.isPatternDrums();
     std::vector<VisibleNote> nextVisible;
     const auto allNotes = session.editorNotes();
@@ -631,8 +650,8 @@ void StepGrid::rebuildVisibleNotes()
                 break;
             }
     notes = next;
-    noteLengths = nextLengths;
-    noteStartOffsets = nextStartOffsets;
+    noteLengths.swap(nextLengths);
+    noteStartOffsets.swap(nextStartOffsets);
     visibleNotes = std::move(nextVisible);
     // Before the selection is reconciled below, which repaints the lane.
     rebuildLaneNotes(allNotes, rows);
@@ -749,8 +768,8 @@ void StepGrid::resized()
     horizontalScroll.setBounds(static_cast<int>(labelWidth),
                                getHeight() - static_cast<int>(footerHeight + scrollHeight),
                                std::max(1, static_cast<int>(gridRight() - labelWidth)), static_cast<int>(scrollHeight));
-    // A new height can lift or lower the cap on how thin a row may be, which
-    // changes which pitches are on screen and so where every note sits.
+    // A new height shows more rows or fewer, which changes which pitches are
+    // on screen and so where every note sits.
     if (computePitchRowCount() != pitchRowCount)
         changeListenerCallback(nullptr);
     updatePlayhead();

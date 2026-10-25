@@ -1,5 +1,7 @@
         StepGrid selectionGrid(session);
-        selectionGrid.setSize(1000, 250);
+        // Tall enough for sixteen whole rows over the velocity lane: the rows
+        // keep their height, so a shorter editor shows fewer pitches.
+        selectionGrid.setSize(1000, 300);
         selectionGrid.changeListenerCallback(nullptr);
         const auto defaultCellWidth = selectionGrid.cell(1, 0).getWidth();
         session.setEditorStepCount(32);
@@ -462,7 +464,9 @@
         const auto defaultRows = selectionGrid.visiblePitchRows();
         const auto defaultRowHeight = selectionGrid.rowHeight();
         const auto stripPoint = juce::Point<float>(20.0f, 126.0f);
-        const auto stripLeft = stripPoint.translated(-35.0f, 0.0f);
+        // Short of the thinnest row, where the zoom stops and a drag back
+        // would no longer retrace it.
+        const auto stripLeft = stripPoint.translated(-15.0f, 0.0f);
         selectionGrid.mouseDown(gridEvent(stripPoint, stripPoint, false));
         selectionGrid.mouseDrag(gridEvent(stripPoint, stripLeft, true));
         require(selectionGrid.visiblePitchRows() > defaultRows

@@ -1,10 +1,8 @@
         // The note editor reads a region exactly as the arrangement does, in
         // steps instead of seconds, and the same four commands act on it.
         {
-            // On the heap deliberately. Every scenario shares one stack frame,
-            // and a StepGrid carries about 200 KB of row-addressed note caches
-            // - two more of them on a 1 MB stack is a stack overflow in the
-            // middle of the deepest paint the suite does.
+            // On the heap deliberately: every scenario shares one stack frame.
+            // See tests/README.md.
             auto grids = std::make_unique<StepGrid>(session);
             auto& clipboardGrid = *grids;
             clipboardGrid.setSize(1000, 250);

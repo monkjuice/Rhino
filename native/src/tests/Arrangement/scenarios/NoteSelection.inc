@@ -1,9 +1,12 @@
         // Selection and transposition across the pitch window. The grid shows
-        // sixteen rows; a pattern is routinely taller, and the parts of it that
-        // are scrolled away must still be selectable and still move.
+        // the rows it has room for; a pattern is routinely taller, and the
+        // parts of it that are scrolled away must still be selectable and
+        // still move.
         {
             StepGrid transposeGrid(session);
-            transposeGrid.setSize(1000, 250);
+            // The open clip is a drum clip on the bank from 48: tall enough for
+            // its rows to reach the high note, now that rows keep their height.
+            transposeGrid.setSize(1000, 300);
             transposeGrid.changeListenerCallback(nullptr);
 
             std::vector<juce::ValueTree> existingNotes;

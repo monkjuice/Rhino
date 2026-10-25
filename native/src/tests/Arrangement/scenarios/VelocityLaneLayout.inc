@@ -97,8 +97,8 @@
                 return std::pair<juce::Point<float>, juce::Point<float>>(from, last);
             };
 
-            // The divider drags the lane taller or shorter, never past what the
-            // sixteen rows can spare, and dragged most of the way down it shuts.
+            // The divider drags the lane taller or shorter, never past the
+            // rows' floor, and dragged most of the way down it shuts.
             const auto quiet = stack.changeRevision;
             {
                 const auto [from, last] = dragDivider({-30.0f});
@@ -109,8 +109,9 @@
             }
             {
                 const auto [from, last] = dragDivider({-200.0f});
-                require(grid.velocityLaneHeight() == 117.0f && grid.rowAreaHeight() == 128.0f && grid.rowHeight() == 8.0f,
-                        "The lane stops where the rows would lose their names");
+                require(grid.velocityLaneHeight() == 117.0f && grid.rowAreaHeight() == 128.0f
+                            && grid.rowHeight() == StepGrid::baseRowHeight,
+                        "The lane stops at the rows' floor, sixteen rows thin enough to lose their names, and the rows keep their height");
                 grid.mouseUp(laneEvent(from, last, true, left));
             }
             {
@@ -146,8 +147,8 @@
             grid.setSize(1000, 300);
             require(grid.velocityLaneHeight() == 64.0f && grid.velocityButton.getAlpha() == 1.0f,
                     "and with room it is its own height again");
-            require(StepGrid::openingHeight == 293,
-                    "The shell opens the editor tall enough for the lane and sixteen rows two pixels taller than names need");
+            require(StepGrid::openingHeight == 309,
+                    "The shell opens the editor tall enough for the lane and sixteen rows of their own height");
             for (const auto zoom : {1.0, 2.0})
             {
                 grid.stepZoom = zoom;
@@ -163,7 +164,15 @@
                                     && grid.velocityLaneBounds().getBottom()
                                            == static_cast<float>(height) - StepGrid::footerHeight - scroll),
                             "At every height the lane is whole pixels in range, ends at the scrollbar and leaves the rows their names");
-                    require(grid.visiblePitchRows() >= Session::pitches, "and every height keeps sixteen rows");
+                    // The rows stand on the lane, so only the top one is cut
+                    // short, by the header's edge.
+                    const auto rowsTop = grid.rowsTop();
+                    require(grid.rowHeight() == StepGrid::baseRowHeight
+                                && grid.visiblePitchRows()
+                                       == static_cast<int>(std::ceil(grid.rowAreaHeight() / StepGrid::baseRowHeight - 0.001f))
+                                && rowsTop <= StepGrid::headerHeight && rowsTop > StepGrid::headerHeight - grid.rowHeight()
+                                && grid.cell(0, grid.visiblePitchRows() - 1).getBottom() == StepGrid::headerHeight + grid.rowAreaHeight(),
+                            "and every height keeps the rows' height, showing as many as reach into the rows' area");
                 }
             }
             grid.stepZoom = 1.0;
@@ -266,6 +275,33 @@
             grid.mouseUp(laneEvent(both, both.translated(0.0f, -13.0f), true, left));
             stack.undo();
             require(velocityOf(hat) == 100, "One undo");
+
+            // The pads' rows keep the rows' height too, and scroll as a piano's
+            // do: they open on the bank the rack's face shows, its first pad on
+            // the bottom row, and a scroll holds until the face pages away.
+            // They used to stretch to fit the sixteen pads, and never scrolled.
+            grid.setSize(1000, 250);
+            require(grid.rowHeight() == StepGrid::baseRowHeight && grid.visiblePitchRows() < Session::pitches
+                        && grid.lowestVisiblePitch == low
+                        && grid.cell(0, grid.visiblePitchRows() - 1).getBottom() == StepGrid::headerHeight + grid.rowAreaHeight(),
+                    "A short editor shows fewer pads at the rows' height, the bank's first whole on the bottom row");
+            juce::MouseWheelDetails notch;
+            notch.deltaY = 0.25f;
+            const auto overRows = grid.cell(4, 4).getCentre();
+            grid.mouseWheelMove(laneEvent(overRows, overRows, false, juce::ModifierKeys()), notch);
+            require(grid.lowestVisiblePitch == low + 2, "The wheel scrolls the pads' rows");
+            stack.beginNoteGesture("A pad struck");
+            require(stack.addNote(2.0, low + 3, 1.0).wasOk(), "A note on a pad");
+            stack.endNoteGesture();
+            grid.changeListenerCallback(nullptr);
+            require(grid.lowestVisiblePitch == low + 2, "and the scroll holds through an edit");
+            auto slot = -1;
+            for (const auto& device : stack.deviceSlots(0))
+                if (device.deviceId == "Drums")
+                    slot = device.pluginIndex;
+            require(stack.showDrumBank(0, slot, low + Session::pitches).wasOk()
+                        && grid.lowestVisiblePitch == low + Session::pitches,
+                    "until the rack's face pages to another bank, which the rows follow");
             owned.reset();
             stack.releaseAudioDevice();
         }

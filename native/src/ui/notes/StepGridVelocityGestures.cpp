@@ -80,8 +80,8 @@ int StepGrid::pitchNamedAt(juce::Point<float> point) const
         return -1;
     // As cellHit finds the row, so the key named is the row a press would take.
     const auto rows = visiblePitchRows();
-    const auto row = std::clamp(static_cast<int>((point.y - headerHeight) / rowAreaHeight() * rows), 0, rows - 1);
-    return lowestVisiblePitch + rows - 1 - row;
+    const auto row = std::min(rows - 1, static_cast<int>(std::floor((point.y - rowsTop()) / rowHeight())));
+    return row < 0 ? -1 : lowestVisiblePitch + rows - 1 - row;
 }
 
 void StepGrid::setHoveredPitch(int pitch)
@@ -104,7 +104,7 @@ juce::Rectangle<int> StepGrid::keyHoverArea(int pitch) const
         return {};
     const auto height = rowHeight();
     const auto reach = std::max(height, (keyTagHeight - height) * 0.5f + 1.0f);
-    return juce::Rectangle<float>(0.0f, headerHeight + static_cast<float>(row) * height - reach,
+    return juce::Rectangle<float>(0.0f, rowsTop() + static_cast<float>(row) * height - reach,
                                   labelWidth, height + 2.0f * reach)
         .getIntersection({0.0f, headerHeight, labelWidth, rowAreaHeight()})
         .getSmallestIntegerContainer();

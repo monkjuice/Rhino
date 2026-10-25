@@ -15,6 +15,17 @@ namespace rhino
 namespace
 {
 juce::Result noOpenClip() { return juce::Result::fail("Open a MIDI clip to edit its notes."); }
+
+// Where the editor shows a note to start, in its own steps. A clip whose window
+// opens part-way through a note - cut, trimmed or pasted a hair after the note
+// began - still plays it: Tracktion moves the note-on of a note that began
+// before the clip to the clip's start (createDefaultPlaybackMidiSequence). So
+// that note is shown, sized and divided from step 0, where it sounds. A note
+// wholly before the window plays nothing and keeps its own start, off the grid.
+double shownStartStep(double startStep, double lengthSteps)
+{
+    return startStep < 0.0 && startStep + lengthSteps > 0.0 ? 0.0 : startStep;
+}
 }
 
 bool Session::hasNote(int step, int pitch) const
@@ -40,10 +51,13 @@ std::vector<Session::EditorNote> Session::editorNotes() const
     const auto stepBeats = stepDurationBeats(editorStepResolution());
     result.reserve(static_cast<size_t>(pattern().getSequence().getNumNotes()));
     for (auto* note : pattern().getSequence().getNotes())
-        result.push_back({note->state,
-                          stepForBeat(note->getStartBeat().inBeats()),
-                          note->getLengthBeats().inBeats() / stepBeats,
+    {
+        const auto start = stepForBeat(note->getStartBeat().inBeats());
+        const auto length = note->getLengthBeats().inBeats() / stepBeats;
+        const auto shown = shownStartStep(start, length);
+        result.push_back({note->state, shown, length - (shown - start),
                           note->getNoteNumber(), note->getVelocity(), note->getColour()});
+    }
     return result;
 }
 
@@ -373,9 +387,14 @@ juce::Result Session::resizeNote(const juce::ValueTree& state, double lengthStep
     if (note == nullptr)
         return juce::Result::fail("Select a note to resize.");
     const auto stepBeats = stepDurationBeats(editorStepResolution());
-    const auto startStep = stepForBeat(note->getStartBeat().inBeats());
+    // The length asked for is the one the editor shows, measured from where
+    // it shows the note to start; the part before the window is kept.
+    const auto noteStart = stepForBeat(note->getStartBeat().inBeats());
+    const auto noteLength = note->getLengthBeats().inBeats() / stepBeats;
+    const auto startStep = shownStartStep(noteStart, noteLength);
+    const auto hidden = startStep - noteStart;
     lengthSteps = std::clamp(lengthSteps, 0.001, static_cast<double>(editorStepCount()) - startStep);
-    if (std::abs(note->getLengthBeats().inBeats() / stepBeats - lengthSteps) < 0.0001)
+    if (std::abs(noteLength - hidden - lengthSteps) < 0.0001)
         return juce::Result::ok();
     auto nextStart = static_cast<double>(editorStepCount());
     for (auto* other : sequence.getNotes())
@@ -383,10 +402,10 @@ juce::Result Session::resizeNote(const juce::ValueTree& state, double lengthStep
             && other->getStartBeat() > note->getStartBeat())
             nextStart = std::min(nextStart, stepForBeat(other->getStartBeat().inBeats()));
     lengthSteps = std::min(lengthSteps, std::max(0.001, nextStart - startStep));
-    if (std::abs(note->getLengthBeats().inBeats() / stepBeats - lengthSteps) < 0.0001)
+    if (std::abs(noteLength - hidden - lengthSteps) < 0.0001)
         return juce::Result::ok();
     note->setStartAndLength(note->getStartBeat(),
-                            tracktion::core::BeatDuration::fromBeats(lengthSteps * stepBeats),
+                            tracktion::core::BeatDuration::fromBeats((hidden + lengthSteps) * stepBeats),
                             &edit->getUndoManager());
     markModified(patternTrackIndex(), ModelChange::notes);
     sendSynchronousChangeMessage();
@@ -515,7 +534,8 @@ juce::Result Session::fillNoteToClipEnd(const juce::ValueTree& state)
     if (note == nullptr)
         return juce::Result::fail("Select a note to fill.");
     const auto stepBeats = stepDurationBeats(editorStepResolution());
-    const auto startStep = stepForBeat(note->getStartBeat().inBeats());
+    const auto startStep = shownStartStep(stepForBeat(note->getStartBeat().inBeats()),
+                                          note->getLengthBeats().inBeats() / stepBeats);
     return resizeNote(state, patternLengthBeats() / stepBeats - startStep);
 }
 
@@ -739,6 +759,11 @@ juce::Result Session::redistributeNotes(const std::vector<juce::ValueTree>& stat
         start = std::min(start, note->getStartBeat().inBeats());
         end = std::max(end, note->getEndBeat().inBeats());
     }
+    // What is divided is what the editor shows: a note that began before the
+    // window is shown from the window's start, and divided from there too, so
+    // no retrigger lands where the clip cannot play it.
+    if (const auto windowStart = patternOffsetBeats(); start < windowStart && end > windowStart)
+        start = windowStart;
     if (end - start < 0.0001)
         return juce::Result::fail("The selected note is too short to divide.");
     for (auto* other : sequence.getNotes())

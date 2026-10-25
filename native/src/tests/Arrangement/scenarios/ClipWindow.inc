@@ -61,6 +61,62 @@
                     "A note drawn on step four is written a beat into the window, not a beat into the sequence");
             require(session.hasNote(4, 67), "The drawn note reads back on the step it was drawn on");
 
+            // A note that began a 64th before the window - the clip cut or
+            // pasted on the beat after an early note - still plays, from the
+            // clip's start. The editor read it as starting before step 0, like
+            // the notes the clip never plays, and dropped it: a clip that kept
+            // sounding showed an empty grid.
+            {
+                const auto crossingStart = session.patternOffsetBeats() - 0.046875;
+                session.beginNoteGesture("Window fixture crossing note");
+                auto* crossing = session.pattern().getSequence().addNote(58,
+                    tracktion::core::BeatPosition::fromBeats(crossingStart),
+                    tracktion::core::BeatDuration::fromBeats(3.0), 100, 0, &session.edit->getUndoManager());
+                session.endNoteGesture();
+                require(crossing != nullptr, "Can place a note across the window's start");
+                const auto crossingState = crossing->state;
+                const auto shownCrossing = [&session, &crossingState]
+                {
+                    for (const auto& note : session.editorNotes())
+                        if (note.state == crossingState) return std::pair {note.startSteps, note.lengthSteps};
+                    return std::pair {-1000.0, 0.0};
+                };
+                require(close(shownCrossing().first, 0.0) && close(shownCrossing().second, 11.8125),
+                        "A note that began just before the window is shown from step 0, where it plays");
+                auto editor = std::make_unique<StepGrid>(session);
+                editor->setSize(1000, 250);
+                editor->changeListenerCallback(nullptr);
+                require(editor->noteForState(crossingState) != nullptr && editor->laneNoteFor(crossingState) != nullptr,
+                        "The note editor draws it, and gives it a velocity marker");
+
+                session.beginNoteGesture("Window fixture resize");
+                require(session.resizeNote(crossingState, 4.0).wasOk(), "Can resize the crossing note");
+                session.endNoteGesture();
+                require(close(shownCrossing().first, 0.0) && close(shownCrossing().second, 4.0)
+                            && close(crossing->getStartBeat().inBeats(), crossingStart),
+                        "Resizing it sets the length the editor shows, and keeps where the note began");
+
+                std::vector<juce::ValueTree> halves;
+                session.beginNoteGesture("Window fixture divide");
+                require(session.redistributeNotes({crossingState}, 2, halves).wasOk() && halves.size() == 2,
+                        "Can divide the crossing note");
+                session.endNoteGesture();
+                auto halfStarts = std::vector<double> {};
+                for (const auto& note : session.editorNotes())
+                    if (note.pitch == 58) halfStarts.push_back(note.startSteps);
+                std::sort(halfStarts.begin(), halfStarts.end());
+                require(halfStarts.size() == 2 && close(halfStarts[0], 0.0) && close(halfStarts[1], 2.0),
+                        "Dividing it divides the part the editor shows, so both halves play");
+
+                editor.reset();
+                session.undo();
+                session.undo();
+                session.undo();
+                const auto afterUndo = session.editorNotes();
+                require(std::none_of(afterUndo.begin(), afterUndo.end(), [](const auto& note) { return note.pitch == 58; }),
+                        "Undo takes the crossing note back out");
+            }
+
             // The arrangement draws from the same window. The pasted clip runs
             // from two seconds to four, and the note it plays fills it.
             view.sync();

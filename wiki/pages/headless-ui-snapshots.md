@@ -40,6 +40,10 @@ file first; it is the way to see the meters without opening the app ([Track leve
 `-short` appended: a 160 px band of the arrangement from track 0's card down, with its lane row open, folded away by
 the arrow in the card's corner, and with the card folded to its one line, from `AutomationLanes.inc` in the same case,
 deleting any old files first ([Track automation](automation.md)).
+`RHINO_AUTOMATION_TRACK_SNAPSHOT` (2026-10-25) writes track 0's own row across the arrangement's full width with a
+ramp drawn on the lane its card's chooser shows, under the clips' name strip, from `AutomationLanes.inc` in the same
+case, deleting any old file first; unset, the render still runs as a paint smoke test
+([Track automation](automation.md#the-automation-chooser)).
 `RHINO_PREFERENCES_SNAPSHOT` writes the Preferences panel on its MIDI tab at 560 x 480, with a `Theme`, from
 `KeyboardCurves.inc` in the same case, deleting any old file first ([Keyboard velocity curves](keyboard-velocity-curves.md)).
 `RHINO_RETURN_TRACKS_SNAPSHOT` writes the left 420 px of the arrangement's cards at 2x scale, with a `Theme`, from

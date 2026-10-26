@@ -1277,3 +1277,11 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/forge.md (keys labelled A0 to C6 with middle C as C3, not A1 to C7; 88 px; the guide's door and `Page::guide`; 23 test areas)
 - updated: pages/build-and-test-forge.md (MSB8029 under `Temp` is not harmless: an edited header went uncompiled until `--clean-first`)
 - updated: pages/proving-a-forge-change-changed-nothing.md (a control with only the suspect edit isolates a failure; `--clean-first` after editing a scratch tree)
+
+## [2026-10-25] update | Arrangement: a card's automation chooser replaces the A button's edit mode; level drags by pointer travel, Shift for fine (92b4258)
+- source: the coordinator's brief and addendum, checked against native/src/model/SessionAutomation.cpp (`readTrackAutomations`, `ensureTrackAutomationState`, `setTrackShownAutomation`), native/src/ui/arrangement/ArrangementAutomationChooser.cpp, ArrangementAutomation.cpp (`automationArea`, `automationHoverAt`, `beginAutomationGesture`, `dragAutomationGesture`), Arrangement.cpp (`resized`), Arrangement.h, ArrangementGestures.cpp (menu item 212) and native/CMakeLists.txt; per the coordinator, all six CTest cases passed on the build before the track-row snapshot was added
+- updated: pages/automation.md (summary; new sections The automation chooser (the A button and its mode gone, the card's chooser and the track menu's item, `rhinoShownAutomation` and how `shown` resolves, a lane put over the track becomes the shown one, the curve under the clips' strip, focus) and Dragging a level (travel instead of position, 200 px and Shift's tenth, the snap in travel, Alt, the test); the fold paragraph under a heading of its own)
+- updated: pages/arrangement-view.md (summary and intro: fifteen units with `ArrangementAutomationChooser.cpp`; a clip's body edits the shown curve; the card's third line, the A button gone; the fold link's anchor)
+- updated: pages/session-model.md (the lane a row shows among the view settings that skip undo and pass `ModelChange::none`)
+- updated: pages/headless-ui-snapshots.md (`RHINO_AUTOMATION_TRACK_SNAPSHOT`: track 0's row with a ramp on its shown lane, a paint smoke test when unset; added from the coordinator's second addendum, checked against AutomationLanes.inc)
+- updated: index.md (summaries of Track automation and Arrangement view)

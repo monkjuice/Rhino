@@ -1387,3 +1387,7 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - created: pages/rhino-duck-panel.md (the 1000 x 620 layout, the strip's dynamic ranges and sync guard, the art, the meter's scale, spring and fixed waterline, the scope's layers and handles, the panel tests and snapshot flags, the preset-bar and brand-mark decisions)
 - updated: pages/rhino-duck.md (summary; source layout; Hold and Release replace Slope, Attack and Depth, the rooms, Swell and Double's new point, Attack kept in ms; the dry trace and `takeDeepestGain`; the panel section shortened to a pointer; tests and verification status; decisions on per-curve memory and the single band cutoff)
 - updated: index.md (Components: Rhino Duck's panel; Rhino Duck's summary)
+
+## [2026-10-26] update | Rhino Duck: chips lifted clear of the plates' lit top edge (e8da50a)
+- source: the coordinator's addendum, checked against effects/rhino-duck/ui/DuckTheme.h and ui/DuckArt.h (`drawPlate`); committed as e8da50a
+- updated: pages/rhino-duck-panel.md (the chip colour departs from the handoff: a fill must clear the plate's lightest point, not its average; why SOLO, Length and Trigger read as bare text; the new colours and edge)

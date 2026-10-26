@@ -34,7 +34,11 @@ ms at the current tempo (`Processor::cycleSeconds`), Attack in its stored ms.
 
 `ui/DuckArt.h` holds the plates, recessed wells, screws, a 128 px grain tile made once per editor, and the rubber duck
 as vector paths (body, wing, head, beak, a horn on the crown, a scowl). The duck's head is the brand mark. The palette
-in `ui/DuckTheme.h` follows the handoff's `palette.json`. The editor is two units: `src/DuckEditor.cpp` (construction,
+in `ui/DuckTheme.h` follows the handoff's `palette.json`, except one colour. **A control's fill must clear the plate's
+lightest point, not its average.** `drawPlate` lights the top of each plate with `plate.brighter(0.08)`, and the
+handoff's `panel_raised` chip fill (`#2B3037`) matched that top edge. Unlit chips near a plate's top (SOLO, Length,
+Trigger) therefore showed only as bare text. Since e8da50a, `colour::chip` is `#32373F` (hover `#3D434C`) and an
+unlit live chip draws a faint white edge. The editor is two units: `src/DuckEditor.cpp` (construction,
 wiring, refresh, menus) and `src/DuckEditorPaint.cpp` (plates, brand, readings, dividers). The editor's 30 Hz tick
 still repaints the scope and follows host-moved parameters.
 

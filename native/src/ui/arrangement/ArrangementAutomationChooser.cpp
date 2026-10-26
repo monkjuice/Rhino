@@ -26,7 +26,7 @@ void Arrangement::syncAutomationChoosers()
         const auto* shown = shownAutomation(track);
         const auto name = factsFor(track).name;
         auto& chooser = *automationChooser[static_cast<size_t>(track)];
-        chooser.setButtonText((shown != nullptr ? shown->parameterName : juce::String("None")) + "  v");
+        chooser.setButtonText(shown != nullptr ? shown->parameterName : juce::String("None"));
         chooser.setTooltip(shown != nullptr
             ? "Automation on " + name + ": " + shown->deviceName + " " + shown->parameterName
                   + ". Click under the clip names to add a node, drag one to move it, Shift for fine steps. "

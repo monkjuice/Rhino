@@ -34,6 +34,31 @@ public:
         g.fillEllipse(juce::Rectangle<float>(diameter, diameter).withCentre(bounds.getCentre()));
     }
 };
+
+// The input and automation choosers. The stock button fits a label that is too
+// wide by squeezing its glyphs and shrinking its font, which lands them between
+// pixels and blurs them - and one column wide, most input names were too wide.
+// This sets the label in the font the stock button starts from, on whole
+// pixels, cut short with an ellipsis, and keeps the menu's "v" at the right
+// edge however long the name is.
+class ChooserButton final : public juce::TextButton
+{
+public:
+    explicit ChooserButton(const juce::String& name) : juce::TextButton(name) {}
+
+    void paintButton(juce::Graphics& g, bool highlighted, bool pressed) override
+    {
+        auto& look = getLookAndFeel();
+        look.drawButtonBackground(g, *this,
+                                  findColour(getToggleState() ? buttonOnColourId : buttonColourId),
+                                  highlighted, pressed);
+        g.setFont(look.getTextButtonFont(*this, getHeight()));
+        g.setColour(findColour(getToggleState() ? textColourOnId : textColourOffId));
+        auto area = getLocalBounds().reduced(4, 0);
+        drawSnappedText(g, "v", area.removeFromRight(7), juce::Justification::centred);
+        drawSnappedText(g, getButtonText(), area.withTrimmedRight(2), juce::Justification::centred, true);
+    }
+};
 }
 
 const Arrangement::TrackFacts& Arrangement::factsFor(int track) const
@@ -116,9 +141,9 @@ void Arrangement::sync()
         // the name comes from the session rather than from anything the menu
         // remembered. Which of the two inputs is named follows from what the
         // track is, which is fixed when the track is made.
-        trackInput[index]->setButtonText((takes == Session::RecordInput::midi
-                                              ? session.trackMidiInputName(track)
-                                              : session.trackAudioInputName(track)) + "  v");
+        trackInput[index]->setButtonText(takes == Session::RecordInput::midi
+                                             ? session.trackMidiInputName(track)
+                                             : session.trackAudioInputName(track));
         trackInput[index]->setTooltip(takes == Session::RecordInput::midi
             ? "MIDI From on " + name + " - which input plays it. All Ins is every keyboard "
               "plus the typing keyboard; Computer Keyboard is the typing keyboard alone."
@@ -337,13 +362,13 @@ void Arrangement::syncTrackControls()
         // What the track takes in. The list is the machine's devices at the
         // moment it is opened, so it is a menu rather than a ComboBox holding
         // a snapshot of them, and which list that is follows from the track.
-        auto inputButton = std::make_unique<juce::TextButton>("All Ins  v");
+        auto inputButton = std::make_unique<ChooserButton>("All Ins");
         inputButton->onClick = [this, track] { showTrackInputMenu(track); };
         inputButton->setColour(juce::TextButton::buttonColourId, palette::control);
         inputButton->setColour(juce::TextButton::textColourOffId, palette::textDim);
         // Beside it, which lane the row shows; it wears the input chooser's
         // look because it is the same kind of control.
-        auto chooserButton = std::make_unique<juce::TextButton>("None  v");
+        auto chooserButton = std::make_unique<ChooserButton>("None");
         chooserButton->onClick = [this, track] { showAutomationChooser(track); };
         chooserButton->setColour(juce::TextButton::buttonColourId, palette::control);
         chooserButton->setColour(juce::TextButton::textColourOffId, palette::textDim);

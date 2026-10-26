@@ -1381,3 +1381,9 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/arrangement-view.md (the snapping bullet: edges behind the pointer cut the cell and the nearest edge ahead within 14 px wins if nearer, trims to the nearest grid line or edge on their own track, what stays grid only, why both parts given the trim handle and why not a plain magnet, the test; updated date)
 - updated: pages/pointer-and-selection.md (a sweep snaps to clip edges on its rows; Alt bypasses that too; updated date)
 - updated: pages/region-editing.md (one sentence on sweep snapping, linking the arrangement's bullet; updated date)
+
+## [2026-10-26] update | Rhino Duck: the panel redesigned with a duck meter, an Attack/Hold/Release/Depth strip and a curve chooser (7a4c161)
+- source: the change brief (the designer's rhino_duck_handoff.zip and the user's answers) and the coordinator's addenda, checked against effects/rhino-duck/core/DuckCurves.h, core/DuckEngine.h, src/DuckProcessor.h/.cpp, src/DuckEditor.cpp, ui/DuckLayout.h, ui/DuckMeter.h, ui/DuckArt.h, ui/DuckControls.h and the tests; committed and pushed as 7a4c161, all four Duck areas pass; not yet loaded in a real host, Rhino's suite not run
+- created: pages/rhino-duck-panel.md (the 1000 x 620 layout, the strip's dynamic ranges and sync guard, the art, the meter's scale, spring and fixed waterline, the scope's layers and handles, the panel tests and snapshot flags, the preset-bar and brand-mark decisions)
+- updated: pages/rhino-duck.md (summary; source layout; Hold and Release replace Slope, Attack and Depth, the rooms, Swell and Double's new point, Attack kept in ms; the dry trace and `takeDeepestGain`; the panel section shortened to a pointer; tests and verification status; decisions on per-curve memory and the single band cutoff)
+- updated: index.md (Components: Rhino Duck's panel; Rhino Duck's summary)

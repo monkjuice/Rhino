@@ -1,7 +1,7 @@
 ---
 title: Rhino Duck
 type: component
-summary: An independent VST3 and standalone sidechain ducker under effects/rhino-duck/, built the way Forge is: sixteen curves read by a Sync, MIDI or Audio clock, Mix for depth, Slope and Shift kept per curve, a band split, and a scope and thumbnails drawn from the one function the audio runs.
+summary: An independent VST3 and standalone sidechain ducker under effects/rhino-duck/, built the way Forge is: sixteen curves read by a Sync, MIDI or Audio clock, Mix for depth, Hold, Release, Attack, Depth and Shift kept per curve, a band split, and a scope, thumbnails and gain-reduction meter drawn from what the audio runs.
 tags: [duck, vst3, effects, dsp, juce]
 sources: []
 updated: 2026-10-26
@@ -22,8 +22,8 @@ hold here). The code, the look and the curves are Rhino's own; only the workflow
 | --- | --- |
 | `core/DuckCurves.h` | The sixteen curves as pure arithmetic, no JUCE |
 | `core/DuckEngine.h` | The engine: clock, triggers, delay, crossover, scope, no JUCE |
-| `ui/` | `DuckTheme.h` (colours and the three faces), `DuckLayout.h` (geometry as a pure function), `DuckControls.h` (chip, knob, slider, curve cell), the subset fonts |
-| `src/` | `DuckProcessor.*` and `DuckParameters.cpp` (the host boundary), `DuckScopeView.*`, `DuckEditor.*` |
+| `ui/` | `DuckTheme.h` (palette and the three faces), `DuckLayout.h` (geometry as a pure function), `DuckControls.h`, `DuckArt.h` (plates, grain, the duck), `DuckMeter.h`, the subset fonts |
+| `src/` | `DuckProcessor.*` and `DuckParameters.cpp` (the host boundary), `DuckScopeView.*`, `DuckEditor.*` and `DuckEditorPaint.cpp` |
 | `tests/` | One file per area, `curves`, `engine`, `processor`, `layout`, and `--snapshot` |
 
 Build and test exactly as Forge: `cmake -S effects/rhino-duck -B effects/rhino-duck/build -G "Visual Studio 17 2022" -A x64`,
@@ -42,16 +42,26 @@ before the next beat (Sub Slow, Sub Deep), two kick trimmers that start open and
 curves open at both ends with a dip between (Suction, Suction Wide), and two rhythm curves closed at both ends (Swell,
 Double).
 
-Two adjustments bend a curve and are remembered **per curve**, as the manual's Kickstart does:
+Five adjustments, `CurveAdjust { hold, shift, release, attack, depth }`, bend a curve and are remembered **per
+curve**, as the manual's Kickstart does (Hold and Release replaced Slope in 7a4c161, 2026-10-26):
 
-- **Slope** moves the points flagged `mobile` left or right, as far as the fixed points either side allow
-  (`mobileRoom`, `mobileOffset`, `slopeForOffset`). A drag on the scope's sloped part converts pixels to a phase offset
-  and back to a Slope, so the part moves under the pointer.
+- **Hold** moves the points flagged `mobile`, the sloped part, by an absolute phase offset of its start; **Release**
+  scales the part's length from that start. Both stay within the room the fixed points leave (`mobileRoom`,
+  `slopedPart`); `holdRoom`/`releaseRoom` are each knob's travel given the other, and `withHold`/`withRelease` clamp
+  each against the other, so turning one never moves the other (evaluation clamps too, Release winning). A part
+  designed to start at phase 0 may stay there, which is why Swell and Double gained a mobile point at phase 0, level 0:
+  they now have a part to hold and release, and sound identical at the defaults (tested).
+- **Attack** (phase, at most 0.5) eases, smoothstep, from the level the cycle ends at into the curve over its first
+  stretch; a curve that ends where it starts is unchanged by it.
+- **Depth** keeps that much of the dip: `1 - depth * (1 - level)`.
 - **Shift** moves the whole curve round the cycle, wrapping. The four arrows step it by 1/16 and 1/256 of the length.
 
-They are not parameters. They live on the processor as atomics, are written to a `CURVES` child of the state tree in
-`getStateInformation` and read back in `setStateInformation`, so they save with the project and never appear in a
-host's automation list ([Decisions](#decisions)).
+None is a parameter ([Decisions](#decisions)). The processor keeps them as atomics (`Processor::Memory`) and saves
+them in `CURVE` children of a `CURVES` node (`hold`, `shift`, `release`, `attackMs`, `depth`; no reading of the
+day-old `slope` attribute). **Attack is stored in milliseconds** (0-100 ms) and converted to phase at
+`cycleSeconds()`, Length in beats x 60 / the host's last bpm, which `processBlock` stores before reading the settings:
+a tempo change leaves Attack's ms alone while Hold and Release, being phase, scale with tempo and Length like the rest
+of the curve. `readCurves` takes raw values within sane bounds; `slopedPart` applies the room whenever they are read.
 
 ## The engine
 
@@ -73,22 +83,21 @@ host's automation list ([Decisions](#decisions)).
   not the band is on so switching it meets warm filters; the band and solo switches crossfade over 10 ms, and the
   cutoff glides over about 20 ms, recomputed per block. The first block after a reset lands on its cutoff at once, so a
   static setting renders the same in blocks of any size.
-- **The scope** is 256 columns of lowest and highest sample, output and sidechain, indexed by phase and written by the
-  audio thread into atomics; the panel reads them whole. The sidechain shown is delayed by the latency, so it lines up
-  with the output.
+- **The scope** is 256 columns of lowest and highest sample, output, sidechain and dry (the delayed input before the
+  gain), six atomics per column, indexed by phase and written by the audio thread; the panel reads them whole. The
+  sidechain shown is delayed by the latency, so it lines up with the output.
+- **The meter's reading.** `takeDeepestGain()` exchanges the deepest gain applied since the last take (Mix included)
+  with `noGainReading` (2.0: no block ran). The atomic is `mutable` so the panel's `const Engine&` can take it; the
+  audio thread does a load-min-store, so a take landing between the two costs at most one block's figure. Only the
+  meter takes it; `cycleCount()` tells a picture that a cycle started.
 
 ## The panel
 
-840 x 452, placed by `ui::layoutFor` ([Displays draw from the DSP](displays-draw-from-the-dsp.md) holds throughout):
-the name, the Mix knob and its reading, BAND, SOLO and the cutoff on the left; the Length chips (1/8 to 1/1), the
-SYNC, MIDI and AUDIO chips, LOOP (shown in MIDI and Audio) and the menu over the scope; the scope, the Shift arrows
-round the curve's name and family, and sixteen curve cells in two rows of eight (`curveAtCell`: the first eight fill
-the left four columns, then a family a column), with a divider where a family ends. Every control draws itself
-(`ui/DuckControls.h`), so there is no look-and-feel. The scope (`src/DuckScopeView.*`) draws the curve from `curveGain`,
-tints the sloped part and takes a drag on it, draws and drags the End marker in one-shot mode, draws the sweep, and
-resets the curve from its corner. The menu holds anti-click smoothing, the MIDI channel and note, the curve resets and
-the window size (75% to 200%, through `setScaleFactor`, kept on the state as `uiScale`). The editor's 30 Hz tick
-repaints the scope and follows parameters the host moved, repainting only what changed.
+Since 7a4c161 (2026-10-26) the panel is 1000 x 620 in the industrial Rhino and Forge look: a rail with the brand, a
+rubber-duck gain-reduction meter and Mix; the chips, the scope and the sixteen curve cells; a strip with Attack, Hold,
+Release and Depth for the chosen curve beside the band split; and a preset bar that steps through the curves.
+[Rhino Duck's panel](rhino-duck-panel.md) has the layout, the meter, the scope's layers and the snapshot flags. The
+menu holds anti-click smoothing, the MIDI channel and note, the curve resets and the window size.
 
 ## Hosting
 
@@ -116,22 +125,33 @@ output follows the curve at the host's phase and from a mid-beat start; Mix 0 pa
 200 Hz split leaves 2 kHz within 0.5 dB while taking 60 Hz down 30 dB; a kick on the sidechain lands the duck 10 ms
 later on its own onset and a second kick restarts an open curve; a note cuts on its frame, and with smoothing fades
 over 288 samples; a one-shot freezes at End; the largest sample-to-sample step is under 0.004 with smoothing and
-about 0.02 without; the state round-trips with the curves' memory; latency follows the mode; the MIDI filters hold; the
-panel's parts stay inside it and apart, and the editor paints headless. `RhinoDuckTests --snapshot out.png [MIDI|AUDIO] [BAND] [ONESHOT]`
-renders the panel after two seconds of a bassline under a kick ([Seeing the UI without taking the screen](headless-ui-snapshots.md)).
+about 0.02 without; Depth 50% ducks half way, Attack lets the beat's first moments through, a shorter Release opens
+sooner and a longer Hold cuts longer; the dry trace is recorded and the deepest gain includes Mix; untouched curves
+play as designed and Hold and Release keep their rooms; the state round-trips all five adjustments per curve, and
+Attack keeps its ms across Length and host tempo; latency follows the mode; the MIDI filters hold. The panel's tests
+and `--snapshot` are on [Rhino Duck's panel](rhino-duck-panel.md#tests-and-snapshots). For 7a4c161, dropping Depth
+from `curveGain` and moving the waterline with the duck each failed their area before being reverted.
+
+Not yet verified for 7a4c161 (as of 2026-10-26): the new VST3 loaded in a real host, and Rhino's own suite, which
+was not run because RhinoDAW was open.
 
 ## Decisions
 
 - **An independent VST3, not a native device.** Asked for on 2026-10-25; the reasons are Forge's. It joined the
   catalog as an external entry the next day, which is what made the catalog carry an external plugin's facts.
 - **A new top-level `effects/` folder**, beside `instruments/`, because an effect under `instruments/` would mislead.
-- **Curve adjustments are state, not parameters.** Sixteen Slopes and sixteen Shifts as parameters would put 32
-  entries in every host's automation list for something the manual treats as the curve buttons' own memory.
+- **Curve adjustments are state, not parameters.** The manual treats them as the curve buttons' own memory. Per-curve
+  parameters would flood every host's automation list, and four shared Attack/Hold/Release/Depth parameters would
+  make a tile forget its edits when another is chosen. So when the handoff's strip arrived (7a4c161) the user kept all
+  five per curve: none is automatable or on Rhino's rack, whose `rackParameters` stay nine.
+- **The band keeps its single Linkwitz-Riley cutoff** (20 Hz-5.12 kHz); the mockup's low-high range was not built.
+  WHOLE SIGNAL is a switch shown as the inverse of the existing `band` parameter, so no parameter changed.
 - **Lookahead is the engine's own delay line**, not a request to the host, so a restart lands on the sample it was heard
   with in every host alike.
 
 ## Related
 
+- [Rhino Duck's panel](rhino-duck-panel.md)
 - [Rhino Forge](forge.md)
 - [Forge is an independent VST3](forge-is-an-independent-vst3.md)
 - [Build and test Forge](build-and-test-forge.md)

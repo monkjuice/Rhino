@@ -190,8 +190,9 @@ private:
         AudioClipPanel& panel;
     };
     KnobMenu knobMenu {*this};
-    // The node being carried, the level it is carried at before snapping, and
-    // where the pointer was, so the level moves by how far the pointer travels.
+    // The node being carried, the height in the band it is carried at before
+    // snapping (0 at the foot, 1 at the top), and where the pointer was, so
+    // the node moves by how far the pointer travels.
     int draggingNode = -1;
     float envelopeCarried = 0.0f, envelopeLastY = 0.0f;
     bool envelopeGestureOpen = false;

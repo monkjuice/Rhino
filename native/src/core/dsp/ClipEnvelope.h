@@ -84,14 +84,49 @@ inline float clampClipEnvelopeValue(ClipEnvelopeKind kind, float value)
     return std::clamp(value, range.minimum, range.maximum);
 }
 
-// Pitch lands on whole semitones unless asked not to, as Live's Transposition
-// envelope does without Shift: tuning a note by hand is the rare case.
-inline float snapClipEnvelopeValue(ClipEnvelopeKind kind, float value, bool fine)
+// Pitch moves freely, and lands on a whole semitone only when asked to. Live
+// snaps its Transposition envelope unless Shift is held; snapping by default
+// left no way to pick anything between two semitones without a modifier, and
+// that was the first thing tried.
+inline float snapClipEnvelopeValue(ClipEnvelopeKind kind, float value, bool wholeSemitones)
 {
     value = clampClipEnvelopeValue(kind, value);
-    if (kind == ClipEnvelopeKind::pitch && !fine)
+    if (kind == ClipEnvelopeKind::pitch && wholeSemitones)
         return clampClipEnvelopeValue(kind, std::round(value));
     return value;
+}
+
+// Where the editor draws a value, from 0 at the foot of its band to 1 at the
+// top. Gain and Pan are drawn as they are. Pitch is drawn on a square-root
+// scale either side of no shift, because two semitones is already a long way
+// and a straight scale across four octaves drew it nearly flat: +1 st sits a
+// fifth of the way from the middle to the top, +2 nearly three tenths, +12
+// seven tenths. The engine's line between two nodes is still straight in
+// semitones, so the editor draws it as the curve this scale makes of it.
+inline float clipEnvelopeDisplayPosition(ClipEnvelopeKind kind, float value)
+{
+    const auto range = clipEnvelopeRange(kind);
+    value = clampClipEnvelopeValue(kind, value);
+    if (kind == ClipEnvelopeKind::pitch)
+    {
+        const auto amount = std::sqrt(std::abs(value) / range.maximum);
+        return 0.5f + (value < 0.0f ? -0.5f : 0.5f) * amount;
+    }
+    return (value - range.minimum) / (range.maximum - range.minimum);
+}
+
+// The value drawn at a height of the band, 0 at its foot and 1 at its top:
+// clipEnvelopeDisplayPosition run backwards.
+inline float clipEnvelopeValueAtDisplayPosition(ClipEnvelopeKind kind, float position)
+{
+    const auto range = clipEnvelopeRange(kind);
+    position = std::isfinite(position) ? std::clamp(position, 0.0f, 1.0f) : 0.5f;
+    if (kind == ClipEnvelopeKind::pitch)
+    {
+        const auto offset = (position - 0.5f) * 2.0f;
+        return clampClipEnvelopeValue(kind, (offset < 0.0f ? -1.0f : 1.0f) * offset * offset * range.maximum);
+    }
+    return clampClipEnvelopeValue(kind, range.minimum + position * (range.maximum - range.minimum));
 }
 
 // The envelope's value at a moment, as the engine plays it: a straight line

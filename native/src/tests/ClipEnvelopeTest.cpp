@@ -47,10 +47,32 @@ void checkClipEnvelopeRules()
             "Pitch stops where the knob does");
     require(clampClipEnvelopeValue(ClipEnvelopeKind::pan, std::nanf("")) == 0.0f, "A value that is no number rests");
 
-    // Pitch lands on semitones unless asked to be fine.
-    require(snapClipEnvelopeValue(ClipEnvelopeKind::pitch, 2.6f, false) == 3.0f, "Pitch snaps to a semitone");
-    require(near(snapClipEnvelopeValue(ClipEnvelopeKind::pitch, 2.6f, true), 2.6), "Fine pitch does not snap");
-    require(near(snapClipEnvelopeValue(ClipEnvelopeKind::gain, 0.37f, false), 0.37), "Gain never snaps");
+    // Pitch moves freely, and lands on a semitone only when asked.
+    require(near(snapClipEnvelopeValue(ClipEnvelopeKind::pitch, 2.6f, false), 2.6), "Pitch moves between semitones");
+    require(snapClipEnvelopeValue(ClipEnvelopeKind::pitch, 2.6f, true) == 3.0f, "and snaps to one when asked");
+    require(near(snapClipEnvelopeValue(ClipEnvelopeKind::gain, 0.37f, true), 0.37), "Gain never snaps");
+
+    // Where the editor draws them. Gain and Pan as they are; Pitch on a
+    // square-root scale, so a couple of semitones is a visible move.
+    require(near(clipEnvelopeDisplayPosition(ClipEnvelopeKind::gain, 0.25f), 0.25), "Gain is drawn as it is");
+    require(near(clipEnvelopeDisplayPosition(ClipEnvelopeKind::pan, 0.0f), 0.5), "Pan's centre is the middle");
+    require(near(clipEnvelopeDisplayPosition(ClipEnvelopeKind::pitch, 0.0f), 0.5), "No shift is the middle");
+    require(near(clipEnvelopeDisplayPosition(ClipEnvelopeKind::pitch, clipEnvelopeMaximumSemitones), 1.0)
+                && near(clipEnvelopeDisplayPosition(ClipEnvelopeKind::pitch, -clipEnvelopeMaximumSemitones), 0.0),
+            "and the ends of the range are the ends of the band");
+    require(clipEnvelopeDisplayPosition(ClipEnvelopeKind::pitch, 2.0f) - 0.5f > 0.14f,
+            "Two semitones up is drawn more than a quarter of the way from the middle to the top");
+    require(near(clipEnvelopeDisplayPosition(ClipEnvelopeKind::pitch, -2.0f),
+                 1.0 - clipEnvelopeDisplayPosition(ClipEnvelopeKind::pitch, 2.0f)),
+            "and two down as far below it");
+    for (int kind = 0; kind < clipEnvelopeKindCount; ++kind)
+        for (const auto position : {0.0f, 0.1f, 0.37f, 0.5f, 0.62f, 0.9f, 1.0f})
+        {
+            const auto envelope = static_cast<ClipEnvelopeKind>(kind);
+            require(near(clipEnvelopeDisplayPosition(envelope, clipEnvelopeValueAtDisplayPosition(envelope, position)),
+                         position),
+                    std::string(clipEnvelopeName(envelope)) + " reads back the value drawn at a height");
+        }
 
     // The line between points, level outside them, neutral with none.
     const std::vector<Point> none;

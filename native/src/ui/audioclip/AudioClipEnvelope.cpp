@@ -9,13 +9,15 @@
 // edited where it is drawn: a press puts a node down or takes the one under
 // it, a drag carries it - along in time, and up and down by how far the
 // pointer travels, Shift for a tenth of that - and a double-click takes it
-// away. Pitch lands on whole semitones unless Shift is held, as Live's
-// Transposition envelope does.
+// away. Pitch moves freely and lands on whole semitones only with Ctrl held,
+// and it is drawn on a square-root scale either side of no shift, so a
+// semitone or two is a visible move rather than a flat line.
 //
 // Every value is the model's (Session::setClipEnvelope); this file only
-// draws and gestures. The line drawn is the line the engine plays: straight
-// between nodes, level before the first and after the last, and the rules
-// for both live in dsp/ClipEnvelope.h.
+// draws and gestures. The line drawn is the line the engine plays - straight
+// in the envelope's own units between nodes, level before the first and
+// after the last - drawn through the band's scale, and the rules for all of
+// it live in dsp/ClipEnvelope.h.
 //
 // AudioClipPanel is defined across this file, AudioClipPanel.cpp and
 // AudioClipWarp.cpp. Nothing outside the class changed for the split.
@@ -224,9 +226,7 @@ float AudioClipPanel::yForEnvelopeValue(float value) const
     const auto area = envelopeArea();
     if (!shownEnvelope.has_value() || area.isEmpty())
         return area.getCentreY();
-    const auto range = clipEnvelopeRange(*shownEnvelope);
-    const auto amount = (clampClipEnvelopeValue(*shownEnvelope, value) - range.minimum) / (range.maximum - range.minimum);
-    return area.getBottom() - amount * area.getHeight();
+    return area.getBottom() - clipEnvelopeDisplayPosition(*shownEnvelope, value) * area.getHeight();
 }
 
 float AudioClipPanel::envelopeValueAtY(float y) const
@@ -234,9 +234,7 @@ float AudioClipPanel::envelopeValueAtY(float y) const
     const auto area = envelopeArea();
     if (!shownEnvelope.has_value() || area.isEmpty() || area.getHeight() <= 0.0f)
         return 0.0f;
-    const auto range = clipEnvelopeRange(*shownEnvelope);
-    const auto amount = (area.getBottom() - y) / area.getHeight();
-    return clampClipEnvelopeValue(*shownEnvelope, range.minimum + amount * (range.maximum - range.minimum));
+    return clipEnvelopeValueAtDisplayPosition(*shownEnvelope, (area.getBottom() - y) / area.getHeight());
 }
 
 int AudioClipPanel::envelopeNodeAt(juce::Point<float> point) const
@@ -304,6 +302,32 @@ void AudioClipPanel::paintEnvelope(juce::Graphics& g)
     g.setColour(restingEnvelope.withAlpha(0.22f));
     g.drawHorizontalLine(juce::roundToInt(neutralY), left, right);
 
+    // Pitch's scale is not straight, so it says where it is: a hairline at a
+    // semitone, a whole tone, a fourth and an octave either way, the last
+    // three named where there is room to.
+    if (kind == Session::ClipEnvelope::pitch)
+    {
+        const auto font = uiFont(9.0f);
+        g.setFont(font);
+        for (const auto sign : {1.0f, -1.0f})
+        {
+            auto lastLabel = neutralY;
+            for (const auto semitones : {1.0f, 2.0f, 5.0f, 12.0f})
+            {
+                const auto y = yForEnvelopeValue(sign * semitones);
+                g.setColour(restingEnvelope.withAlpha(0.12f));
+                g.drawHorizontalLine(juce::roundToInt(y), left, right);
+                if (semitones < 2.0f || std::abs(y - lastLabel) < 11.0f)
+                    continue;
+                lastLabel = y;
+                g.setColour(restingEnvelope.withAlpha(0.6f));
+                drawSnappedText(g, (sign > 0.0f ? "+" : "-") + juce::String(juce::roundToInt(semitones)),
+                                juce::Rectangle<float>(left + 3.0f, y - 6.0f, 24.0f, 11.0f).toNearestInt(),
+                                juce::Justification::centredLeft);
+            }
+        }
+    }
+
     if (envelopePoints.empty())
     {
         // Never drawn: a dotted line where the knob is left alone, which says
@@ -313,13 +337,31 @@ void AudioClipPanel::paintEnvelope(juce::Graphics& g)
         return;
     }
 
-    // The line the engine plays across the span the clip plays.
-    juce::Path line;
-    line.startNewSubPath(left, yForEnvelopeValue(clipEnvelopeValueAt(envelopePoints, from, range.neutral)));
+    // The line the engine plays across the span the clip plays: its value at
+    // the clip's start, every node inside, its value at the clip's end, and
+    // straight between them in the envelope's own units. Through Pitch's
+    // scale that straight line is a curve, so each stretch is drawn in short
+    // steps; two nodes at one moment are a step, drawn straight up or down.
+    std::vector<Session::AutomationPoint> corners {{from, clipEnvelopeValueAt(envelopePoints, from, range.neutral)}};
     for (const auto& node : envelopePoints)
         if (node.timeSeconds > from && node.timeSeconds < to)
-            line.lineTo(xForContentTime(node.timeSeconds), yForEnvelopeValue(node.value));
-    line.lineTo(right, yForEnvelopeValue(clipEnvelopeValueBefore(envelopePoints, to, range.neutral)));
+            corners.push_back(node);
+    corners.push_back({to, clipEnvelopeValueBefore(envelopePoints, to, range.neutral)});
+    juce::Path line;
+    line.startNewSubPath(xForContentTime(corners.front().timeSeconds), yForEnvelopeValue(corners.front().value));
+    for (size_t i = 1; i < corners.size(); ++i)
+    {
+        const auto& a = corners[i - 1];
+        const auto& b = corners[i];
+        const auto x0 = xForContentTime(a.timeSeconds), x1 = xForContentTime(b.timeSeconds);
+        const auto steps = kind == Session::ClipEnvelope::pitch && a.value != b.value
+            ? std::max(1, static_cast<int>((x1 - x0) / 3.0f)) : 1;
+        for (int step = 1; step <= steps; ++step)
+        {
+            const auto amount = static_cast<float>(step) / static_cast<float>(steps);
+            line.lineTo(x0 + (x1 - x0) * amount, yForEnvelopeValue(a.value + (b.value - a.value) * amount));
+        }
+    }
     g.setColour(envelopeColour);
     g.strokePath(line, juce::PathStrokeType(1.6f));
 
@@ -378,7 +420,7 @@ bool AudioClipPanel::beginEnvelopeDrag(const juce::MouseEvent& event)
         const auto time = juce::jlimit(from, to, contentTimeAtX(position.x));
         const auto onLine = clipEnvelopeValueAt(points, time, clipEnvelopeRange(kind).neutral);
         const auto value = std::abs(yForEnvelopeValue(onLine) - position.y) <= envelopeLineSnapPixels
-            ? onLine : snapClipEnvelopeValue(kind, envelopeValueAtY(position.y), event.mods.isShiftDown());
+            ? onLine : snapClipEnvelopeValue(kind, envelopeValueAtY(position.y), event.mods.isCommandDown());
         const auto at = std::upper_bound(points.begin(), points.end(), time,
                                          [](double t, const auto& point) { return t < point.timeSeconds; });
         node = static_cast<int>(std::distance(points.begin(), at));
@@ -387,7 +429,7 @@ bool AudioClipPanel::beginEnvelopeDrag(const juce::MouseEvent& event)
     session.beginAudioClipGesture(juce::String(clipEnvelopeName(kind)) + " envelope");
     envelopeGestureOpen = true;
     draggingNode = node;
-    envelopeCarried = points[static_cast<size_t>(node)].value;
+    envelopeCarried = clipEnvelopeDisplayPosition(kind, points[static_cast<size_t>(node)].value);
     envelopeLastY = position.y;
     // A press on a node that then lets go has changed nothing, and records
     // nothing; one that put a node down is already an edit.
@@ -402,16 +444,16 @@ void AudioClipPanel::dragEnvelope(const juce::MouseEvent& event)
     if (!shownEnvelope.has_value() || !juce::isPositiveAndBelow(draggingNode, static_cast<int>(envelopePoints.size())))
         return;
     const auto kind = *shownEnvelope;
-    const auto range = clipEnvelopeRange(kind);
-    const auto fine = event.mods.isShiftDown();
-    // Up and down by travel, not position, carried unsnapped so a node pushed
-    // past an end comes back as soon as the pointer turns.
+    // Up and down by travel, not position, in the band's own scale - so a
+    // Pitch node moves slowly near no shift and faster out towards the
+    // octaves, as it is drawn - and carried unsnapped, so a node pushed past
+    // an end comes back as soon as the pointer turns.
     const auto travel = std::max(envelopeDragTravel, envelopeArea().getHeight());
-    auto step = (envelopeLastY - event.position.y) / travel * (range.maximum - range.minimum);
-    if (fine)
+    auto step = (envelopeLastY - event.position.y) / travel;
+    if (event.mods.isShiftDown())
         step /= envelopeFineDivisor;
     envelopeLastY = event.position.y;
-    envelopeCarried = juce::jlimit(range.minimum, range.maximum, envelopeCarried + step);
+    envelopeCarried = juce::jlimit(0.0f, 1.0f, envelopeCarried + step);
 
     // Along in time where the pointer is, held between its neighbours so the
     // order never changes, and inside the span the clip plays.
@@ -423,7 +465,8 @@ void AudioClipPanel::dragEnvelope(const juce::MouseEvent& event)
         upper = std::min(upper, points[index + 1].timeSeconds);
     upper = std::max(lower, upper);
     const Session::AutomationPoint moved {juce::jlimit(lower, upper, contentTimeAtX(event.position.x)),
-                                          snapClipEnvelopeValue(kind, envelopeCarried, fine)};
+                                          snapClipEnvelopeValue(kind, clipEnvelopeValueAtDisplayPosition(kind, envelopeCarried),
+                                                                event.mods.isCommandDown())};
     if (moved.timeSeconds == points[index].timeSeconds && moved.value == points[index].value)
         return;
     points[index] = moved;

@@ -430,16 +430,33 @@
             require(gainPoints().empty() && !panel.names[0].getText().contains("\xe2\x80\xa2"),
                     "A double-click on a node takes it away, and the knob's mark with it");
 
-            // Pitch lands on a whole semitone unless Shift is held.
+            // Pitch is drawn so that a couple of semitones shows, moves freely
+            // between semitones, and lands on a whole one with Ctrl.
             panel.chooseEnvelopeMenuItem(3);
+            require(panel.yForEnvelopeValue(0.0f) - panel.yForEnvelopeValue(2.0f) > area.getHeight() * 0.125f,
+                    "Two semitones up is drawn more than a quarter of the way from the middle to the top");
             const juce::Point<float> pitched {panel.xForContentTime(0.5), area.getY() + area.getHeight() * 0.3f};
             panel.mouseDown(panelEvent(pitched, pitched, false, left));
             panel.mouseUp(panelEvent(pitched, pitched, false, left));
-            const auto pitch = enveloped.clipEnvelope(hits, Session::ClipEnvelope::pitch);
+            auto pitch = enveloped.clipEnvelope(hits, Session::ClipEnvelope::pitch);
+            const auto drawnAt = clipEnvelopeValueAtDisplayPosition(ClipEnvelopeKind::pitch, 0.7f);
+            require(pitch.size() == 1 && std::abs(pitch[0].value - drawnAt) < 0.05f
+                        && std::abs(pitch[0].value - std::round(pitch[0].value)) > 0.05f,
+                    "A pitch node lands where it is put, between two semitones");
+            const juce::Point<float> onPitch {panel.xForContentTime(pitch[0].timeSeconds), panel.yForEnvelopeValue(pitch[0].value)};
+            const auto snapping = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::commandModifier);
+            panel.mouseDown(panelEvent(onPitch, onPitch, false, snapping));
+            panel.mouseDrag(panelEvent(onPitch, onPitch.translated(0.0f, -3.0f), true, snapping));
+            panel.mouseUp(panelEvent(onPitch, onPitch.translated(0.0f, -3.0f), true, snapping));
+            pitch = enveloped.clipEnvelope(hits, Session::ClipEnvelope::pitch);
             require(pitch.size() == 1 && pitch[0].value == std::round(pitch[0].value) && pitch[0].value > 0.0f,
-                    "A pitch node lands on a whole semitone");
-            if (const auto shot = juce::SystemStats::getEnvironmentVariable("RHINO_CLIP_ENVELOPE_SNAPSHOT", {});
-                shot.isNotEmpty())
+                    "and Ctrl lands it on a whole semitone");
+            // A shape with ramps both ways, painted as a smoke test of the
+            // curved line, and written out when asked for.
+            require(enveloped.setClipEnvelope(hits, Session::ClipEnvelope::pitch,
+                                              {{0.1, 0.0f}, {0.8, 2.0f}, {1.2, -1.0f}, {1.9, 7.0f}}).wasOk(),
+                    "A pitch shape can be drawn for the picture");
+            panel.syncEnvelope();
             {
                 // The runners install no look of their own; the app's is set
                 // for the picture so it shows what the app draws.
@@ -447,9 +464,14 @@
                 panel.setLookAndFeel(&look);
                 const auto picture = panel.createComponentSnapshot(panel.getLocalBounds());
                 panel.setLookAndFeel(nullptr);
-                juce::File(shot).deleteFile();
-                if (auto stream = juce::File(shot).createOutputStream())
-                    juce::PNGImageFormat().writeImageToStream(picture, *stream);
+                require(picture.getWidth() == 880, "The panel paints its envelope");
+                if (const auto shot = juce::SystemStats::getEnvironmentVariable("RHINO_CLIP_ENVELOPE_SNAPSHOT", {});
+                    shot.isNotEmpty())
+                {
+                    juce::File(shot).deleteFile();
+                    if (auto stream = juce::File(shot).createOutputStream())
+                        juce::PNGImageFormat().writeImageToStream(picture, *stream);
+                }
             }
             panel.chooseEnvelopeMenuItem(13);
             require(enveloped.clipEnvelope(hits, Session::ClipEnvelope::pitch).empty() && plugins(hits) == 0,

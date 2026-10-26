@@ -27,6 +27,7 @@ Every device in the [Device catalog](device-catalog.md) on 2026-10-26. Rhino's o
 | Rhino Vocoder | audio FX | `audio/VocoderDevice.*` | [Rhino Vocoder](rhino-vocoder.md) |
 | Rhino Arp | MIDI FX | `midi/RhinoArpDevice.*` | [Rhino Arp](rhino-arp.md) |
 | DJ Input, DJ Output | hidden | `infra/DjTrackPortDevices.*` | The DJ booth's two ends of every track, since 2026-10-12: [DJ decks play live through the track's chain](dj-decks-play-live-through-the-track.md) |
+| Clip Envelope, Clip Pitch | hidden | `infra/ClipEnvelopeDevice.*`, `infra/ClipPitchDevice.*` | On an audio clip's own plugin list, only while it has an envelope for them, since `a1c9607`: [Clip envelopes](clip-envelopes.md) |
 
 The two DJ ends are hand-written on `te::Plugin`, flagged `infrastructure` like Utility and never browsable; they pass the block through until a deck binds them, and `--device-test` holds both to the standard as pass-through effects. Like Utility, the DJ Input answers `getNumOutputChannelsGivenInputs` with its input count, and two only at a chain's head with none, so a mono chain stays mono; its first version answered at least two, the trap that once made a mono take play from the left speaker only, until the review of 2026-10-12 (`AudioChannels.inc`).
 

@@ -51,3 +51,4 @@ It covers a fresh pitched clip, a clip warped in Beats, unwarped and then pitche
 - [Measure sound, don't read the DSP](measure-sound-dont-read-dsp.md)
 - [Offline renders that never return](renders-that-never-return.md)
 - [Bounce to New Track](bounce-to-new-track.md)
+- [Tracktion's pitch shifter under-reports its latency](tracktion-pitch-shifter-under-reports-latency.md)

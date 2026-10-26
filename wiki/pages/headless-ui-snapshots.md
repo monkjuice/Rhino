@@ -68,6 +68,8 @@ rows the kit's assigned keys and the keys its notes are on, from `NoteDrumRows.i
 them out, with two notes selected and D major lit, from `NoteTools.inc` in the same case, deleting any old file first
 ([Note editor tools panel](note-editor-tools-panel.md)). It sets a `Theme` on both for the picture only: without one
 the panel showed JUCE's rounded stock buttons and no value text in the Humanize bar.
+`RHINO_CLIP_ENVELOPE_SNAPSHOT` (commit `a1c9607`) writes the audio clip editor with an envelope drawn over its waveform,
+with the `Theme` look set, from `ClipEnvelopes.inc` in the arrangement case ([Clip envelopes](clip-envelopes.md)).
 
 A `juce::TreeView` cannot be seen this way opened: it lays out its rows asynchronously, so a snapshot shows an opened
 folder with no children, even after `setOpen`, `resized()` or a rebuild at a new width. Test the browser's rows and drag

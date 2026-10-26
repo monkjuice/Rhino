@@ -4,12 +4,12 @@ type: component
 summary: Per-track lanes stored as Rhino's own ValueTree children, naming their device by key rather than slot, played by the engine from parameter curves the session mirrors after every change, and edited on a row of their own or, on the track's own row, the one lane its card's chooser picks, by pointer travel with Shift for fine steps.
 tags: [rhino, automation, arrangement, devices]
 sources: []
-updated: 2026-10-25
+updated: 2026-10-26
 ---
 
 # Track automation
 
-Automation belongs to a track and spans the whole timeline; it moved off clips in September 2026. The model is `native/src/model/SessionAutomation.cpp`; the arrangement's lane rows, hit testing and gestures are `ArrangementAutomation.cpp`, the drawing `ArrangementAutomationPaint.cpp`, the card's chooser `ArrangementAutomationChooser.cpp`.
+Automation belongs to a track and spans the whole timeline; it moved off clips in September 2026. Its clip-local counterpart, since 2026-10-26, is an audio clip's own Gain, Pan and Pitch envelopes. These are kept and edited apart from track lanes, but mirrored by the same pass ([Clip envelopes](clip-envelopes.md)). The model is `native/src/model/SessionAutomation.cpp`; the arrangement's lane rows, hit testing and gestures are `ArrangementAutomation.cpp`, the drawing `ArrangementAutomationPaint.cpp`, the card's chooser `ArrangementAutomationChooser.cpp`.
 
 ## Storage
 
@@ -51,8 +51,8 @@ Commit `99b4e24`, 2026-10-25, at the user's request. A card whose track has at l
 
 **The engine plays the lanes** (commit `fe163c8`). `Session::mirrorAutomationToEngine` writes every drawn lane that nobody has taken over by hand onto its parameter's own `te::AutomatableParameter` curve, which the audio graph reads every block, live and in a render alike. The shell's 30 Hz timer used to set each parameter from the message thread instead: values moved in frame-sized steps and stalled whenever that thread was busy, every step rebuilt the interface, and a plain render heard no lanes.
 
-- **When it runs.** `markModified` marks the lanes stale for every change but `ModelChange::none` (a name, a colour, a view setting, which can move no lane; [Session, the model](session-model.md)), and `AutomationMirror`, a listener on the session's own announcement, mirrors them after any such change, leaving unchanged curves alone. It also runs at once when a knob touch takes a parameter from its lane (inside a drag nothing is announced until release) and when an override is toggled. The WAV export calls it before rendering.
-- **It owns every curve in the edit.** A curve no lane drives is cleared rather than played unseen, whether it came from a document saved with its curves, a device restored by undo or one moved to another track. The edit is searched for strays only when its set of plugins changes, compared by `EditItemID`. Curves are never written through the undo manager.
+- **When it runs.** `markModified` marks the lanes stale for every change but `ModelChange::none` (a name, a colour, a view setting, which can move no lane; [Session, the model](session-model.md)), and `AutomationMirror`, a listener on the session's own announcement, mirrors them after any such change, leaving unchanged curves alone. It also runs at once when a knob touch takes a parameter from its lane (inside a drag nothing is announced until release) and when an override is toggled. The WAV export calls it before rendering. Since commit `a1c9607` it ends by calling `mirrorClipEnvelopesToEngine`, which writes the clip envelopes' curves.
+- **It owns every curve on a track's or the main list's devices.** A clip's own plugin list falls outside this rule: the clip-envelope devices' curves belong to their own mirror. A curve no lane drives is cleared rather than played unseen, whether it came from a document saved with its curves, a device restored by undo or one moved to another track. The edit is searched for strays only when its set of plugins changes, compared by `EditItemID`. Curves are never written through the undo manager.
 - **Touching an automated knob overrides it**, as in Live: the knob's **A** button turns amber and the lane stops driving until it is clicked. The override is kept by device key, so it survives a reorder. A lane that stops driving hands its parameter back to the value last set by hand rather than freezing on its final point, unless the user has taken that knob over.
 - **The rack follows.** The engine tells nobody when it moves a knob, so the Device View reads moving knobs back on its own 30 Hz timer, only while the transport rolls, only for faces with a knob on a lane, and not while hidden ([Device rack and device editors](device-rack.md)).
 - **Tempo changes rescale every point** by old over new BPM in `Session::setTempo`: points are seconds, and the engine moves clips by beats.
@@ -62,9 +62,11 @@ Commit `99b4e24`, 2026-10-25, at the user's request. A card whose track has at l
 - **The mirror holds plugins alive.** `mirroredCurves` keeps a `te::Plugin::Ptr` per curve, so `restoreProject` and `newProject` clear it before the outgoing edit is destroyed. A plugin outliving its edit corrupted the heap (`0xc0000374`) the first time a document was reopened ([Hold ids, not pointers](ids-not-pointers.md)).
 - **A parameter is still named by its index** within the device (`parameter`), so a device's parameter order stays persistent ([Stored indices are append-only](append-only-stored-indices.md)). For an external plugin that index is the knob's place in the rack's chosen list, so a knob joins only at the end, and taking one off moves the lanes above it down in the same undo step ([Mapped parameters](mapped-parameters.md)).
 - **The main row has no lanes yet.** `showTrackAutomation` refuses a main-track target because the pinned row has nowhere to stack one, although storage (on the edit's own state) and playback already treat it like any track.
+- **A latent device's lane is read early.** The engine reads a delayed plugin's curve one latency ahead ([Tracktion reads a delayed plugin's automation early](tracktion-reads-delayed-plugin-automation-early.md)). Clip Pitch corrects for this; track lanes do not (not measured).
 
 ## Related
 
+- [Clip envelopes](clip-envelopes.md)
 - [Arrangement view](arrangement-view.md)
 - [Device rack and device editors](device-rack.md)
 - [Device chain order](device-chain-order.md)

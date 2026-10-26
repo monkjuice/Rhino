@@ -1,7 +1,7 @@
 ---
 title: Return tracks and sends
 type: component
-summary: Live's return tracks - an ordinary track fed by an engine aux bus, kept with the other returns at the foot of the stack and drawn pinned between the scrolling lanes and the main row - and one post-fader send per return at the end of every other track's chain, set from -inf to 0 dB on a knob under the card's name; a new document has A Delay and B Reverb, wholly wet, fed nothing.
+summary: Live's return tracks - an ordinary track fed by an engine aux bus, kept with the other returns at the foot of the stack and drawn pinned between the scrolling lanes and the main row - and one post-fader send per return at the end of every other track's chain, set from -inf to 0 dB on a knob in a column between the card's meter and its buttons; a new document has A Delay and B Reverb, wholly wet, fed nothing.
 tags: [rhino, mixer, returns, sends, tracks, arrangement]
 sources: []
 updated: 2026-10-25
@@ -42,7 +42,7 @@ Since commit `5632644` (2026-10-25, at the user's request) the arrangement draws
 - **Painting.** The cards, the row rules and the automation rows are painted in two passes, clipped to `rowArea(false)` and `rowArea(true)`. The last pinned row draws no bottom rule, because the main row's top rule closes it. A rule `pinnedRuleThickness` (4 px; rows use 2) thick runs across the full width at `returnsTop()`, over the first return, or over the main row when there is none.
 - **Selections and clips.** A region stops at the last lane: `setTimeSelection` clamps to `firstPinnedTrack() - 1`, and a region gesture starts only above the block. A clip carried onto the returns or under them is previewed in the slot under the last lane, where its new lane will appear (`laneOrSlot`, used by `boundsOf`, the clip painter and the selection painter). A drop below `lastLaneBottom()` still makes a lane.
 
-Every card except a return's shows a row of `SendKnob`s under its name, starting after the fold arrow and level with the faders (`sendLineTop` 21). A `SendKnob` is a 20 px `juce::Slider` that draws a dark well, the return's letter and an arc in `palette::send` (violet). The knobs wrap onto further lines while the row is tall enough and hide on a row too short for one line. The travel is the engine's fader law below unity, dB = 20 ln(position), so half a turn is about -13.9 dB. A drag writes `<track> to <letter> <return>: -12.0 dB` in the status line, and a double-click sends nothing. A return's card shows its letter where other cards show their number (`A  Delay`, from `TrackFacts::returnLetter`), and only mute, solo, fader, pan and meter. Its card menu has no group items and greys out Cut, Copy, Duplicate and Bounce.
+Every card except a return's shows its `SendKnob`s in a column of their own between the meter and the mute, solo and arm buttons, one return under another from the button line down (since commit `e6473f5`, at the user's request; before that they sat in a row under the name). A `SendKnob` is a 20 px `juce::Slider` that draws a dark well, the return's letter and an arc in `palette::send` (violet). The column is `sendColumnWidth()` wide (24 px, or 0 with no returns) and pushes every card's controls right, the returns' and Main's included, so the name column is 24 px narrower while the song has returns ([Arrangement view](arrangement-view.md#rules-worth-knowing)). At the user's explicit wish the card never grows for its knobs: a knob the row is too short for is hidden until the row is dragged taller, so a one-line row (32 px) shows only A. The travel is the engine's fader law below unity, dB = 20 ln(position), so half a turn is about -13.9 dB. A drag writes `<track> to <letter> <return>: -12.0 dB` in the status line, and a double-click sends nothing. A return's card shows its letter where other cards show their number (`A  Delay`, from `TrackFacts::returnLetter`), and only mute, solo, fader, pan and meter. Its card menu has no group items and greys out Cut, Copy, Duplicate and Bounce.
 
 ## Tests
 
@@ -55,7 +55,10 @@ Every card except a return's shows a row of `SendKnob`s under its name, starting
 - the block's 4 px rule, by pixel;
 - Main's card colour, by pixel, changed and undone, and kept across a reopen;
 - dragging B's card onto A reorders and re-letters them;
-- dragging a return's top edge up makes it taller. It also checks the sound in rendered audio:
+- dragging a return's top edge up makes it taller;
+- since `e6473f5`: the knobs stand stacked between the meter and the buttons; the returns' and Main's controls line up with a card that carries knobs; a 32 px row keeps knob A and hides B without growing, and its fitted height shows both; with no returns there is no column and nothing shifts.
+
+The controls-column checks in `TrackManagement.inc`, `Recording.inc`, `VocoderCarrier.inc` and `TrackGroups.inc` read `cardControlsRight()` rather than a fixed width. It also checks the sound in rendered audio:
 
 - a send at nothing renders the dry burst;
 - a send turned up adds silence until the delay time, then the echo;

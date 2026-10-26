@@ -48,7 +48,7 @@ case, deleting any old file first; unset, the render still runs as a paint smoke
 `KeyboardCurves.inc` in the same case, deleting any old file first ([Keyboard velocity curves](keyboard-velocity-curves.md)).
 `RHINO_RETURN_TRACKS_SNAPSHOT` writes the left 420 px of the arrangement's cards at 2x scale, with a `Theme`, from
 `ReturnTracks.inc` in the same case. Since `5632644` the picture also shows the returns' pinned block, under its 4 px
-rule, and Main's card. It turns a few sends up first so the knobs show their arcs, and deletes any old file first
+rule, and Main's card, and since `e6473f5` the send knobs in their column between the meter and the buttons. It turns a few sends up first so the knobs show their arcs, and deletes any old file first
 ([Return tracks and sends](return-tracks.md#in-the-arrangement)).
 `RHINO_TIME_ROW_SNAPSHOT` writes the arrangement's time row at four zooms, stacked - two minutes, a 1/32 grid, a 1/512
 grid and the deepest zoom - from `BrowserDrops.inc` in the same case, deleting any old file first

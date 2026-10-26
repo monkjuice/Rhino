@@ -1285,3 +1285,11 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/session-model.md (the lane a row shows among the view settings that skip undo and pass `ModelChange::none`)
 - updated: pages/headless-ui-snapshots.md (`RHINO_AUTOMATION_TRACK_SNAPSHOT`: track 0's row with a ramp on its shown lane, a paint smoke test when unset; added from the coordinator's second addendum, checked against AutomationLanes.inc)
 - updated: index.md (summaries of Track automation and Arrangement view)
+
+## [2026-10-25] update | Arrangement: the send knobs stand in a column between the meter and the buttons, hidden rather than grown for (e6473f5)
+- source: the coordinator's brief, checked against native/src/ui/arrangement/Arrangement.h (`sendColumnWidth`, `cardControlsLeft`, `cardControlsRight`), Arrangement.cpp (`resized`, `sendColumnWidth`), ArrangementPainter.cpp (the cards' and Main's name columns and dividers) and ArrangementGroups.cpp (`disclosureBounds`); the LNK1104 rename from the brief
+- updated: pages/return-tracks.md (summary; the knobs' column, the shift it gives every card's controls, a knob hidden rather than the card grown; the cards scenario's new checks and the controls-column checks reading `cardControlsRight()`)
+- updated: pages/arrangement-view.md (the send column in the card layout, `cardControlsLeft()`/`cardControlsRight()`, the name column 24 px narrower with returns; Main's volume at `cardControlsLeft()`; the sends bullet: stacked, never grown for)
+- updated: pages/headless-ui-snapshots.md (`RHINO_RETURN_TRACKS_SNAPSHOT` shows the knobs' column)
+- updated: pages/locked-executable-lnk1104.md (summary; rename to a fresh name when `.inuse` is taken: `RhinoDAW.exe.inuse-2888` on 2026-10-25)
+- updated: index.md (summaries of Return tracks and sends and the LNK1104 gotcha)

@@ -5,10 +5,11 @@
 // row, what the pointer is over, and the gestures that edit it. The drawing is
 // next door in ArrangementAutomationPaint.cpp.
 //
-// Automation runs the length of the timeline, not the length of a clip. Every
-// track shows the lanes the user has revealed on it; a lane sent to its own row
-// gets a dimmed clone of the track stacked underneath, so a busy track can be
-// read one parameter at a time.
+// Automation runs the length of the timeline, not the length of a clip. A
+// track's own row shows one of the lanes drawn over it, the one its card's
+// chooser picked (ArrangementAutomationChooser.cpp), and edits it under the
+// clip names; a lane sent to its own row gets a dimmed clone of the track
+// stacked underneath, so a busy track can be read one parameter at a time.
 
 namespace rhino
 {
@@ -19,6 +20,19 @@ constexpr float pointGrabRadius = 7.0f;
 // so a node meant for the curve lands exactly on it, not so that the lane
 // resists being drawn on a few pixels away.
 constexpr float curveSnapDistance = 5.0f;
+// The same snap on a node being dragged, measured in pointer travel rather
+// than on screen: a drag steps finer than the lane's pixels, and a band five of
+// them tall held a node over a sixth of a short lane's range.
+constexpr float dragSnapTravel = 2.0f;
+// A track's own row too short to hold a curve this tall shows none: a row
+// folded to its one line is all clip.
+constexpr float minimumCurveHeight = 8.0f;
+
+juce::Range<float> automationRange(const Session::TrackAutomation& automation)
+{
+    return automation.maximum > automation.minimum ? juce::Range<float> {automation.minimum, automation.maximum}
+                                                   : juce::Range<float> {0.0f, 1.0f};
+}
 }
 
 // Rows are rebuilt whenever the edit changes, because revealing a lane changes
@@ -146,34 +160,39 @@ const Session::TrackAutomation* Arrangement::automationFor(const LaneRow& row) c
     return &lanes[static_cast<size_t>(row.automation)];
 }
 
-// A track's own row shares its height with the clips drawn under it, so the
-// curve keeps a small margin rather than running into the clip name bar.
+// A track's own row shares its height with the clips drawn on it, so the curve
+// runs under the strip their names are on - which stays theirs, so a clip can
+// still be picked up by it with a curve shown - and keeps a margin off the
+// row's foot. The strip is measured as a clip box measures it (boundsOf).
 juce::Rectangle<float> Arrangement::automationArea(int row) const
 {
     const auto bounds = rowBounds(row);
     if (bounds.isEmpty())
         return {};
     if (rows[static_cast<size_t>(row)].automation < 0)
-        return bounds.reduced(0.0f, 8.0f).withTrimmedTop(10.0f);
+    {
+        const auto clipHeight = bounds.getHeight() - 10.0f;
+        const auto area = bounds.withTop(bounds.getY() + 5.0f + clipHeaderHeight(clipHeight) + 3.0f)
+                              .withTrimmedBottom(8.0f);
+        return area.getHeight() >= minimumCurveHeight ? area : juce::Rectangle<float>();
+    }
     return bounds.reduced(0.0f, 7.0f);
 }
 
 float Arrangement::automationYFor(int row, const Session::TrackAutomation& automation, float value) const
 {
     const auto area = automationArea(row);
-    const auto minimum = automation.maximum > automation.minimum ? automation.minimum : 0.0f;
-    const auto maximum = automation.maximum > automation.minimum ? automation.maximum : 1.0f;
-    const auto amount = std::clamp((value - minimum) / std::max(0.0001f, maximum - minimum), 0.0f, 1.0f);
+    const auto range = automationRange(automation);
+    const auto amount = std::clamp((value - range.getStart()) / std::max(0.0001f, range.getLength()), 0.0f, 1.0f);
     return area.getBottom() - amount * area.getHeight();
 }
 
 float Arrangement::automationValueForY(int row, const Session::TrackAutomation& automation, float y) const
 {
     const auto area = automationArea(row);
-    const auto minimum = automation.maximum > automation.minimum ? automation.minimum : 0.0f;
-    const auto maximum = automation.maximum > automation.minimum ? automation.maximum : 1.0f;
+    const auto range = automationRange(automation);
     const auto amount = 1.0f - std::clamp((y - area.getY()) / std::max(1.0f, area.getHeight()), 0.0f, 1.0f);
-    return minimum + (maximum - minimum) * amount;
+    return range.getStart() + range.getLength() * amount;
 }
 
 // Lifting a never-drawn lane turns its dotted resting line into a real, flat
@@ -194,72 +213,56 @@ Arrangement::AutomationHover Arrangement::automationHoverAt(juce::Point<float> p
     if (row < 0)
         return hover;
     const auto& entry = rows[static_cast<size_t>(row)];
-    // A track's own row belongs to its clips: automation there is read-only
-    // until the A button puts the arrangement in automation mode. A lane row
-    // holds nothing else, so it is always editable.
-    if (entry.automation < 0 && !automationButton.getToggleState())
-        return hover;
-    if (automationArea(row).isEmpty() || !juce::isPositiveAndBelow(entry.track, static_cast<int>(trackLanes.size())))
+    const auto area = automationArea(row);
+    if (area.isEmpty() || !juce::isPositiveAndBelow(entry.track, static_cast<int>(trackLanes.size())))
         return hover;
 
-    // A lane row shows exactly one curve; a track row shows every curve that
-    // was not sent away, tested newest first so the topmost drawn wins.
+    // Every row shows one curve at most: a lane row its own, a track's row
+    // the one its card's chooser picked, which is editable there with no mode
+    // to switch on. A chooser on None leaves the row to its clips.
     const auto& lanes = trackLanes[static_cast<size_t>(entry.track)];
-    std::vector<int> candidates;
-    if (entry.automation >= 0)
-        candidates.push_back(entry.automation);
-    else
-        for (int i = static_cast<int>(lanes.size()); --i >= 0;)
-            if (!lanes[static_cast<size_t>(i)].ownLane)
-                candidates.push_back(i);
-    if (candidates.empty())
+    auto index = entry.automation;
+    if (index < 0)
+        for (int i = 0; i < static_cast<int>(lanes.size()); ++i)
+            if (lanes[static_cast<size_t>(i)].shown)
+                index = i;
+    if (!juce::isPositiveAndBelow(index, static_cast<int>(lanes.size())))
+        return hover;
+    // Above the curve, on a track's row, is the strip the clip names are on,
+    // which is the clips'. Only a node at the top of the range reaches into it.
+    const auto underClipNames = entry.automation < 0 && point.y < area.getY();
+    if (underClipNames && point.y < area.getY() - pointGrabRadius)
         return hover;
 
+    const auto& automation = lanes[static_cast<size_t>(index)];
     hover.row = row;
     hover.pointer = point;
+    hover.automation = index;
 
     // A node under the pointer wins over the line it sits on: it is the
     // smaller target, and it is the one being reached for.
-    for (const auto index : candidates)
+    for (int i = 0; i < static_cast<int>(automation.points.size()); ++i)
     {
-        const auto& automation = lanes[static_cast<size_t>(index)];
-        for (int i = 0; i < static_cast<int>(automation.points.size()); ++i)
+        const auto& stored = automation.points[static_cast<size_t>(i)];
+        const juce::Point<float> handle {xFor(stored.timeSeconds), automationYFor(row, automation, stored.value)};
+        if (std::abs(handle.x - point.x) <= pointGrabRadius && std::abs(handle.y - point.y) <= pointGrabRadius)
         {
-            const auto& stored = automation.points[static_cast<size_t>(i)];
-            const juce::Point<float> handle {xFor(stored.timeSeconds), automationYFor(row, automation, stored.value)};
-            if (std::abs(handle.x - point.x) <= pointGrabRadius && std::abs(handle.y - point.y) <= pointGrabRadius)
-            {
-                hover.automation = index;
-                hover.point = i;
-                hover.onCurve = true;
-                hover.timeSeconds = stored.timeSeconds;
-                hover.value = stored.value;
-                return hover;
-            }
+            hover.point = i;
+            hover.onCurve = true;
+            hover.timeSeconds = stored.timeSeconds;
+            hover.value = stored.value;
+            return hover;
         }
     }
+    if (underClipNames)
+        return {};
 
-    // Otherwise the pointer belongs to the nearest curve in the row, wherever
-    // in the lane it is: a lane is a value editor, so every position in one
-    // says something about one of the curves drawn on it.
+    // Otherwise the pointer belongs to the curve wherever in the lane it is: a
+    // lane is a value editor, so every position in one says something about
+    // the curve drawn on it.
     const auto pointerTime = std::max(0.0, timeAt(point.x));
-    auto nearest = -1;
-    auto nearestDistance = 0.0f;
-    for (const auto index : candidates)
-    {
-        const auto& automation = lanes[static_cast<size_t>(index)];
-        const auto distance = std::abs(automationYFor(row, automation, automation.valueAt(pointerTime)) - point.y);
-        if (nearest < 0 || distance < nearestDistance)
-        {
-            nearest = index;
-            nearestDistance = distance;
-        }
-    }
-
-    const auto& automation = lanes[static_cast<size_t>(nearest)];
     // The same snap a dragged node takes, so where the ghost is drawn is where
     // the node lands rather than somewhere near it.
-    hover.automation = nearest;
     hover.timeSeconds = std::max(0.0, snapped(pointerTime, bypassSnap));
     const auto onLine = automation.valueAt(hover.timeSeconds);
     hover.onCurve = std::abs(automationYFor(row, automation, onLine) - point.y) <= curveSnapDistance;
@@ -425,6 +428,12 @@ bool Arrangement::beginAutomationGesture(const juce::MouseEvent& event)
         automationInserted = true;
         automationHover.point = automationPoint;
     }
+    // The drag carries the level on from where the node or the line already
+    // is, whatever height in the lane the press landed at.
+    automationDragY = event.position.y;
+    automationDragValue = juce::isPositiveAndBelow(automationPoint, static_cast<int>(automationPoints.size()))
+        ? automationPoints[static_cast<size_t>(automationPoint)].value
+        : automationPoints.front().value;
     selectTrack(entry.track);
     // An existing node is left exactly where it was until the pointer moves,
     // so clicking one focuses its lane the way clicking a lane selects it.
@@ -452,7 +461,17 @@ void Arrangement::dragAutomationGesture(const juce::MouseEvent& event)
     if (automation == nullptr)
         return;
 
-    auto value = automationValueForY(automationRow, *automation, event.position.y);
+    // By how far the pointer has travelled since it was last read, so the
+    // level moves in steps a fraction of the lane's pixels: a parameter's whole
+    // range takes automationDragTravel of travel, or the curve's own height
+    // where that is taller, and Shift makes each step a tenth of that.
+    const auto range = automationRange(*automation);
+    const auto travel = std::max(automationArea(automationRow).getHeight(), automationDragTravel)
+        * (event.mods.isShiftDown() ? automationFineDivisor : 1.0f);
+    const auto perPixel = range.getLength() / travel;
+    automationDragValue = range.clipValue(automationDragValue + (automationDragY - event.position.y) * perPixel);
+    automationDragY = event.position.y;
+    auto value = automationDragValue;
     if (automationGesture == AutomationGesture::moveLine)
     {
         for (auto& point : automationPoints)
@@ -476,28 +495,32 @@ void Arrangement::dragAutomationGesture(const juce::MouseEvent& event)
                                          snapped(std::max(0.0, timeAt(event.position.x)), event.mods.isAltDown()));
         }
         // The subtle snap, applied to the drag as well as to the click that
-        // started it: within a few pixels of the line its neighbours draw, a
-        // node sits exactly on that line. Measured after the time has settled,
-        // because on a ramp the line to snap to depends on where along it the
-        // node now is.
+        // started it: within a little travel of the line its neighbours draw,
+        // a node sits exactly on that line. Measured after the time has
+        // settled, because on a ramp the line to snap to depends on where along
+        // it the node now is. Alt places it freely, as it does in time. The
+        // level carried on is the unsnapped one, so the snap never holds a slow
+        // drag back.
         const auto neighbour = automationNeighbourValue(automationPoints, automationPoint, point.timeSeconds);
-        if (std::abs(automationYFor(automationRow, *automation, neighbour)
-                     - automationYFor(automationRow, *automation, value)) <= curveSnapDistance)
+        if (!event.mods.isAltDown() && std::abs(neighbour - value) <= dragSnapTravel * perPixel)
             value = neighbour;
         point.value = value;
     }
     // The reading follows the node rather than the pointer while one is being
-    // carried, so it says what the curve is about to become.
+    // carried, so it says what the curve is about to become - and sits beside
+    // it, since a fine drag leaves the pointer some way off.
     automationHover.row = automationRow;
     automationHover.automation = automationIndex;
     automationHover.point = automationPoint;
     automationHover.dragging = true;
     automationHover.onCurve = false;
-    automationHover.pointer = event.position;
     automationHover.value = value;
     automationHover.timeSeconds = juce::isPositiveAndBelow(automationPoint, static_cast<int>(automationPoints.size()))
         ? automationPoints[static_cast<size_t>(automationPoint)].timeSeconds
         : std::max(0.0, timeAt(event.position.x));
+    automationHover.pointer = {juce::isPositiveAndBelow(automationPoint, static_cast<int>(automationPoints.size()))
+                                   ? xFor(automationHover.timeSeconds) : event.position.x,
+                               automationYFor(automationRow, *automation, value)};
     repaint();
 }
 

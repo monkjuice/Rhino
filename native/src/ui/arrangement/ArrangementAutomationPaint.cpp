@@ -58,7 +58,9 @@ void Arrangement::paintAutomationRow(juce::Graphics& g, int row)
     const auto& lanes = trackLanes[static_cast<size_t>(entry.track)];
     for (int index = 0; index < static_cast<int>(lanes.size()); ++index)
     {
-        if (entry.automation >= 0 ? index != entry.automation : lanes[static_cast<size_t>(index)].ownLane)
+        // A lane row draws its own curve; a track's row the one its card's
+        // chooser picked, and none at all on None.
+        if (entry.automation >= 0 ? index != entry.automation : !lanes[static_cast<size_t>(index)].shown)
             continue;
         const auto& automation = lanes[static_cast<size_t>(index)];
         const auto beingDragged = automationGesture != AutomationGesture::none && automationRow == row
@@ -161,8 +163,8 @@ void Arrangement::paintAutomationReadout(juce::Graphics& g)
     if (text.isEmpty())
         text = juce::String(automationHover.value, 2);
     // A lane row is labelled by its own header, so the reading is just the
-    // level. A track's own row stacks every curve that was not sent away, so
-    // there the reading has to say which of them it belongs to.
+    // level. A track's own row is labelled by the chooser on its card, which
+    // a short row does not show, so there the reading says which curve it is.
     if (entry.automation < 0)
         text = automation.parameterName + "  " + text;
 

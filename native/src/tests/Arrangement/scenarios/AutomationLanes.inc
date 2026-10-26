@@ -212,14 +212,135 @@
             require(!view.automationHover.valid(), "Rebuilding the row stack drops the hover");
         }
 
-        // A clip drag on the track's own row must still move the clip, not the
-        // curve drawn over it, until automation mode is switched on.
-        require(!view.automationHoverAt({view.xFor(0.5), view.lane(0).getCentreY()}, false).valid(),
-                "Automation ignores the pointer on a track row in clip mode");
-        view.automationButton.setToggleState(true, juce::dontSendNotification);
-        require(!view.automationHoverAt({view.xFor(0.5), view.lane(0).getCentreY()}, false).valid(),
-                "A lane on its own row is not also editable over the track");
-        view.automationButton.setToggleState(false, juce::dontSendNotification);
+        // A track's own row shows the lane drawn over it that its card's
+        // chooser picked, and edits it under the clip names with no mode to
+        // switch on. None leaves the row to its clips.
+        {
+            const auto trackRow = view.trackRowIndex[0];
+            const auto curve = view.automationArea(trackRow);
+            const juce::Point<float> body {view.xFor(0.5), curve.getCentreY()};
+            require(view.shownAutomation(0) == nullptr && !view.automationHoverAt(body, false).valid(),
+                    "A lane on its own row is not also editable over the track");
+            require(view.automationChooser[0]->getButtonText().startsWith("None"), "and the card's chooser says None");
+            require(view.automationChooser[0]->getRight() - view.trackInput[0]->getX()
+                            <= 2 * view.cardControlWidth + view.cardControlGap
+                        && view.automationChooser[0]->getX() >= view.trackInput[0]->getRight()
+                        && view.automationChooser[0]->getY() == view.trackInput[0]->getY(),
+                    "The chooser sits right of the input chooser, on its line and inside the controls");
+
+            require(laneParameters.size() > 1, "The pattern device has a second parameter to draw over the track");
+            const Session::DeviceTarget overTarget {0, 1, 1};
+            require(session.showTrackAutomation(overTarget, false).wasOk(), "Reveal a lane over the track");
+            view.sync();
+            const auto* shown = view.shownAutomation(0);
+            require(shown != nullptr && shown->target.parameter == overTarget.parameter,
+                    "A lane revealed over the track is the one its row shows");
+            require(view.automationChooser[0]->getButtonText().startsWith(shown->parameterName),
+                    "and the card's chooser names it");
+            const auto clipNames = view.lane(0).getY() + 5.0f + view.clipHeaderHeight(view.lane(0).getHeight() - 10.0f);
+            require(!curve.isEmpty() && curve.getY() >= clipNames, "The curve runs under the strip the clip names are on");
+            const auto hover = view.automationHoverAt(body, false);
+            require(hover.valid() && view.trackLanes[0][static_cast<size_t>(hover.automation)].target.parameter
+                                         == overTarget.parameter,
+                    "The track's own row edits the lane it shows, with no mode to switch on");
+            require(!view.automationHoverAt({view.xFor(0.5), view.lane(0).getY() + 8.0f}, false).valid(),
+                    "The strip along the clips' tops stays the clips'");
+
+            view.showAutomationOnTrack(0, {});
+            view.sync();
+            require(view.shownAutomation(0) == nullptr && !view.automationHoverAt(body, false).valid(),
+                    "None leaves the row to its clips");
+            require(view.automationChooser[0]->getButtonText().startsWith("None")
+                        && session.trackAutomationState(overTarget).visible,
+                    "and keeps the lane, which goes on playing");
+            view.showAutomationOnTrack(0, overTarget);
+            view.sync();
+            require(view.shownAutomation(0) != nullptr, "Choosing the lane again shows it");
+            // Painted over the clips, so a render is the coverage it can have;
+            // the PNG is only written when somebody asks to look at it.
+            {
+                require(session.setTrackAutomationPoints(overTarget, {{0.0, laneParameters[1].minimum},
+                                                                      {8.0, laneParameters[1].maximum}}).wasOk(),
+                        "Draw a ramp over the track");
+                view.sync();
+                const auto band = view.lane(0).getSmallestIntegerContainer().withX(0).withWidth(view.getWidth());
+                const auto picture = view.createComponentSnapshot(band);
+                require(picture.getWidth() == band.getWidth(), "A track's row renders with the curve it shows");
+                if (const auto shot = juce::SystemStats::getEnvironmentVariable("RHINO_AUTOMATION_TRACK_SNAPSHOT", {});
+                    shot.isNotEmpty())
+                {
+                    juce::File(shot).deleteFile();
+                    if (auto stream = juce::File(shot).createOutputStream())
+                        juce::PNGImageFormat().writeImageToStream(picture, *stream);
+                }
+            }
+            require(session.setTrackShownAutomation(0, laneTarget).failed(),
+                    "A lane on a row of its own is not the track's row to show");
+            require(session.hideTrackAutomation(overTarget).wasOk(), "Tidy the lane over the track away");
+            view.sync();
+            require(view.shownAutomation(0) == nullptr, "A hidden lane leaves the row to its clips");
+        }
+
+        // A drag moves a level by how far the pointer travels rather than to
+        // where it is, so a lane a few dozen pixels tall still sweeps its range
+        // in fine steps, and Shift steps a tenth as far again. A short lane
+        // used to step a thirtieth of the range per pixel and hold a node to
+        // its neighbours' line across a sixth of it.
+        {
+            const auto minimum = laneParameters.front().minimum;
+            const auto span = laneParameters.front().maximum - minimum;
+            const auto middle = minimum + span * 0.5f;
+            const auto laneBox = view.rowBounds(1);
+            const auto nodeTime = view.snapped(view.timeAt(laneBox.getCentreX()), false);
+            const auto curveEnd = std::max(4.0, view.timeAt(laneBox.getRight()) + 2.0);
+            const auto travel = std::max(view.automationArea(1).getHeight(), view.automationDragTravel);
+            require(travel > view.automationArea(1).getHeight(), "A lane row is shorter than a full drag");
+            const auto nodeEvent = [&view](juce::Point<float> down, juce::Point<float> point, bool dragged, int mods)
+            {
+                return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), point,
+                    juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier | mods), 1.0f, 0, 0, 0, 0,
+                    &view, &view, juce::Time::getCurrentTime(), down, juce::Time::getCurrentTime(), 1, dragged);
+            };
+            // Draws a flat curve with a node in the middle, carries that node
+            // through the given offsets and answers the level it was put down at.
+            const auto carry = [&](std::initializer_list<juce::Point<float>> offsets, int mods)
+            {
+                require(session.setTrackAutomationPoints(laneTarget, {{0.0, middle}, {nodeTime, middle},
+                                                                      {curveEnd, middle}}).wasOk(),
+                        "Draw a flat curve to carry a node on");
+                view.sync();
+                const juce::Point<float> from {view.xFor(nodeTime),
+                                               view.automationYFor(1, view.trackLanes[0].front(), middle)};
+                view.mouseDown(nodeEvent(from, from, false, mods));
+                auto to = from;
+                for (const auto offset : offsets)
+                {
+                    to = from + offset;
+                    view.mouseDrag(nodeEvent(from, to, true, mods));
+                }
+                view.mouseUp(nodeEvent(from, to, true, mods));
+                view.sync();
+                // Held in a local: a range-for over a member of the returned
+                // vector would read it after the vector had gone.
+                const auto lanes = session.trackAutomations(0);
+                for (const auto& point : lanes.front().points)
+                    if (point.timeSeconds > 0.0 && point.timeSeconds < curveEnd)
+                        return point.value;
+                return -1.0f;
+            };
+            const auto levelMatches = [span](float a, float b) { return std::abs(a - b) < span * 0.0005f; };
+            require(levelMatches(carry({{0.0f, -10.0f}}, 0), middle + span * 10.0f / travel),
+                    "Ten pixels up moves a node ten steps of a full drag, not ten pixels of a short lane");
+            require(levelMatches(carry({{0.0f, -10.0f}}, juce::ModifierKeys::shiftModifier),
+                          middle + span * 10.0f / (travel * view.automationFineDivisor)),
+                    "Shift moves it a tenth as far");
+            require(levelMatches(carry({{0.0f, -1.5f * travel}, {0.0f, -1.5f * travel + 5.0f}}, 0),
+                          minimum + span - span * 5.0f / travel),
+                    "A node carried past the top comes back down as soon as the pointer turns");
+            require(levelMatches(carry({{4.0f, -1.0f}}, 0), middle), "A pixel off its neighbours' line, a node snaps onto it");
+            require(levelMatches(carry({{4.0f, -1.0f}}, juce::ModifierKeys::altModifier), middle + span / travel),
+                    "and Alt places it freely");
+        }
 
         // Delete acts on the last thing selected and nothing else. It used to
         // reach for the focused automation lane whatever was selected.

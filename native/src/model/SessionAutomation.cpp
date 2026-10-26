@@ -29,6 +29,18 @@ bool addressesDevice(const juce::ValueTree& state, const juce::String& deviceKey
     return deviceKey.isNotEmpty() && state.getProperty(automationDeviceID).toString() == deviceKey
         && static_cast<int>(state.getProperty(automationParameterID, -1)) == parameter;
 }
+
+// What the card's automation chooser writes on the track: a lane by its
+// device's key and its parameter, for the reason a lane names its device by
+// key, or this when the row is to show its clips alone. A key is a UUID, so
+// it can never read as this.
+const juce::String noLaneShown {"none"};
+
+juce::String laneChoice(const juce::ValueTree& lane)
+{
+    return lane.getProperty(automationDeviceID).toString() + "/"
+         + juce::String(static_cast<int>(lane.getProperty(automationParameterID, -1)));
+}
 }
 
 float Session::TrackAutomation::valueAt(double seconds) const
@@ -96,6 +108,7 @@ std::vector<Session::TrackAutomation> Session::readTrackAutomations(const juce::
         return automations;
 
     std::vector<DeviceSlot> slots;
+    std::vector<juce::String> choices;
     for (int i = 0; i < owner.getNumChildren(); ++i)
     {
         const auto state = owner.getChild(i);
@@ -145,7 +158,25 @@ std::vector<Session::TrackAutomation> Session::readTrackAutomations(const juce::
             if (automation.parameterName.isEmpty())
                 continue;
         }
+        choices.push_back(laneChoice(state));
         automations.push_back(std::move(automation));
+    }
+
+    // The lane the track's own row shows: the one the chooser named while it
+    // is still drawn over the track, otherwise the first that is - which is
+    // also what a track whose chooser was never touched shows. None when the
+    // chooser said None.
+    if (const auto choice = owner.getProperty(trackShownAutomationID).toString(); choice != noLaneShown)
+    {
+        auto shown = automations.size();
+        for (size_t i = 0; i < automations.size(); ++i)
+            if (!automations[i].ownLane && choices[i] == choice)
+                shown = i;
+        for (size_t i = 0; i < automations.size() && shown == automations.size(); ++i)
+            if (!automations[i].ownLane)
+                shown = i;
+        if (shown < automations.size())
+            automations[shown].shown = true;
     }
     return automations;
 }
@@ -191,16 +222,24 @@ juce::String Session::automationValueText(DeviceTarget target, float value) cons
 
 // Creates the lane if it is missing, inside whatever transaction the caller has
 // already opened, so revealing and drawing a lane is one undo step either way.
+//
+// A lane put over the track, new or moved there, becomes the one the track's
+// row shows, so the lane just asked for is the lane seen and can be drawn on at
+// once. Outside the undo step, as the chooser's own choice is.
 juce::ValueTree Session::ensureTrackAutomationState(DeviceTarget target, bool ownLane, bool keepExistingLane)
 {
+    auto owner = automationOwnerState(target.track);
     auto state = findTrackAutomationState(target);
     if (state.isValid())
     {
         if (!keepExistingLane)
+        {
             state.setProperty(automationOwnLaneID, ownLane, &edit->getUndoManager());
+            if (!ownLane)
+                owner.setProperty(trackShownAutomationID, laneChoice(state), nullptr);
+        }
         return state;
     }
-    auto owner = automationOwnerState(target.track);
     auto* plugin = devicePlugin(target.track, target.slot);
     if (!owner.isValid() || plugin == nullptr)
         return {};
@@ -209,6 +248,8 @@ juce::ValueTree Session::ensureTrackAutomationState(DeviceTarget target, bool ow
     lane.setProperty(automationParameterID, target.parameter, nullptr);
     lane.setProperty(automationOwnLaneID, ownLane, nullptr);
     owner.addChild(lane, -1, &edit->getUndoManager());
+    if (!ownLane)
+        owner.setProperty(trackShownAutomationID, laneChoice(lane), nullptr);
     return lane;
 }
 
@@ -233,6 +274,29 @@ juce::Result Session::showTrackAutomation(DeviceTarget target, bool ownLane)
         automationOwnerState(target.track).removeProperty(trackAutomationFoldedID, nullptr);
     markModified(target.track, ModelChange::curves);
     edit->getUndoManager().beginNewTransaction();
+    sendSynchronousChangeMessage();
+    return juce::Result::ok();
+}
+
+juce::Result Session::setTrackShownAutomation(int track, DeviceTarget lane)
+{
+    if (isMasterTrack(track))
+        return juce::Result::fail("Main track automation lanes are not shown yet.");
+    auto owner = automationOwnerState(track);
+    if (!owner.isValid())
+        return juce::Result::fail("Select a track to choose its automation.");
+    auto choice = noLaneShown;
+    if (lane.isValid())
+    {
+        const auto state = lane.track == track ? findTrackAutomationState(lane) : juce::ValueTree();
+        if (!state.isValid() || static_cast<bool>(state.getProperty(automationOwnLaneID, false)))
+            return juce::Result::fail("That automation is not drawn over the track.");
+        choice = laneChoice(state);
+    }
+    // Written without undo, as the folds are: which lane the row shows is how
+    // the track is looked at, and every lane plays whichever it is.
+    owner.setProperty(trackShownAutomationID, choice, nullptr);
+    markModified(track, ModelChange::none);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }

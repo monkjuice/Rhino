@@ -16,6 +16,7 @@ const juce::Identifier automationOwnLaneID {"ownLane"};
 const juce::Identifier automationTimeID {"time"};
 const juce::Identifier automationValueID {"value"};
 const juce::Identifier trackAutomationFoldedID {"rhinoAutomationFolded"};
+const juce::Identifier trackShownAutomationID {"rhinoShownAutomation"};
 // A group is a track: its bus carries the id, and each member carries the same
 // id. Both are track properties, so the structure travels with the document and
 // with the tracks when they are reordered, without a save path of its own.

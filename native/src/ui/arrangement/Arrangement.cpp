@@ -27,7 +27,6 @@ Arrangement::Arrangement(Session& s)
     duplicateButton.setButtonText(L"\u29c9");
     addTrack.setButtonText(L"+");
     snap.setButtonText(L"\u2317");
-    automationButton.setButtonText("A");
     duplicateButton.setTooltip("Duplicate the selection - puts a copy flush against the end of what is "
                                "selected, ready to be dragged. Ctrl+D.");
     addTrack.setTooltip("Add a track: pick audio or MIDI (Ctrl+T repeats the last kind)");
@@ -35,24 +34,14 @@ Arrangement::Arrangement(Session& s)
                     "or hold Alt for one gesture.");
     gridControl.setTooltip("Grid spacing: how far apart the lines are, and what a clip snaps to");
     toolbarGrid.setTooltip("Grid spacing: how far apart the lines are, and what a clip snaps to");
-    automationButton.setTooltip("Automation edit mode: drag lanes instead of clips");
     snap.setClickingTogglesState(true);
     snap.setToggleState(true, juce::dontSendNotification);
     gridControl.onClick = [this] { showGridMenu(&gridControl); };
     toolbarGrid.onClick = [this] { showGridMenu(&toolbarGrid); };
     snap.onClick = [this] { setGridEnabled(snap.getToggleState()); };
-    automationButton.setClickingTogglesState(true);
     duplicateButton.onClick = [this] { duplicateSelected(); };
-    automationButton.onClick = [this]
-    {
-        if (status)
-            status(automationButton.getToggleState()
-                ? "Automation edit: drags in a track lane move automation, not clips"
-                : "Clip edit: right-click a device knob to show its automation");
-        repaint();
-    };
     addTrack.onClick = [this] { showAddTrackMenu(); };
-    for (auto* control : std::initializer_list<juce::Component*>{&duplicateButton, &addTrack, &snap, &automationButton, &gridControl, &toolbarGrid, &scroll, &trackScrollBar})
+    for (auto* control : std::initializer_list<juce::Component*>{&duplicateButton, &addTrack, &snap, &gridControl, &toolbarGrid, &scroll, &trackScrollBar})
         addAndMakeVisible(control);
     laneHeaders.setInterceptsMouseClicks(false, true);
     addAndMakeVisible(laneHeaders);
@@ -109,8 +98,7 @@ void Arrangement::resized()
     addTrack.setBounds(10, 5, 34, 26);
     duplicateButton.setBounds(48, 5, 34, 26);
     snap.setBounds(86, 5, 34, 26);
-    automationButton.setBounds(124, 5, 34, 26);
-    toolbarGrid.setBounds(164, 5, 92, 26);
+    toolbarGrid.setBounds(124, 5, 92, 26);
     syncTrackControls();
     // Lane height follows the component height, so the row stack has to reflow
     // before anything is positioned against it. A track added since the last
@@ -138,6 +126,7 @@ void Arrangement::resized()
         auto& container = headerFor(i);
         for (auto* control : std::initializer_list<juce::Component*> {mute[index].get(), solo[index].get(),
                                                                          arm[index].get(), trackInput[index].get(),
+                                                                         automationChooser[index].get(),
                                                                          monitor[index].get(), volume[index].get(),
                                                                          pan[index].get(), meters[index].get()})
             if (control->getParentComponent() != &container)
@@ -165,7 +154,8 @@ void Arrangement::resized()
         // one line up, and the track menu carries both for the rows that are
         // not.
         const auto takesInput = session.trackRecordInput(i) != Session::RecordInput::none;
-        const auto inputVisible = row.getHeight() >= inputLaneHeight && takesInput;
+        const auto chooserLine = row.getHeight() >= inputLaneHeight;
+        const auto inputVisible = chooserLine && takesInput;
         const auto monitorVisible = row.getHeight() >= monitorLaneHeight && takesInput;
         // A row folded into a collapsed group is laid out at no height, so its
         // controls go with it rather than piling up under the band above.
@@ -178,6 +168,9 @@ void Arrangement::resized()
         volume[index]->setVisible(visible && mixerVisible);
         pan[index]->setVisible(visible && mixerVisible);
         trackInput[index]->setVisible(visible && inputVisible);
+        // Every track can carry lanes, a bus included, so the automation
+        // chooser keeps its column where the input chooser is not given one.
+        automationChooser[index]->setVisible(visible && chooserLine);
         monitor[index]->setVisible(visible && monitorVisible);
         const auto buttonStep = cardButtonWidth + cardControlGap;
         mute[index]->setBounds(left, top, cardButtonWidth, 18);
@@ -185,11 +178,12 @@ void Arrangement::resized()
         arm[index]->setBounds(left + 2 * buttonStep, top, cardButtonWidth, 18);
         volume[index]->setBounds(left, top + 23, cardControlWidth, 16);
         pan[index]->setBounds(right, top + 23, cardControlWidth, 16);
-        // Both of these span both fader columns: a device name needs the room,
-        // and three segments divide that width evenly.
-        const auto inputWidth = cardControlWidth * 2 + cardControlGap;
-        trackInput[index]->setBounds(left, top + 42, inputWidth, 16);
-        monitor[index]->setBounds(left, top + 61, inputWidth, 15);
+        // The input and automation choosers share the line under the faders,
+        // one column each; the monitor control spans both columns under them,
+        // because three segments divide that width evenly.
+        trackInput[index]->setBounds(left, top + 42, cardControlWidth, 16);
+        automationChooser[index]->setBounds(right, top + 42, cardControlWidth, 16);
+        monitor[index]->setBounds(left, top + 61, cardControlWidth * 2 + cardControlGap, 15);
         // The meter opens the card, pushed in with the controls by a group.
         meters[index]->setVisible(visible);
         meters[index]->setBounds(cardMeterInset + static_cast<int>(trackIndent(i)), top, LevelMeter::width,

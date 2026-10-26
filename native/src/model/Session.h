@@ -133,6 +133,10 @@ public:
         float maximum = 1.0f;
         float restingValue = 0.0f;
         bool ownLane = false;
+        // The one lane drawn, and edited, on the track's own row: the card's
+        // automation chooser picks it. False for every lane while the chooser
+        // says None, and always for a lane on a row of its own.
+        bool shown = false;
         std::vector<AutomationPoint> points;
         bool active() const { return points.size() >= 2; }
         float valueAt(double seconds) const;
@@ -1000,7 +1004,15 @@ public:
     // "2.0 dB", "12%" - so the arrangement can print the level under the
     // pointer rather than a bare number between the parameter's two limits.
     juce::String automationValueText(DeviceTarget, float value) const;
+    // Revealing a lane over the track also makes it the one the track's own
+    // row shows (setTrackShownAutomation).
     juce::Result showTrackAutomation(DeviceTarget, bool ownLane);
+    // Which of the lanes drawn over the track its own row shows and edits: the
+    // card's automation chooser. An invalid lane shows none, which leaves the
+    // row to its clips. A view setting, as the folds are, and every lane plays
+    // whichever is shown. Until one is chosen, or after the one chosen has
+    // gone, the row shows the first lane drawn over the track.
+    juce::Result setTrackShownAutomation(int track, DeviceTarget lane);
     juce::Result hideTrackAutomation(DeviceTarget);
     juce::Result setTrackAutomationPoints(DeviceTarget, std::vector<AutomationPoint>);
     juce::Result clearTrackAutomationPoints(DeviceTarget);

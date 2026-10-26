@@ -888,6 +888,10 @@ void Arrangement::showTrackMenu(int track)
                                true, session.trackMonitoring(track) == mode);
         menu.addSubMenu("Monitor: " + Session::inputMonitoringName(session.trackMonitoring(track)), monitoring);
     }
+    // Which lane the row shows, the chooser beside the input's, which every
+    // kind of track carries.
+    const auto* shown = shownAutomation(track);
+    menu.addItem(212, "Automation: " + (shown != nullptr ? shown->parameterName : juce::String("None")) + "...");
     menu.addSeparator();
     // A bus card is the group, so it bounces the group: after its bus rather
     // than before its fader, which is a different thing to ask for.
@@ -937,6 +941,7 @@ void Arrangement::showTrackMenu(int track)
                     safe->status(done.failed() ? done.getErrorMessage() : subject + " left the group");
             }
             else if (choice == 211) safe->showTrackInputMenu(track);
+            else if (choice == 212) safe->showAutomationChooser(track);
             else if (choice == 8) safe->bounceTracks(targets);
             else if (choice == 5) safe->groupSelectedTracks();
             else if (choice == 6) safe->toggleGroupCollapsed(safe->session.trackGroupBusId(track));

@@ -466,6 +466,17 @@ private:
     // card with no such lane, which carries no arrow.
     juce::Rectangle<float> automationFoldBounds(int track) const;
     bool beginAutomationFoldGesture(const juce::MouseEvent&);
+    // ArrangementAutomationChooser.cpp. The lane the track's own row shows,
+    // or null when its chooser says None or nothing is drawn over it.
+    const Session::TrackAutomation* shownAutomation(int track) const;
+    // The card's chooser, and the same list from the track menu for a row too
+    // short to show it.
+    void showAutomationChooser(int track);
+    // What a choice in it does, apart from the popup so a test can make one.
+    // An invalid lane is None.
+    void showAutomationOnTrack(int track, Session::DeviceTarget lane);
+    // What the chooser on each card says, read off the lanes once per sync.
+    void syncAutomationChoosers();
     // ArrangementAutomationPaint.cpp
     void paintAutomationRow(juce::Graphics&, int row);
     void paintAutomationFold(juce::Graphics&, int track, juce::Colour);
@@ -621,7 +632,7 @@ private:
     // Two faces of one setting, never two settings: gridControl is Live's
     // readout in the corner of the view, toolbarGrid is the same value and the
     // same menu up beside the snap toggle. updateGridControl writes both.
-    juce::TextButton duplicateButton, addTrack, snap, automationButton, gridControl, toolbarGrid;
+    juce::TextButton duplicateButton, addTrack, snap, gridControl, toolbarGrid;
     // The header controls live in a container spanning the scrolling lane
     // viewport, so JUCE clips them at its edges: a row dragged past the bottom
     // slides under the pinned main row instead of being drawn over it, and one
@@ -647,6 +658,11 @@ private:
     // devices every time it is opened - an interface plugged in while Rhino
     // was running should be in it, and one unplugged should not.
     std::vector<std::unique_ptr<juce::TextButton>> trackInput;
+    // Beside it, which of the lanes drawn over the track its own row shows
+    // and edits, or None for the clips alone: Live's automation chooser. A
+    // menu for the same reason, built from the lanes when it opens
+    // (ArrangementAutomationChooser.cpp).
+    std::vector<std::unique_ptr<juce::TextButton>> automationChooser;
     // And whether you hear it, on the line under that. Every kind of track
     // that takes an input has one; a group bus and the main row take none, so
     // they are given no control rather than one that refuses.
@@ -744,6 +760,14 @@ private:
     // pointer has moved at all, so it has to be written on release even though
     // the gesture never travelled.
     bool automationInserted = false;
+    // A drag moves a level by how far the pointer travels rather than to where
+    // it is, so a lane a few dozen pixels tall still sweeps its range in fine
+    // steps: the level before the subtle snap, and the pointer's height when it
+    // was last read. Clamped as it goes, so turning back moves it at once.
+    float automationDragValue = 0.0f, automationDragY = 0.0f;
+    // Pointer travel for a parameter's whole range, or the curve's own height
+    // where that is taller; Shift divides the step by automationFineDivisor.
+    static constexpr float automationDragTravel = 200.0f, automationFineDivisor = 10.0f;
     AutomationHover automationHover;
     float playhead = -1.0f;
     // A parked playhead is a marker, not a sweep: it stays in the ruler so the
@@ -827,12 +851,12 @@ private:
     // A card is name plus one control line at its shortest; the mixer line is
     // the next thing that fits, and past that a row only gets roomier.
     static constexpr float minimumLaneHeight = 32.0f, mixerLaneHeight = 54.0f, maximumLaneHeight = 260.0f;
-    // The third control line - the input chooser - needs a taller row again,
-    // and the fourth - the monitor control - taller again than that. A default
-    // row is between 62 and 96 and is 96 in any window worth working in, so
-    // both are there unless the window is very short or the row has been
-    // dragged down by hand. The track menu carries the same two settings for
-    // the rows that are not.
+    // The third control line - the input and automation choosers - needs a
+    // taller row again, and the fourth - the monitor control - taller again
+    // than that. A default row is between 62 and 96 and is 96 in any window
+    // worth working in, so both are there unless the window is very short or
+    // the row has been dragged down by hand. The track menu carries the same
+    // settings for the rows that are not.
     static constexpr float inputLaneHeight = 72.0f, monitorLaneHeight = 90.0f;
     // A card is two columns: the meter and the controls, then the name on its
     // colour. The divider between them is the same grey the row separators use.

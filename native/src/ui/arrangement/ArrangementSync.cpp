@@ -201,15 +201,28 @@ void Arrangement::sync()
         if (clipSelected) clipSelected(selected);
     }
     buildRows();
+    syncAutomationChoosers();
     // A name being typed on a track that has just gone is abandoned: committing
     // it would rename whatever took that index instead.
     if (renamingTrack >= 0 && !juce::isPositiveAndBelow(renamingTrack, session.trackCount()))
         endRename(false);
-    if (focusedAutomation.isValid() && !session.trackAutomationState(focusedAutomation).visible)
+    // A curve that is no longer drawn anywhere - hidden, or drawn over its
+    // track while the row shows another - cannot keep the keyboard, or Delete
+    // would clear one nobody can see.
+    if (focusedAutomation.isValid())
     {
-        focusedAutomation = {};
-        if (focus == Focus::automation)
-            focus = Focus::none;
+        auto onScreen = false;
+        if (juce::isPositiveAndBelow(focusedAutomation.track, static_cast<int>(trackLanes.size())))
+            for (const auto& automation : trackLanes[static_cast<size_t>(focusedAutomation.track)])
+                if (automation.target.slot == focusedAutomation.slot
+                    && automation.target.parameter == focusedAutomation.parameter)
+                    onScreen = automation.ownLane || automation.shown;
+        if (!onScreen)
+        {
+            focusedAutomation = {};
+            if (focus == Focus::automation)
+                focus = Focus::none;
+        }
     }
     // A track created just now has controls but no bounds yet, and a component
     // at nothing by nothing draws nothing. Placing them here means a new card
@@ -328,6 +341,12 @@ void Arrangement::syncTrackControls()
         inputButton->onClick = [this, track] { showTrackInputMenu(track); };
         inputButton->setColour(juce::TextButton::buttonColourId, palette::control);
         inputButton->setColour(juce::TextButton::textColourOffId, palette::textDim);
+        // Beside it, which lane the row shows; it wears the input chooser's
+        // look because it is the same kind of control.
+        auto chooserButton = std::make_unique<juce::TextButton>("None  v");
+        chooserButton->onClick = [this, track] { showAutomationChooser(track); };
+        chooserButton->setColour(juce::TextButton::buttonColourId, palette::control);
+        chooserButton->setColour(juce::TextButton::textColourOffId, palette::textDim);
         // And whether you hear it. The three settings are one answer, so they
         // are one control; see MonitorSelector.h.
         auto monitorControl = std::make_unique<MonitorSelector>();
@@ -378,6 +397,7 @@ void Arrangement::syncTrackControls()
         laneHeaders.addAndMakeVisible(*soloButton);
         laneHeaders.addAndMakeVisible(*armButton);
         laneHeaders.addAndMakeVisible(*inputButton);
+        laneHeaders.addAndMakeVisible(*chooserButton);
         laneHeaders.addAndMakeVisible(*monitorControl);
         laneHeaders.addAndMakeVisible(*volumeSlider);
         laneHeaders.addAndMakeVisible(*panSlider);
@@ -389,6 +409,7 @@ void Arrangement::syncTrackControls()
         solo.push_back(std::move(soloButton));
         arm.push_back(std::move(armButton));
         trackInput.push_back(std::move(inputButton));
+        automationChooser.push_back(std::move(chooserButton));
         monitor.push_back(std::move(monitorControl));
         volume.push_back(std::move(volumeSlider));
         pan.push_back(std::move(panSlider));
@@ -399,6 +420,7 @@ void Arrangement::syncTrackControls()
         solo.pop_back();
         arm.pop_back();
         trackInput.pop_back();
+        automationChooser.pop_back();
         monitor.pop_back();
         volume.pop_back();
         pan.pop_back();

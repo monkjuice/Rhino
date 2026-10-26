@@ -108,6 +108,7 @@ target_sources(RhinoNative PRIVATE
     src/ui/arrangement/ArrangementGroups.cpp
     src/ui/arrangement/ArrangementRename.cpp
     src/ui/arrangement/ArrangementAutomation.cpp
+    src/ui/arrangement/ArrangementAutomationChooser.cpp
     src/ui/arrangement/ArrangementAutomationPaint.cpp
     src/ui/arrangement/ArrangementDrops.cpp
     src/ui/arrangement/MonitorSelector.cpp

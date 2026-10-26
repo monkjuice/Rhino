@@ -52,6 +52,9 @@ extern const juce::Identifier automationValueID;
 // A track whose lane rows are folded away. On the track, beside the row's own
 // fold, because SessionAutomation.cpp clears it when a lane is revealed.
 extern const juce::Identifier trackAutomationFoldedID;
+// The lane drawn over a track that its own row shows, by the lane's device key
+// and parameter, or "none". On the track, as the fold is. SessionAutomation.cpp.
+extern const juce::Identifier trackShownAutomationID;
 extern const juce::Identifier trackGroupBusID;
 extern const juce::Identifier trackGroupMemberID;
 extern const juce::Identifier trackGroupCollapsedID;

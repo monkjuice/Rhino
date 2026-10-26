@@ -17,22 +17,34 @@
 // the last level back to the first, is the duck itself on most curves: the
 // cut from 1 to 0 on the beat.
 //
-// Two adjustments bend a curve by hand and are kept per curve: Slope moves
-// the mobile points, the sloped part, left or right as far as the fixed
-// points either side allow, and Shift moves the whole curve round the cycle.
+// Five adjustments bend a curve by hand and are kept per curve, so a curve
+// button is a starting point rather than a fixed shape:
+//
+// - Hold moves the mobile points, the sloped part, left or right as far as
+//   the fixed points either side allow: how long the curve holds before it.
+// - Release stretches the sloped part from its start, within the same room.
+// - Shift moves the whole curve round the cycle.
+// - Attack eases the cut on the beat: from the level the cycle ended at into
+//   the curve, over its first stretch.
+// - Depth keeps that much of the curve's dip, 1 the whole of it.
+//
+// Hold, Release and Attack are phases here. The processor keeps Attack in
+// milliseconds and converts it at the current cycle's length.
 namespace rhino::duck
 {
 constexpr int curveCount = 16;
+constexpr float shortestRelease = 0.01f;   // the sloped part's least length, in phase
+constexpr float longestAttack = 0.5f;      // in phase
 
 struct CurveAdjust
 {
-    float slope = 0.0f;   // -1 to 1: the mobile points moved all the way left, or right
-    float shift = 0.0f;   // -0.5 to 0.5 of a cycle
+    float hold = 0.0f;      // phase the sloped part has been moved by: negative is earlier
+    float shift = 0.0f;     // -0.5 to 0.5 of a cycle
+    float release = 1.0f;   // the sloped part's length, as a multiple of its design
+    float attack = 0.0f;    // phase the fall into the curve takes from the beat
+    float depth = 1.0f;     // how much of its dip the curve keeps, 0 to 1
 
-    bool operator== (const CurveAdjust& other) const noexcept
-    {
-        return slope == other.slope && shift == other.shift;
-    }
+    bool operator== (const CurveAdjust&) const noexcept = default;
 };
 
 enum class Family { sidechain, subBass, kickTrim, reverse, rhythm };
@@ -75,8 +87,11 @@ inline constexpr std::array<CurveDef, curveCount> curves { {
     { "Trim Slow", Family::kickTrim, 1.0f, 2, { { { 0.08f, 1.0f, Shape::linear, true }, { 0.70f, 0.0f, Shape::easeIn, true } } } },
     { "Suction", Family::reverse, 1.0f, 4, { { { 0.42f, 1.0f, Shape::linear, true }, { 0.62f, 0.05f, Shape::smooth, true }, { 0.78f, 0.05f, Shape::linear, true }, { 0.95f, 1.0f, Shape::smooth, true } } } },
     { "Suction Wide", Family::reverse, 1.0f, 4, { { { 0.28f, 1.0f, Shape::linear, true }, { 0.50f, 0.05f, Shape::easeIn, true }, { 0.72f, 0.05f, Shape::linear, true }, { 0.90f, 1.0f, Shape::easeOut, true } } } },
-    { "Swell", Family::rhythm, 0.0f, 2, { { { 0.68f, 1.0f, Shape::smooth, true }, { 1.00f, 0.0f, Shape::smooth, false } } } },
-    { "Double", Family::rhythm, 0.0f, 4, { { { 0.24f, 1.0f, Shape::smooth, true }, { 0.50f, 0.25f, Shape::smooth, true }, { 0.74f, 1.0f, Shape::smooth, true }, { 1.00f, 0.0f, Shape::smooth, false } } } },
+    // The rhythm curves rise from the beat itself, so their sloped part
+    // starts with a point at phase 0: Hold can then delay the rise, and
+    // Release has a length to stretch.
+    { "Swell", Family::rhythm, 0.0f, 3, { { { 0.0f, 0.0f, Shape::linear, true }, { 0.68f, 1.0f, Shape::smooth, true }, { 1.00f, 0.0f, Shape::smooth, false } } } },
+    { "Double", Family::rhythm, 0.0f, 5, { { { 0.0f, 0.0f, Shape::linear, true }, { 0.24f, 1.0f, Shape::smooth, true }, { 0.50f, 0.25f, Shape::smooth, true }, { 0.74f, 1.0f, Shape::smooth, true }, { 1.00f, 0.0f, Shape::smooth, false } } } },
 } };
 
 inline int clampCurve(int index) noexcept { return std::clamp(index, 0, curveCount - 1); }
@@ -139,71 +154,141 @@ inline MobileRoom mobileRoom(const CurveDef& def) noexcept
         if (point.at < room.first) room.lowest = std::max(room.lowest, point.at + 0.02f);
         if (point.at > room.last) room.highest = std::min(room.highest, point.at - 0.02f);
     }
+    // A sloped part designed to start on the beat may stay there.
+    room.lowest = std::min(room.lowest, room.first);
+    room.highest = std::max(room.highest, room.last);
     return room;
 }
 
-// How far Slope has moved the mobile points, in phase. Negative is left.
-inline float mobileOffset(int index, float slope) noexcept
+inline const CurveDef& curveDef(int index) noexcept { return curves[static_cast<size_t>(clampCurve(index))]; }
+
+// Where Hold and Release leave the sloped part, in the curve's own time,
+// before Shift: where its first mobile point stands, how long it runs to the
+// last, and that length over the design's.
+struct SlopedPart
 {
-    const auto room = mobileRoom(curves[static_cast<size_t>(clampCurve(index))]);
-    if (!room.any) return 0.0f;
-    slope = std::clamp(slope, -1.0f, 1.0f);
-    return slope < 0.0f ? slope * (room.first - room.lowest) : slope * (room.highest - room.last);
+    float start = 0.0f, length = 0.0f, scale = 1.0f;
+    bool any = false;
+};
+
+inline SlopedPart slopedPart(const MobileRoom& room, CurveAdjust adjust) noexcept
+{
+    if (!room.any) return {};
+    const auto design = room.last - room.first;
+    if (design <= 1.0e-6f)
+        return { std::clamp(room.first + adjust.hold, room.lowest, room.highest), 0.0f, 1.0f, true };
+    const auto length = std::clamp(design * adjust.release, std::min(design, shortestRelease), room.highest - room.lowest);
+    const auto start = std::clamp(room.first + adjust.hold, room.lowest, std::max(room.lowest, room.highest - length));
+    return { start, length, length / design, true };
 }
 
-// The Slope that puts the mobile points at this offset: what a drag on the
-// sloped part writes.
-inline float slopeForOffset(int index, float offset) noexcept
+inline SlopedPart slopedPart(int index, CurveAdjust adjust) noexcept
 {
-    const auto room = mobileRoom(curves[static_cast<size_t>(clampCurve(index))]);
-    if (!room.any) return 0.0f;
-    const auto roomBelow = room.first - room.lowest;
-    const auto roomAbove = room.highest - room.last;
-    if (offset < 0.0f) return roomBelow > 1.0e-6f ? std::clamp(offset / roomBelow, -1.0f, 0.0f) : 0.0f;
-    return roomAbove > 1.0e-6f ? std::clamp(offset / roomAbove, 0.0f, 1.0f) : 0.0f;
+    return slopedPart(mobileRoom(curveDef(index)), adjust);
 }
 
-// Where the sloped part stands on the display, in phase, adjustments applied.
-// The span may run past 1: a shifted curve wraps, and the caller draws it
-// modulo the cycle.
+// A stretch of phase. It may run past 1 where a shifted curve wraps; the
+// caller draws it modulo the cycle.
 struct PhaseSpan
 {
     float from = 0.0f, to = 0.0f;
 };
 
+// Where the sloped part may start, given its length: the Hold knob's travel.
+inline PhaseSpan holdRoom(int index, CurveAdjust adjust) noexcept
+{
+    const auto room = mobileRoom(curveDef(index));
+    if (!room.any) return {};
+    const auto part = slopedPart(room, adjust);
+    return { room.lowest, std::max(room.lowest, room.highest - part.length) };
+}
+
+// How long the sloped part may run, given its start: the Release knob's.
+inline PhaseSpan releaseRoom(int index, CurveAdjust adjust) noexcept
+{
+    const auto room = mobileRoom(curveDef(index));
+    const auto design = room.last - room.first;
+    if (!room.any || design <= 1.0e-6f) return {};
+    const auto part = slopedPart(room, adjust);
+    const auto shortest = std::min(design, shortestRelease);
+    return { shortest, std::max(shortest, room.highest - part.start) };
+}
+
+// The adjustment that starts the sloped part at `start`, kept in its room:
+// what the Hold knob and a drag on the sloped part write.
+inline CurveAdjust withHold(int index, CurveAdjust adjust, float start) noexcept
+{
+    const auto room = mobileRoom(curveDef(index));
+    if (!room.any) return adjust;
+    const auto span = holdRoom(index, adjust);
+    adjust.hold = std::clamp(start, span.from, span.to) - room.first;
+    return adjust;
+}
+
+// The adjustment that makes the sloped part `length` long, kept in its room:
+// what the Release knob and a drag on its end write.
+inline CurveAdjust withRelease(int index, CurveAdjust adjust, float length) noexcept
+{
+    const auto room = mobileRoom(curveDef(index));
+    const auto design = room.last - room.first;
+    if (!room.any || design <= 1.0e-6f) return adjust;
+    const auto span = releaseRoom(index, adjust);
+    adjust.release = std::clamp(length, span.from, span.to) / design;
+    return adjust;
+}
+
+// Where the sloped part stands on the display, in phase, every adjustment
+// applied.
 inline PhaseSpan mobileSpan(int index, CurveAdjust adjust) noexcept
 {
-    const auto room = mobileRoom(curves[static_cast<size_t>(clampCurve(index))]);
-    if (!room.any) return {};
-    const auto offset = mobileOffset(index, adjust.slope);
-    auto from = room.first + offset + adjust.shift;
+    const auto part = slopedPart(index, adjust);
+    if (!part.any) return {};
+    auto from = part.start + adjust.shift;
     from -= std::floor(from);
-    return { from, from + (room.last - room.first) };
+    return { from, from + part.length };
+}
+
+// The level a curve holds at the end of its cycle, which the next cycle's
+// Attack falls from.
+inline float endLevel(const CurveDef& def) noexcept
+{
+    return def.count > 0 ? def.points[static_cast<size_t>(def.count - 1)].level : def.start;
 }
 
 // The gain of curve `index` at `phase`, bent by `adjust`. Pure, and the one
 // function both the audio and every picture call.
 inline float curveGain(int index, float phase, CurveAdjust adjust) noexcept
 {
-    const auto& def = curves[static_cast<size_t>(clampCurve(index))];
-    const auto offset = mobileOffset(index, adjust.slope);
+    const auto& def = curveDef(index);
+    const auto room = mobileRoom(def);
+    const auto part = slopedPart(room, adjust);
     auto t = phase - adjust.shift;
     t -= std::floor(t);
+
+    auto level = endLevel(def);
     auto fromAt = 0.0f;
     auto fromLevel = def.start;
     for (int i = 0; i < def.count; ++i)
     {
         const auto& point = def.points[static_cast<size_t>(i)];
-        const auto at = point.mobile ? point.at + offset : point.at;
+        const auto at = point.mobile ? part.start + (point.at - room.first) * part.scale : point.at;
         if (t <= at)
         {
             const auto span = at - fromAt;
             const auto u = span > 1.0e-6f ? (t - fromAt) / span : 1.0f;
-            return fromLevel + (point.level - fromLevel) * travel(point.shape, u);
+            level = fromLevel + (point.level - fromLevel) * travel(point.shape, u);
+            break;
         }
         fromAt = at;
         fromLevel = point.level;
     }
-    return fromLevel;
+
+    const auto attack = std::clamp(adjust.attack, 0.0f, longestAttack);
+    if (attack > 1.0e-6f && t < attack)
+    {
+        const auto from = endLevel(def);
+        level = from + (level - from) * travel(Shape::smooth, t / attack);
+    }
+    return 1.0f - std::clamp(adjust.depth, 0.0f, 1.0f) * (1.0f - level);
 }
 }

@@ -324,7 +324,64 @@ void scopeRecordsTheCycle()
     juce::ignoreUnused(out);
     require(engine.scopeColumn(10).outHigh < 0.05f, "early in the cycle the scope saw the ducked output");
     require(engine.scopeColumn(240).outHigh > 0.95f, "and late in it the open one");
+    require(engine.scopeColumn(10).dryHigh > 0.95f && engine.scopeColumn(240).dryHigh > 0.95f,
+            "and the signal before the duck, whole, throughout");
     require(engine.cycleCount() >= 2, "two cycles were counted");
+}
+
+// The meter's reading: the deepest gain since the last take, so a cut
+// shorter than a frame still shows.
+void meterTakesTheDeepestGain()
+{
+    Engine engine;
+    engine.prepare(testRate, 4096);
+    require(engine.takeDeepestGain() == noGainReading, "before any block there is nothing to read");
+    Settings settings;
+    settings.mix = 0.5f;
+    const auto out = render(engine, settings, constant(cycle / 2), {});
+    juce::ignoreUnused(out);
+    requireClose(engine.takeDeepestGain(), 0.5f, 0.01f, "the meter reads the deepest gain, Mix included");
+    require(engine.takeDeepestGain() == noGainReading, "and a take clears it until the next block");
+
+    // A block that never ducks reads open.
+    Engine open;
+    open.prepare(testRate, 4096);
+    RenderOptions late;
+    late.host.ppq = 0.75;   // three quarters into the cycle: Classic is open
+    const auto opened = render(open, Settings {}, constant(2000), late);
+    juce::ignoreUnused(opened);
+    requireClose(open.takeDeepestGain(), 1.0f, 1.0e-4f, "a cycle that stays open reads no reduction");
+}
+
+// The strip's adjustments, heard: each is measured in the rendered output
+// against what it promises.
+void adjustmentsShapeTheSound()
+{
+    const auto renderWith = [] (CurveAdjust adjust)
+    {
+        Engine engine;
+        engine.prepare(testRate, 4096);
+        Settings settings;
+        settings.adjust = adjust;
+        return render(engine, settings, constant(cycle), {});
+    };
+    CurveAdjust shallow;
+    shallow.depth = 0.5f;
+    requireClose(meanOf(renderWith(shallow), 300, 1300), 0.5f, 0.01f, "Depth 50% ducks half way down");
+
+    CurveAdjust soft;
+    soft.attack = 0.04f;   // 20 ms of a half-second cycle
+    const auto eased = renderWith(soft);
+    require(eased[100] > 0.95f, "with Attack the first moments of the beat still pass");
+    requireClose(eased[480], 0.5f, 0.03f, "half way through it the cut is half made");
+    require(meanOf(eased, 1000, 1400) < 0.02f, "and after it the cut is whole");
+
+    const auto quick = renderWith(withRelease(0, {}, 0.23f));
+    require(meanOf(quick, 7000, 7400) > 0.98f, "a shorter Release has the signal open by 30% of the cycle");
+    require(meanOf(renderWith({}), 7000, 7400) < 0.6f, "where the curve as designed is still rising");
+
+    const auto held = renderWith(withHold(0, {}, 0.3f));
+    require(meanOf(held, 6000, 7000) < 0.02f, "a longer Hold keeps the signal cut for longer");
 }
 
 void latencyIsReportedPerMode()
@@ -352,6 +409,8 @@ void engineTests()
     antiClickSoftensTheRestart();
     stoppedHostRunsFree();
     scopeRecordsTheCycle();
+    meterTakesTheDeepestGain();
+    adjustmentsShapeTheSound();
     latencyIsReportedPerMode();
 }
 }

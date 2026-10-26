@@ -61,7 +61,9 @@ set(duck_sources
     core/DuckEngine.h
     ui/DuckTheme.h
     ui/DuckLayout.h
+    ui/DuckArt.h
     ui/DuckControls.h
+    ui/DuckMeter.h
     src/DuckPch.h
     src/DuckProcessor.h
     src/DuckProcessor.cpp
@@ -69,7 +71,8 @@ set(duck_sources
     src/DuckScopeView.h
     src/DuckScopeView.cpp
     src/DuckEditor.h
-    src/DuckEditor.cpp)
+    src/DuckEditor.cpp
+    src/DuckEditorPaint.cpp)
 
 target_sources(RhinoDuck PRIVATE ${duck_sources})
 duck_use_precompiled_header(RhinoDuck)

@@ -17,8 +17,6 @@ Processor::Processor()
                          .withInput("Sidechain", juce::AudioChannelSet::stereo(), true)),
       state(*this, nullptr, "RHINO_DUCK", parameterLayout())
 {
-    for (auto& slope : slopes) slope.store(0.0f, std::memory_order_relaxed);
-    for (auto& shift : shifts) shift.store(0.0f, std::memory_order_relaxed);
     mixValue = state.getRawParameterValue(id::mix);
     curveValue = state.getRawParameterValue(id::curve);
     lengthValue = state.getRawParameterValue(id::length);
@@ -87,7 +85,6 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     juce::ScopedNoDenormals noDenormals;
     const auto numSamples = buffer.getNumSamples();
     if (numSamples <= 0 || buffer.getNumChannels() == 0) return;
-    const auto settings = settingsNow();
 
     HostClock host;
     if (auto* head = getPlayHead())
@@ -97,6 +94,9 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
             if (const auto bpm = position->getBpm()) host.bpm = *bpm;
             if (const auto ppq = position->getPpqPosition()) host.ppq = *ppq;
         }
+    // Before the settings: Attack is read in phase at this tempo.
+    hostBpm.store(host.bpm > 1.0 ? host.bpm : 120.0, std::memory_order_relaxed);
+    const auto settings = settingsNow();
 
     // The notes that trigger, by frame. A note is kept only when it is on
     // the channel and the key the menu asks for, or the menu asks for all.
@@ -150,39 +150,70 @@ juce::AudioProcessorEditor* Processor::createEditor()
 
 // ---- the curves' own memory ---------------------------------------------------
 
-CurveAdjust Processor::curveAdjust(int curve) const noexcept
+double Processor::cycleSeconds() const noexcept
 {
-    const auto index = static_cast<size_t>(clampCurve(curve));
-    return { slopes[index].load(std::memory_order_relaxed), shifts[index].load(std::memory_order_relaxed) };
+    const auto length = std::clamp(lengthValue != nullptr ? juce::roundToInt(lengthValue->load(std::memory_order_relaxed)) : 1, 0, lengthCount - 1);
+    return lengthInBeats[static_cast<size_t>(length)] * 60.0 / hostBpm.load(std::memory_order_relaxed);
 }
 
-void Processor::setCurveSlope(int curve, float slope)
+CurveAdjust Processor::curveAdjust(int curve) const noexcept
 {
-    slopes[static_cast<size_t>(clampCurve(curve))].store(std::clamp(slope, -1.0f, 1.0f), std::memory_order_relaxed);
+    const auto& kept = memory[static_cast<size_t>(clampCurve(curve))];
+    CurveAdjust adjust;
+    adjust.hold = kept.hold.load(std::memory_order_relaxed);
+    adjust.shift = kept.shift.load(std::memory_order_relaxed);
+    adjust.release = kept.release.load(std::memory_order_relaxed);
+    adjust.attack = static_cast<float>(kept.attackMs.load(std::memory_order_relaxed) / 1000.0 / cycleSeconds());
+    adjust.depth = kept.depth.load(std::memory_order_relaxed);
+    return adjust;
+}
+
+float Processor::curveAttackMs(int curve) const noexcept
+{
+    return memory[static_cast<size_t>(clampCurve(curve))].attackMs.load(std::memory_order_relaxed);
+}
+
+void Processor::setCurveHold(int curve, float start)
+{
+    const auto index = clampCurve(curve);
+    memory[static_cast<size_t>(index)].hold.store(withHold(index, curveAdjust(index), start).hold, std::memory_order_relaxed);
+    revision.fetch_add(1, std::memory_order_relaxed);
+}
+
+void Processor::setCurveRelease(int curve, float length)
+{
+    const auto index = clampCurve(curve);
+    memory[static_cast<size_t>(index)].release.store(withRelease(index, curveAdjust(index), length).release, std::memory_order_relaxed);
+    revision.fetch_add(1, std::memory_order_relaxed);
+}
+
+void Processor::setCurveAttack(int curve, float milliseconds)
+{
+    memory[static_cast<size_t>(clampCurve(curve))].attackMs.store(std::clamp(milliseconds, 0.0f, longestAttackMs), std::memory_order_relaxed);
+    revision.fetch_add(1, std::memory_order_relaxed);
+}
+
+void Processor::setCurveDepth(int curve, float depth)
+{
+    memory[static_cast<size_t>(clampCurve(curve))].depth.store(std::clamp(depth, 0.0f, 1.0f), std::memory_order_relaxed);
     revision.fetch_add(1, std::memory_order_relaxed);
 }
 
 void Processor::setCurveShift(int curve, float shift)
 {
-    shifts[static_cast<size_t>(clampCurve(curve))].store(std::clamp(shift, -0.5f, 0.5f), std::memory_order_relaxed);
+    memory[static_cast<size_t>(clampCurve(curve))].shift.store(std::clamp(shift, -0.5f, 0.5f), std::memory_order_relaxed);
     revision.fetch_add(1, std::memory_order_relaxed);
 }
 
 void Processor::resetCurve(int curve)
 {
-    const auto index = static_cast<size_t>(clampCurve(curve));
-    slopes[index].store(0.0f, std::memory_order_relaxed);
-    shifts[index].store(0.0f, std::memory_order_relaxed);
+    memory[static_cast<size_t>(clampCurve(curve))].forget();
     revision.fetch_add(1, std::memory_order_relaxed);
 }
 
 void Processor::resetAllCurves()
 {
-    for (int curve = 0; curve < curveCount; ++curve)
-    {
-        slopes[static_cast<size_t>(curve)].store(0.0f, std::memory_order_relaxed);
-        shifts[static_cast<size_t>(curve)].store(0.0f, std::memory_order_relaxed);
-    }
+    for (auto& kept : memory) kept.forget();
     revision.fetch_add(1, std::memory_order_relaxed);
 }
 
@@ -190,33 +221,49 @@ void Processor::writeCurves(juce::ValueTree& tree) const
 {
     tree.removeChild(tree.getChildWithName(curvesNode), nullptr);
     juce::ValueTree all(curvesNode);
+    const CurveAdjust design;
     for (int curve = 0; curve < curveCount; ++curve)
     {
-        const auto adjust = curveAdjust(curve);
-        if (adjust.slope == 0.0f && adjust.shift == 0.0f) continue;
+        const auto& kept = memory[static_cast<size_t>(curve)];
+        const auto hold = kept.hold.load(std::memory_order_relaxed);
+        const auto shift = kept.shift.load(std::memory_order_relaxed);
+        const auto release = kept.release.load(std::memory_order_relaxed);
+        const auto attackMs = kept.attackMs.load(std::memory_order_relaxed);
+        const auto depth = kept.depth.load(std::memory_order_relaxed);
+        if (hold == design.hold && shift == design.shift && release == design.release && attackMs == 0.0f && depth == design.depth)
+            continue;
         juce::ValueTree one(curveNode);
         one.setProperty("index", curve, nullptr);
-        one.setProperty("slope", adjust.slope, nullptr);
-        one.setProperty("shift", adjust.shift, nullptr);
+        one.setProperty("hold", hold, nullptr);
+        one.setProperty("shift", shift, nullptr);
+        one.setProperty("release", release, nullptr);
+        one.setProperty("attackMs", attackMs, nullptr);
+        one.setProperty("depth", depth, nullptr);
         all.appendChild(one, nullptr);
     }
     tree.appendChild(all, nullptr);
 }
 
+// Hold and Release come back as they were saved, within sane bounds; the
+// curve's own room is applied whenever it is read (slopedPart), so a damaged
+// state cannot bend a curve past it.
 void Processor::readCurves(const juce::ValueTree& tree)
 {
-    for (auto& slope : slopes) slope.store(0.0f, std::memory_order_relaxed);
-    for (auto& shift : shifts) shift.store(0.0f, std::memory_order_relaxed);
+    for (auto& kept : memory) kept.forget();
     const auto all = tree.getChildWithName(curvesNode);
+    const CurveAdjust design;
     for (const auto& one : all)
     {
         if (!one.hasType(curveNode)) continue;
         const auto curve = static_cast<int>(one.getProperty("index", -1));
         if (curve < 0 || curve >= curveCount) continue;
-        slopes[static_cast<size_t>(curve)].store(std::clamp(static_cast<float>(one.getProperty("slope", 0.0f)), -1.0f, 1.0f),
-                                                 std::memory_order_relaxed);
-        shifts[static_cast<size_t>(curve)].store(std::clamp(static_cast<float>(one.getProperty("shift", 0.0f)), -0.5f, 0.5f),
-                                                 std::memory_order_relaxed);
+        const auto read = [&one] (const char* name, float fallback) { return static_cast<float>(one.getProperty(name, fallback)); };
+        auto& kept = memory[static_cast<size_t>(curve)];
+        kept.hold.store(std::clamp(read("hold", design.hold), -1.0f, 1.0f), std::memory_order_relaxed);
+        kept.release.store(std::clamp(read("release", design.release), 0.0f, 100.0f), std::memory_order_relaxed);
+        kept.shift.store(std::clamp(read("shift", design.shift), -0.5f, 0.5f), std::memory_order_relaxed);
+        kept.attackMs.store(std::clamp(read("attackMs", 0.0f), 0.0f, longestAttackMs), std::memory_order_relaxed);
+        kept.depth.store(std::clamp(read("depth", design.depth), 0.0f, 1.0f), std::memory_order_relaxed);
     }
     revision.fetch_add(1, std::memory_order_relaxed);
 }

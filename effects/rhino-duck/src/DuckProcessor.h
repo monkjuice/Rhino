@@ -28,14 +28,18 @@ inline constexpr const char* midiChannel = "midiChannel";
 inline constexpr const char* midiNote = "midiNote";
 }
 
+// The longest Attack a curve takes, in milliseconds.
+inline constexpr float longestAttackMs = 100.0f;
+
 // Rhino Duck as a host sees it: the parameters, the buses (a stereo pair in
 // and out, and a sidechain pair the Audio trigger listens to), the state, and
 // the engine fed once a block with the host's clock and the notes that
 // trigger.
 //
-// The sixteen curves' Slope and Shift are not parameters. They are kept per
-// curve on the state tree, saved with the project, and written only by the
-// panel, as the curve buttons' own memory rather than something to automate.
+// The sixteen curves' Hold, Release, Attack, Depth and Shift are not
+// parameters. They are kept per curve on the state tree, saved with the
+// project, and written only by the panel, as the curve buttons' own memory
+// rather than something to automate.
 class Processor final : public juce::AudioProcessor,
                         private juce::AsyncUpdater
 {
@@ -67,11 +71,22 @@ public:
     juce::AudioProcessorValueTreeState state;
 
     // ---- the curves' own memory, message thread ----------------------------
+    // A curve's adjustments as the audio reads them now, Attack converted to
+    // phase at the current cycle's length.
     CurveAdjust curveAdjust(int curve) const noexcept;
-    void setCurveSlope(int curve, float slope);
+    float curveAttackMs(int curve) const noexcept;
+    // Where the sloped part starts, and how long it runs, in phase; each kept
+    // within the room the other leaves.
+    void setCurveHold(int curve, float start);
+    void setCurveRelease(int curve, float length);
+    void setCurveAttack(int curve, float milliseconds);
+    void setCurveDepth(int curve, float depth);
     void setCurveShift(int curve, float shift);
     void resetCurve(int curve);
     void resetAllCurves();
+    // One cycle in seconds, at the host's last tempo and the Length chosen:
+    // what turns the curve's phases into the milliseconds the panel shows.
+    double cycleSeconds() const noexcept;
     // Moves on every adjustment and every loaded state, so the panel can
     // notice by comparing one number.
     int curveRevision() const noexcept { return revision.load(std::memory_order_relaxed); }
@@ -97,8 +112,25 @@ private:
     // through getSampleRate(), which a test driving prepareToPlay directly
     // leaves at zero.
     double preparedRate = 48000.0;
-    std::array<std::atomic<float>, curveCount> slopes {};
-    std::array<std::atomic<float>, curveCount> shifts {};
+    // A curve's memory, each a field of CurveAdjust except Attack, which is
+    // kept in milliseconds so a change of tempo leaves it alone.
+    struct Memory
+    {
+        std::atomic<float> hold { 0.0f }, shift { 0.0f }, release { 1.0f }, attackMs { 0.0f }, depth { 1.0f };
+
+        // Back to the curve as designed.
+        void forget() noexcept
+        {
+            const CurveAdjust design;
+            hold.store(design.hold, std::memory_order_relaxed);
+            shift.store(design.shift, std::memory_order_relaxed);
+            release.store(design.release, std::memory_order_relaxed);
+            attackMs.store(0.0f, std::memory_order_relaxed);
+            depth.store(design.depth, std::memory_order_relaxed);
+        }
+    };
+    std::array<Memory, curveCount> memory;
+    std::atomic<double> hostBpm { 120.0 };
     std::atomic<int> revision { 0 };
     std::atomic<int> wantedLatency { 0 };
 

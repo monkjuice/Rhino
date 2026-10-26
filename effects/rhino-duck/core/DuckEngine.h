@@ -63,13 +63,17 @@ struct HostClock
     double ppq = 0.0;   // at the block's first sample, in quarter notes
 };
 
-// The scope's picture of one cycle: the ducked output and the sidechain, as
-// the lowest and highest sample each column saw. Written a sample at a time
-// by the audio thread and read whole by the panel.
+// The scope's picture of one cycle: the ducked output, the same signal before
+// the duck, and the sidechain, as the lowest and highest sample each column
+// saw. Written a sample at a time by the audio thread and read whole by the
+// panel.
 struct ScopeColumn
 {
-    float outLow = 0.0f, outHigh = 0.0f, sideLow = 0.0f, sideHigh = 0.0f;
+    float outLow = 0.0f, outHigh = 0.0f, sideLow = 0.0f, sideHigh = 0.0f, dryLow = 0.0f, dryHigh = 0.0f;
 };
+
+// What takeDeepestGain answers when no block has run since it last asked.
+constexpr float noGainReading = 2.0f;
 
 inline int latencySamples(Trigger trigger, bool antiClick, double sampleRate) noexcept
 {
@@ -166,6 +170,7 @@ public:
         for (auto& value : scope) value.store(0.0f, std::memory_order_relaxed);
         sweep.store(0.0f, std::memory_order_relaxed);
         gainNow.store(1.0f, std::memory_order_relaxed);
+        deepest.store(noGainReading, std::memory_order_relaxed);
         cycles.store(0, std::memory_order_relaxed);
     }
 
@@ -208,6 +213,7 @@ public:
         }
 
         auto midiIndex = 0;
+        auto deepestHere = 1.0f;
         for (int i = 0; i < numSamples; ++i)
         {
             // Triggers heard on this frame restart the cycle `latency` frames
@@ -281,17 +287,20 @@ public:
             }
             const auto wanted = 1.0f - mix * (1.0f - target);
             gain += std::clamp(wanted - gain, -gainStep, gainStep);
+            deepestHere = std::min(deepestHere, gain);
 
             bandAmount += (bandTarget - bandAmount) * switchCoeff;
             soloAmount += (soloTarget - soloAmount) * switchCoeff;
 
             const auto readPos = (writePos - latency + lineLength) % lineLength;
-            auto outLow = 1.0e9f, outHigh = -1.0e9f;
+            auto outLow = 1.0e9f, outHigh = -1.0e9f, dryLow = 1.0e9f, dryHigh = -1.0e9f;
             for (int channel = 0; channel < channels; ++channel)
             {
                 auto& line = lines[static_cast<size_t>(channel)];
                 line[static_cast<size_t>(writePos)] = main[channel][i];
                 const auto x = line[static_cast<size_t>(readPos)];
+                dryLow = std::min(dryLow, x);
+                dryHigh = std::max(dryHigh, x);
                 // The crossover runs whether or not the band is on, so turning
                 // it on meets warm filters rather than a transient.
                 auto& stage = filters[static_cast<size_t>(channel)];
@@ -308,25 +317,33 @@ public:
             const auto sideShown = sideLine[static_cast<size_t>(readPos)];
             writePos = (writePos + 1) % lineLength;
 
-            if (running && channels > 0) paintScope(outLow, outHigh, sideShown);
+            if (running && channels > 0) paintScope({ outLow, outHigh, sideShown, sideShown, dryLow, dryHigh });
             ++frame;
         }
         sweep.store(static_cast<float>(phase), std::memory_order_relaxed);
         gainNow.store(gain, std::memory_order_relaxed);
+        // The deepest gain since the meter last took it. A take landing
+        // between this load and store loses nothing worse than one block's
+        // figure to the next frame.
+        deepest.store(std::min(deepest.load(std::memory_order_relaxed), deepestHere), std::memory_order_relaxed);
     }
 
     // ---- what the panel reads, from any thread -----------------------------
     float sweepPhase() const noexcept { return sweep.load(std::memory_order_relaxed); }
     float currentGain() const noexcept { return gainNow.load(std::memory_order_relaxed); }
+    // The deepest gain the duck applied, Mix included, since the last take:
+    // what the meter shows, so a cut shorter than a frame is never missed.
+    // noGainReading when no block has run since. Only the meter takes it.
+    float takeDeepestGain() const noexcept { return deepest.exchange(noGainReading, std::memory_order_relaxed); }
     // How many cycles have started, so a picture can tell a new one.
     int cycleCount() const noexcept { return cycles.load(std::memory_order_relaxed); }
     bool isArmed() const noexcept { return armed; }
 
     ScopeColumn scopeColumn(int column) const noexcept
     {
-        const auto base = static_cast<size_t>(std::clamp(column, 0, scopeColumns - 1)) * 4;
-        return { scope[base].load(std::memory_order_relaxed), scope[base + 1].load(std::memory_order_relaxed),
-                 scope[base + 2].load(std::memory_order_relaxed), scope[base + 3].load(std::memory_order_relaxed) };
+        const auto base = static_cast<size_t>(std::clamp(column, 0, scopeColumns - 1)) * scopeFields;
+        const auto at = [this, base] (size_t field) { return scope[base + field].load(std::memory_order_relaxed); };
+        return { at(0), at(1), at(2), at(3), at(4), at(5) };
     }
 
 private:
@@ -407,23 +424,24 @@ private:
         return true;
     }
 
-    void paintScope(float outLow, float outHigh, float sideShown) noexcept
+    // A new column starts from this sample; the same column widens to take
+    // it in, each low field taking the lower and each high the higher.
+    void paintScope(const ScopeColumn& sample) noexcept
     {
         const auto column = std::clamp(static_cast<int>(phase * scopeColumns), 0, scopeColumns - 1);
-        const auto base = static_cast<size_t>(column) * 4;
-        if (column != lastColumn)
+        const auto base = static_cast<size_t>(column) * scopeFields;
+        const std::array<float, scopeFields> values { sample.outLow, sample.outHigh, sample.sideLow, sample.sideHigh,
+                                                      sample.dryLow, sample.dryHigh };
+        const auto fresh = column != lastColumn;
+        lastColumn = column;
+        for (size_t field = 0; field < scopeFields; ++field)
         {
-            lastColumn = column;
-            scope[base].store(outLow, std::memory_order_relaxed);
-            scope[base + 1].store(outHigh, std::memory_order_relaxed);
-            scope[base + 2].store(sideShown, std::memory_order_relaxed);
-            scope[base + 3].store(sideShown, std::memory_order_relaxed);
-            return;
+            auto& slot = scope[base + field];
+            const auto held = slot.load(std::memory_order_relaxed);
+            const auto low = field % 2 == 0;
+            slot.store(fresh ? values[field] : (low ? std::min(held, values[field]) : std::max(held, values[field])),
+                       std::memory_order_relaxed);
         }
-        scope[base].store(std::min(scope[base].load(std::memory_order_relaxed), outLow), std::memory_order_relaxed);
-        scope[base + 1].store(std::max(scope[base + 1].load(std::memory_order_relaxed), outHigh), std::memory_order_relaxed);
-        scope[base + 2].store(std::min(scope[base + 2].load(std::memory_order_relaxed), sideShown), std::memory_order_relaxed);
-        scope[base + 3].store(std::max(scope[base + 3].load(std::memory_order_relaxed), sideShown), std::memory_order_relaxed);
     }
 
     double rate = 48000.0;
@@ -447,9 +465,12 @@ private:
     std::int64_t nextRestart = 0;
     std::int64_t frame = 0;
 
+    static constexpr size_t scopeFields = 6;   // the fields of a ScopeColumn, in order
     int lastColumn = -1;
-    std::array<std::atomic<float>, scopeColumns * 4> scope {};
+    std::array<std::atomic<float>, scopeColumns * scopeFields> scope {};
     std::atomic<float> sweep { 0.0f }, gainNow { 1.0f };
+    // Taken, and so written, from a const reader: the meter's exchange.
+    mutable std::atomic<float> deepest { noGainReading };
     std::atomic<int> cycles { 0 };
 };
 }

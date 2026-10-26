@@ -65,7 +65,10 @@ void stateRoundTrips()
     setValue(first, id::curve, 5.0f);
     setValue(first, id::trigger, 2.0f);
     setValue(first, id::cutoff, 500.0f);
-    first.setCurveSlope(5, 0.6f);
+    first.setCurveHold(5, 0.2f);
+    first.setCurveRelease(5, 0.5f);
+    first.setCurveAttack(5, 12.0f);
+    first.setCurveDepth(5, 0.7f);
     first.setCurveShift(5, -0.125f);
     first.setCurveShift(12, 0.25f);
     first.setUiScale(1.5f);
@@ -78,19 +81,59 @@ void stateRoundTrips()
     requireClose(value(second, id::curve), 5.0f, 1.0e-5f, "the curve comes back");
     requireClose(value(second, id::trigger), 2.0f, 1.0e-5f, "the trigger comes back");
     requireClose(value(second, id::cutoff), 500.0f, 0.05f, "the cutoff comes back");
-    requireClose(second.curveAdjust(5).slope, 0.6f, 1.0e-6f, "a curve's Slope comes back");
-    requireClose(second.curveAdjust(5).shift, -0.125f, 1.0e-6f, "a curve's Shift comes back");
+    requireClose(slopedPart(5, second.curveAdjust(5)).start, 0.2f, 1.0e-5f, "a curve's Hold comes back");
+    requireClose(slopedPart(5, second.curveAdjust(5)).length, 0.5f, 1.0e-5f, "its Release");
+    requireClose(second.curveAttackMs(5), 12.0f, 1.0e-4f, "its Attack");
+    requireClose(second.curveAdjust(5).depth, 0.7f, 1.0e-6f, "its Depth");
+    requireClose(second.curveAdjust(5).shift, -0.125f, 1.0e-6f, "and its Shift");
     requireClose(second.curveAdjust(12).shift, 0.25f, 1.0e-6f, "for every curve that was adjusted");
-    requireClose(second.curveAdjust(0).slope, 0.0f, 1.0e-6f, "and an untouched curve stays at its defaults");
+    require(second.curveAdjust(0) == CurveAdjust {}, "and an untouched curve stays as designed");
     requireClose(second.uiScale(), 1.5f, 1.0e-6f, "the window size comes back");
 
     const auto revision = second.curveRevision();
     second.resetCurve(5);
-    require(second.curveAdjust(5).slope == 0.0f && second.curveAdjust(5).shift == 0.0f, "Reset takes a curve back to its defaults");
+    require(second.curveAdjust(5) == CurveAdjust {} && second.curveAttackMs(5) == 0.0f, "Reset takes a curve back to its design");
     require(second.curveRevision() > revision, "and moves the revision");
     second.resetAllCurves();
-    require(second.curveAdjust(12).shift == 0.0f, "Reset all takes every curve back");
-    require(first.curveAdjust(5).slope == 0.6f, "while the other instance keeps its own");
+    require(second.curveAdjust(12) == CurveAdjust {}, "Reset all takes every curve back");
+    require(first.curveAdjust(5).depth == 0.7f, "while the other instance keeps its own");
+}
+
+void holdAndReleaseKeepToTheirRoom()
+{
+    Processor processor;
+    processor.setCurveRelease(0, 5.0f);
+    const auto stretched = slopedPart(0, processor.curveAdjust(0));
+    processor.setCurveHold(0, 0.5f);
+    const auto held = slopedPart(0, processor.curveAdjust(0));
+    requireClose(held.length, stretched.length, 1.0e-6f, "Hold never takes from the Release");
+    require(held.start + held.length <= mobileRoom(curveDef(0)).highest + 1.0e-5f, "and the sloped part stays in its room");
+    processor.setCurveDepth(0, 3.0f);
+    require(processor.curveAdjust(0).depth == 1.0f, "Depth stops at the whole dip");
+    processor.setCurveAttack(0, 500.0f);
+    require(processor.curveAttackMs(0) == longestAttackMs, "Attack stops at its longest");
+}
+
+// Attack is kept in milliseconds and read in phase, at the Length chosen and
+// the tempo the host last gave.
+void attackIsKeptInMilliseconds()
+{
+    Processor processor;
+    processor.setCurveAttack(0, 25.0f);
+    requireClose(static_cast<float>(processor.cycleSeconds()), 0.5f, 1.0e-6f, "a quarter note at 120 bpm is half a second");
+    requireClose(processor.curveAdjust(0).attack, 0.05f, 1.0e-6f, "so 25 ms is a twentieth of the cycle");
+    setValue(processor, id::length, 3.0f);
+    requireClose(processor.curveAdjust(0).attack, 0.0125f, 1.0e-6f, "a longer cycle keeps the same milliseconds");
+
+    TestPlayHead head;
+    head.bpm = 60.0;
+    processor.setPlayHead(&head);
+    processor.prepareToPlay(testRate, 512);
+    juce::AudioBuffer<float> buffer(4, 512);
+    juce::MidiBuffer midi;
+    processor.processBlock(buffer, midi);
+    requireClose(static_cast<float>(processor.cycleSeconds()), 4.0f, 1.0e-6f, "the host's tempo counts once a block has told it");
+    requireClose(processor.curveAdjust(0).attack, 0.00625f, 1.0e-6f, "and the Attack follows");
 }
 
 void latencyFollowsTheTriggerMode()
@@ -176,6 +219,8 @@ void processorTests()
 {
     parametersAreDeclared();
     stateRoundTrips();
+    holdAndReleaseKeepToTheirRoom();
+    attackIsKeptInMilliseconds();
     latencyFollowsTheTriggerMode();
     busLayoutsAreTheExpectedOnes();
     ducksThroughTheHostClock();

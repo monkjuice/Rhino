@@ -4,7 +4,7 @@ type: decision
 summary: Why Forge is its own JUCE plugin project, hosted by Rhino through Tracktion's external-plugin wrapper rather than built in.
 tags: [forge, vst3, hosting, architecture]
 sources: []
-updated: 2026-10-18
+updated: 2026-10-26
 ---
 
 # Forge is an independent VST3
@@ -34,7 +34,7 @@ The rejected alternative was a built-in Tracktion device like Rhino Wave. That a
 
 ## Consequences
 
-- **Rhino never names a Forge parameter.** Rhino finds the plugin by its description (`looksLikeForge` in `native/src/model/SessionExternalPlugins.cpp`). So a Forge parameter change can only affect Forge state saved inside a `.rhinoedit`, and Forge reconciles that state when it loads ([Hosting Forge in Rhino](forge-hosting.md), [Forge presets and state](forge-presets-and-state.md)).
+- **Rhino never names a Forge parameter**, except the nine its catalog entry lists for the rack by name ([Mapped parameters](mapped-parameters.md)). Rhino finds the plugin by its description (`looksLike` in `native/src/model/SessionExternalPlugins.cpp`, against the entry's `pluginName`; `looksLikeForge` until 2026-10-26, when Rhino Duck became the second external entry). So a Forge parameter change can only affect Forge state saved inside a `.rhinoedit`, and Forge reconciles that state when it loads ([Hosting Forge in Rhino](forge-hosting.md), [Forge presets and state](forge-presets-and-state.md)).
 - **A running host locks the VST3.** Relinking fails with LNK1104 while RhinoDAW or a DAW has the plugin loaded. Build the test binary and the standalone instead, and say the VST3 is stale ([LNK1104 means a running binary holds the file](locked-executable-lnk1104.md)).
 - **Separate build and tests.** Forge has its own CMake configure step and its own test binary, one CTest case per test area ([Build and test Forge](build-and-test-forge.md)).
 - **Shipping needs a real host.** A VST3 counts as shipped only after it has been loaded and automated in at least one external host; a successful compile is not proof. Generated bundles are never committed.

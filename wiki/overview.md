@@ -4,12 +4,12 @@ type: overview
 summary: "Rhino and Rhino Forge at a glance: what they are, how they are built and where to start reading."
 tags: [overview, rhino, forge]
 sources: []
-updated: 2026-10-19
+updated: 2026-10-26
 ---
 
 # Rhino and Rhino Forge
 
-This repository holds two products.
+This repository holds three products.
 
 - **Rhino** is a native desktop DAW for electronic music: an arrangement view with a note editor, audio and MIDI
   recording, time warp, track groups, a device chain per track, and an experimental DJ view of decks and a mixer.
@@ -18,8 +18,11 @@ This repository holds two products.
 - **Rhino Forge** is an independent wavetable and spectral synthesiser: one JUCE `AudioProcessor` built as a VST3 and
   a standalone app, under `instruments/rhino-forge/`. Rhino hosts it like any third-party VST3. Serum 2 is its north
   star for structure and workflow; it reuses no Serum code, assets, names or presets.
+- **Rhino Duck** is an independent sidechain ducking effect built the same way, under `effects/rhino-duck/`, since
+  2026-10-26 ([Rhino Duck](pages/rhino-duck.md)). Rhino's device catalog lists both plugins as external entries and
+  finds their development builds without a copy step ([Hosting Forge in Rhino](pages/forge-hosting.md)).
 
-Both products are in mid-alpha. Source builds are supported on Windows; production installers for Windows and macOS
+All three are in mid-alpha. Source builds are supported on Windows; production installers for Windows and macOS
 are targeted for December 2026-January 2027. Ableton Live is the reference for Rhino's workflow vocabulary, as Serum
 is for Forge's.
 
@@ -31,6 +34,7 @@ is for Forge's.
 | `native/src/core/`, `native/src/devices/`, `native/src/tests/` | The `RhinoCore` target (`dsp/`, `dj/`, `content/`: JUCE-only DSP, the DJ booth's engine, the content library), the `RhinoDevices` target (built-in plugins, device catalog), and the test runners |
 | `native/assets/` | Fonts and app icons, the only assets compiled in |
 | `instruments/rhino-forge/` | Forge: `core/` engine (headers only), `ui/`, `src/`, `tests/`, `tables/`, `presets/` (the factory set) |
+| `effects/rhino-duck/` | Duck: `core/` (curves and engine, headers only), `ui/`, `src/`, `tests/` |
 | `library/` | Rhino's content: samples (stored with Git LFS), device presets, drum kits and drum presets |
 | `research/` | The September 2026 DAW study; `research/sources/` is off limits |
 | `native/.deps/` | Pinned JUCE and Tracktion, fetched by script, ignored by git, never read |
@@ -93,3 +97,4 @@ The full catalog is [index.md](index.md).
 | 2026-10-12 | [DJ decks play live through their track's chain](pages/dj-decks-play-live-through-the-track.md), by two hidden devices on every track; the bounces, group decks and the knob-held preview removed |
 | 2026-10-13 | `native/src` laid out by layer, `app/`, `model/`, `ui/<view>/`, `core/{dsp,dj,content}/`, with includes spelled from each target's root ([The source tree mirrors the layers](pages/source-tree-mirrors-the-layers.md)); `Main.cpp` split into `MainWindow`, `MainComponent` and its six units ([App shell](pages/app-shell.md)); Forge's arp gains four pattern slots and a waterfall on its plate, moved between the keys and the note guide ([Forge ARP plate](pages/forge-arp-plate.md)) |
 | 2026-10-18/19 | Forge gains a [preset browser and bank](pages/forge-preset-browser.md), a factory set of 18 presets, and [import of Serum 2 and Vital presets](pages/forge-preset-import.md) |
+| 2026-10-26 | [Rhino Duck](pages/rhino-duck.md), a sidechain ducking VST3 under `effects/rhino-duck/`, and the [device catalog](pages/device-catalog.md) describing every external plugin by its entry, Duck the second |

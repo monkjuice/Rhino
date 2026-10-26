@@ -92,11 +92,17 @@ repaints the scope and follows parameters the host moved, repainting only what c
 
 ## Hosting
 
-Rhino's own device catalog does not list Duck yet: `SessionExternalPlugins.cpp` discovers Forge alone
-([Hosting Forge in Rhino](forge-hosting.md)). Until that is generalised, Duck is used in Rhino or any DAW as an
-ordinary VST3 from `effects/rhino-duck/build/RhinoDuck_artefacts/Release/VST3/Rhino Duck.vst3`. As with Forge, a
-VST3 counts as shipped only after it has been loaded in a real host, and a running host locks the bundle against
-relinking ([LNK1104 means a running binary holds the file](locked-executable-lnk1104.md)).
+Since 2026-10-26 Rhino's device catalog lists Duck as `RhinoDuck`, an external audio effect under Dynamics, so the
+browser's Audio FX tab offers it and a drop or the rack's `+` menu puts the VST3 on a track through Tracktion's
+external-plugin wrapper. The entry carries what discovery needs (`pluginName`, `bundle`, `developmentArtefacts`) and
+the nine parameters its rack shows first (Mix, Curve, Length, Trigger, Loop, End, Band split, Band cutoff, Band solo;
+MAP adds more from its own window), and `SessionExternalPlugins.cpp` finds every external entry the way it found
+Forge: a VST3 already in the engine's known-plugin list, else the development build under the repository, else the
+bundle in the platform's VST3 folders ([Hosting Forge in Rhino](forge-hosting.md), [Device catalog](device-catalog.md)).
+The scenario in `native/src/tests/Pattern/scenarios/DeviceParameters.inc` adds it to an audio lane and a MIDI lane
+where a Duck build is found, and requires it to be found when the development Release bundle exists. Outside Rhino it is an ordinary VST3 from `effects/rhino-duck/build/RhinoDuck_artefacts/Release/VST3/Rhino Duck.vst3`.
+As with Forge, a VST3 counts as shipped only after it has been loaded in a real host, and a running host locks the
+bundle against relinking ([LNK1104 means a running binary holds the file](locked-executable-lnk1104.md)).
 
 ## Tests
 
@@ -113,7 +119,8 @@ renders the panel after two seconds of a bassline under a kick ([Seeing the UI w
 
 ## Decisions
 
-- **An independent VST3, not a catalog device.** Asked for on 2026-10-25; the reasons are Forge's.
+- **An independent VST3, not a native device.** Asked for on 2026-10-25; the reasons are Forge's. It joined the
+  catalog as an external entry the next day, which is what made the catalog carry an external plugin's facts.
 - **A new top-level `effects/` folder**, beside `instruments/`, because an effect under `instruments/` would mislead.
 - **Curve adjustments are state, not parameters.** Sixteen Slopes and sixteen Shifts as parameters would put 32
   entries in every host's automation list for something the manual treats as the curve buttons' own memory.

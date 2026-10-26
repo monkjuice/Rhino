@@ -4,12 +4,12 @@ type: component
 summary: Every device Rhino ships, what each one is and where its source lives, with Utility's details and the pitfalls the devices share.
 tags: [rhino, devices, dsp]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-26
 ---
 
 # Built-in devices
 
-Every device in the [Device catalog](device-catalog.md) on 2026-10-12. Rhino's own live under `native/src/devices/`, with their DSP under `native/src/core/dsp/`; four come from Tracktion.
+Every device in the [Device catalog](device-catalog.md) on 2026-10-26. Rhino's own live under `native/src/devices/`, with their DSP under `native/src/core/dsp/`; four come from Tracktion.
 
 | Device | Kind | Source | What it is |
 | --- | --- | --- | --- |
@@ -19,6 +19,7 @@ Every device in the [Device catalog](device-catalog.md) on 2026-10-12. Rhino's o
 | Drum Rack | instrument | `instruments/DrumRackDevice.*` | [Drum Rack](drum-rack.md) |
 | Rhino EQ | audio FX | `audio/RhinoEqDevice.*` | [Rhino EQ](rhino-eq.md) |
 | Compressor, Reverb, Delay | audio FX | Tracktion built-ins | |
+| Rhino Duck | audio FX | external VST3, `effects/rhino-duck/` | [Rhino Duck](rhino-duck.md), the second external entry, since 2026-10-26 |
 | Utility | audio FX | `audio/UtilityDevice.*` | Gain trim inside every track's chain |
 | Rhino Space | audio FX | `audio/RhinoSpaceDevice.*` | Mix, size, smear, drive, width |
 | Rhino Bloom | audio FX | `audio/RhinoBloomDevice.*` | Bloom, chorus, clouds, plate, colour |

@@ -4,7 +4,7 @@ type: component
 summary: Rhino builds as three targets (RhinoCore, RhinoDevices, the app) so that editing a device does not rebuild the app.
 tags: [rhino, build, cmake, architecture]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-26
 ---
 
 # Rhino's build targets
@@ -31,7 +31,7 @@ The `te` alias (`namespace te = tracktion::engine;`) is Rhino's, not Tracktion's
 
 ## The app target
 
-`juce_add_gui_app(RhinoNative ...)` produces `RhinoDAW.exe` ([The executable is RhinoDAW, not Rhino](executable-named-rhinodaw.md)). The runners in `native/src/tests/` are compiled into that binary, and each CTest case runs it with a flag such as `--self-test`. Its only JUCE binary data is the two Inter fonts ([Content is files, never compiled in](content-is-files.md)). The app and `RhinoCore` are compiled with `RHINO_SOURCE_DIR`, the absolute path of `native/`, which is how a development build finds `library/` and the Forge VST3 without a copy step.
+`juce_add_gui_app(RhinoNative ...)` produces `RhinoDAW.exe` ([The executable is RhinoDAW, not Rhino](executable-named-rhinodaw.md)). The runners in `native/src/tests/` are compiled into that binary, and each CTest case runs it with a flag such as `--self-test`. Its only JUCE binary data is the two Inter fonts ([Content is files, never compiled in](content-is-files.md)). The app and `RhinoCore` are compiled with `RHINO_SOURCE_DIR`, the absolute path of `native/`, which is how a development build finds `library/` and each external plugin's development VST3 (Forge's, Duck's) without a copy step ([Hosting Forge in Rhino](forge-hosting.md)).
 
 ## Pitfalls
 

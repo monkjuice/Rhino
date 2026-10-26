@@ -1300,3 +1300,7 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - source: the change brief, checked against native/src/ui/arrangement/Arrangement.h (`laneTailHeight`), ArrangementSync.cpp (`updateScroll`), ArrangementGestures.cpp (`mouseWheelMove`, `cardResizeEdgeAt`) and tests/Arrangement/scenarios/ArrangementPan.inc
 - updated: pages/arrangement-view.md (Cards bullet: `laneTailHeight`, why the last lane's edge was unreachable on `returnsTop()`, the strip doubling as the new-lane drop zone, the test)
 - updated: pages/return-tracks.md (In the arrangement, Gestures: the tail as the consequence of lane edges counting only above the block)
+
+## [2026-10-25] update | Arrangement: the timeline scrolls 32 bars past the song's end at any zoom, clips or none (060e69b)
+- source: the change brief, checked against native/src/ui/arrangement/Arrangement.h (`timelineTailBars`), ArrangementSync.cpp (`updateScroll`) and tests/Arrangement/scenarios/ArrangementPan.inc
+- updated: pages/arrangement-view.md (Zoom and the adaptive grid: new bullet on the horizontal extent, the old one-bar tail and 8 s floor it replaced, the bar following the time signature, the test)

@@ -71,10 +71,11 @@ public:
         if (!live) fill = fill.withMultipliedAlpha(lit ? 0.35f : 0.4f);
         g.setColour(fill);
         g.fillRoundedRectangle(area, area.getHeight() * 0.5f);
-        // Disabled, the outline keeps it reading as a button.
-        if (!live)
+        // A faint edge keeps an unlit chip reading as a button, a firmer one
+        // a disabled chip.
+        if (!lit || !live)
         {
-            g.setColour(colour::chipMuted.withAlpha(0.3f));
+            g.setColour(live ? juce::Colours::white.withAlpha(0.06f) : colour::chipMuted.withAlpha(0.3f));
             g.drawRoundedRectangle(area.reduced(0.5f), area.getHeight() * 0.5f, 1.0f);
         }
         auto ink = lit ? colour::accentDark : colour::chipText;

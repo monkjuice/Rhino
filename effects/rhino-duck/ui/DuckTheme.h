@@ -16,8 +16,9 @@ inline const juce::Colour plate { 0xff21252b };        // a raised section: the 
 inline const juce::Colour plateRaised { 0xff2b3037 };
 inline const juce::Colour well { 0xff0e1013 };         // the recessed scope and value boxes
 inline const juce::Colour wellLine { 0xff2d3238 };     // the scope's grid
-inline const juce::Colour chip { 0xff2b3037 };
-inline const juce::Colour chipHover { 0xff363b44 };
+// A step above the plates' lit top edge, so a chip there still reads.
+inline const juce::Colour chip { 0xff32373f };
+inline const juce::Colour chipHover { 0xff3d434c };
 inline const juce::Colour chipText { 0xffd3d7de };
 inline const juce::Colour chipMuted { 0xff8f969e };
 inline const juce::Colour accent { 0xffff8a3d };

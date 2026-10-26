@@ -1295,3 +1295,8 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/headless-ui-snapshots.md (`RHINO_RETURN_TRACKS_SNAPSHOT` shows the knobs' column)
 - updated: pages/locked-executable-lnk1104.md (summary; rename to a fresh name when `.inuse` is taken: `RhinoDAW.exe.inuse-2888` on 2026-10-25)
 - updated: index.md (summaries of Return tracks and sends and the LNK1104 gotcha)
+
+## [2026-10-25] update | Arrangement: the lanes scroll 40 px past the last track, so its bottom edge can be dragged (100bf20)
+- source: the change brief, checked against native/src/ui/arrangement/Arrangement.h (`laneTailHeight`), ArrangementSync.cpp (`updateScroll`), ArrangementGestures.cpp (`mouseWheelMove`, `cardResizeEdgeAt`) and tests/Arrangement/scenarios/ArrangementPan.inc
+- updated: pages/arrangement-view.md (Cards bullet: `laneTailHeight`, why the last lane's edge was unreachable on `returnsTop()`, the strip doubling as the new-lane drop zone, the test)
+- updated: pages/return-tracks.md (In the arrangement, Gestures: the tail as the consequence of lane edges counting only above the block)

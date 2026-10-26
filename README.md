@@ -112,11 +112,23 @@ Rhino discovers the development VST3 automatically. You can also run Forge by it
 instruments/rhino-forge/build/RhinoForge_artefacts/Release/Standalone/Rhino Forge.exe
 ```
 
+### 5. Add Rhino Duck (optional)
+
+[Rhino Duck](effects/rhino-duck/README.md) is a sidechain ducking effect, a VST3 and standalone app built the same way as Forge from the same JUCE checkout:
+
+```powershell
+cmake -S effects/rhino-duck -B effects/rhino-duck/build -G "Visual Studio 17 2022" -A x64
+cmake --build effects/rhino-duck/build --config Release --parallel 2 -- /p:BuildInParallel=false
+```
+
+The bundle lands at `effects/rhino-duck/build/RhinoDuck_artefacts/Release/VST3/Rhino Duck.vst3`, for any VST3 host; Rhino does not list it in its own device catalog yet.
+
 ## Verify a development build
 
 ```powershell
 ctest --test-dir native/build -C Release --output-on-failure
 ctest --test-dir instruments/rhino-forge/build -C Release -j 8 --output-on-failure
+ctest --test-dir effects/rhino-duck/build -C Release --output-on-failure
 ```
 
 The detailed build notes, architecture, component guides, decisions, and known gotchas live in the [Rhino wiki](wiki/index.md). Start with the [project overview](wiki/overview.md), [building Rhino](wiki/pages/build-and-test-rhino.md), or [building Forge](wiki/pages/build-and-test-forge.md).

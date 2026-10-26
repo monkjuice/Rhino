@@ -1304,3 +1304,8 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 ## [2026-10-25] update | Arrangement: the timeline scrolls 32 bars past the song's end at any zoom, clips or none (060e69b)
 - source: the change brief, checked against native/src/ui/arrangement/Arrangement.h (`timelineTailBars`), ArrangementSync.cpp (`updateScroll`) and tests/Arrangement/scenarios/ArrangementPan.inc
 - updated: pages/arrangement-view.md (Zoom and the adaptive grid: new bullet on the horizontal extent, the old one-bar tail and 8 s floor it replaced, the bar following the time signature, the test)
+
+## [2026-10-26] update | Rhino Duck: a sidechain ducking VST3 and standalone under effects/rhino-duck/, modelled on the Kickstart 2 manual
+- source: the Kickstart 2 manual (Downloads, v2.0.9, its text and screenshots), the new project's sources (core/DuckCurves.h, core/DuckEngine.h, src/DuckProcessor.*, src/DuckScopeView.*, src/DuckEditor.*, tests/) and its four CTest areas
+- created: pages/rhino-duck.md (the curves and their per-curve Slope and Shift, the engine's three clocks, latency and anti-click, the crossover, the scope, the panel, the hosting gap in Rhino's catalog, the tests, the decisions)
+- updated: index.md (Components: Rhino Duck)

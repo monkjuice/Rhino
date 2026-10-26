@@ -3,6 +3,8 @@
 #include "app/ControlBarFields.h"
 #include <array>
 #include <memory>
+#include <optional>
+#include <vector>
 
 namespace rhino
 {
@@ -87,6 +89,44 @@ private:
     double warpTimeForSourceTime(double sourceSeconds) const;
     int warpMarkerAt(juce::Point<float>) const;
     void showWarpModeMenu();
+    // AudioClipEnvelope.cpp - the clip's own envelopes, Live's clip
+    // envelopes, drawn and edited over its waveform: the chooser that says
+    // which one is shown, the knob menu that shows or clears one, the line and
+    // its nodes, and the gestures that edit them. A third responsibility, and
+    // so a third file: what the knobs do over time rather than where they sit.
+    void configureEnvelopeControls();
+    void syncEnvelope();
+    void layoutEnvelopeControls(juce::Rectangle<int>& header);
+    // Which envelope the waveform shows, or none: the knobs alone.
+    void showEnvelope(std::optional<Session::ClipEnvelope>);
+    void showEnvelopeMenu();
+    void showControlMenu(int control);
+    // What either menu's choices do, apart from the menus themselves so a test
+    // can choose without opening one. 0 hides the envelope, 1 to 3 show Gain,
+    // Pan or Pitch, and 11 to 13 clear one.
+    void chooseEnvelopeMenuItem(int item);
+    static std::optional<Session::ClipEnvelope> envelopeOfControl(int control);
+    // The band the envelope is drawn across: the waveform's own, under the
+    // warp markers' bar when that is showing. Empty with nothing to draw on.
+    juce::Rectangle<float> envelopeArea() const;
+    bool envelopeShown() const;
+    // Seconds of the clip's content - where its material begins is zero - to
+    // a column of the waveform, and back.
+    float xForContentTime(double contentSeconds) const;
+    double contentTimeAtX(float x) const;
+    float yForEnvelopeValue(float value) const;
+    float envelopeValueAtY(float y) const;
+    int envelopeNodeAt(juce::Point<float>) const;
+    juce::String envelopeValueText(float value) const;
+    void paintEnvelope(juce::Graphics&);
+    // A press over the envelope takes the node under it, or puts one down
+    // where it landed, and carries it until release. False when the press was
+    // not the envelope's to take.
+    bool beginEnvelopeDrag(const juce::MouseEvent&);
+    void dragEnvelope(const juce::MouseEvent&);
+    void endEnvelopeDrag();
+    bool removeEnvelopeNodeAt(juce::Point<float>);
+    void applyEnvelope(std::vector<Session::AutomationPoint>);
     void report(const juce::Result&);
     void timerCallback() override;
     void changeListenerCallback(juce::ChangeBroadcaster*) override;
@@ -132,5 +172,33 @@ private:
     static constexpr int warpStripHeight = 30, markerBarHeight = 13;
     // How near a handle a press has to land to take it.
     static constexpr float markerGrabPixels = 5.0f;
+    // Envelopes. The one shown, its points as the model has them - or as the
+    // drag in progress has them, since a drag announces nothing until it ends
+    // - and which of the three have any, for the knobs' marks.
+    std::optional<Session::ClipEnvelope> shownEnvelope;
+    std::vector<Session::AutomationPoint> envelopePoints;
+    std::array<bool, Session::clipEnvelopeCount> envelopesInUse {};
+    juce::TextButton envelopeButton;
+    // Hears a right-click on a knob, which opens its envelope menu. A
+    // listener of its own rather than the panel, which would hear its own
+    // presses twice over (JUCE delivers to a component and then to its
+    // listeners).
+    struct KnobMenu final : juce::MouseListener
+    {
+        explicit KnobMenu(AudioClipPanel& owner) : panel(owner) {}
+        void mouseDown(const juce::MouseEvent&) override;
+        AudioClipPanel& panel;
+    };
+    KnobMenu knobMenu {*this};
+    // The node being carried, the level it is carried at before snapping, and
+    // where the pointer was, so the level moves by how far the pointer travels.
+    int draggingNode = -1;
+    float envelopeCarried = 0.0f, envelopeLastY = 0.0f;
+    bool envelopeGestureOpen = false;
+    static constexpr int envelopeButtonWidth = 132;
+    static constexpr float envelopeGrabPixels = 6.0f, envelopeLineSnapPixels = 5.0f;
+    // The whole range takes this much pointer travel, or the band's height
+    // where that is taller, as a track lane's level does; Shift a tenth.
+    static constexpr float envelopeDragTravel = 200.0f, envelopeFineDivisor = 10.0f;
 };
 }

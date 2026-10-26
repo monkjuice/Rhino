@@ -352,17 +352,34 @@ void AudioClipPanel::paintWarpMarkers(juce::Graphics& g)
     }
 }
 
+// The waveform answers to two things: the warp markers' handles in the bar
+// across its top, and below that the envelope shown, when one is
+// (AudioClipEnvelope.cpp). A handle wins where the two meet.
 void AudioClipPanel::mouseMove(const juce::MouseEvent& event)
 {
     setMouseCursor(warpMarkerAt(event.position) >= 0 ? juce::MouseCursor::LeftRightResizeCursor
-                                                     : juce::MouseCursor::NormalCursor);
+                   : envelopeNodeAt(event.position) >= 0 ? juce::MouseCursor::DraggingHandCursor
+                   : envelopeShown() && envelopeArea().contains(event.position) ? juce::MouseCursor::CrosshairCursor
+                   : juce::MouseCursor::NormalCursor);
 }
 
 void AudioClipPanel::mouseDown(const juce::MouseEvent& event)
 {
     draggingMarker = -1;
     const auto index = warpMarkerAt(event.position);
-    if (index < 0) return;
+    if (index < 0)
+    {
+        // The right button opens the envelope menu anywhere on the waveform,
+        // and never takes a node away (that is a double-click).
+        if (event.mods.isPopupMenu())
+        {
+            if (waveArea.contains(event.position.toInt()))
+                showEnvelopeMenu();
+            return;
+        }
+        beginEnvelopeDrag(event);
+        return;
+    }
     // Right-click or Ctrl-click takes a marker away, which is the same gesture
     // every marker in every DAW answers to.
     if (event.mods.isPopupMenu() || event.mods.isCtrlDown())
@@ -378,6 +395,11 @@ void AudioClipPanel::mouseDown(const juce::MouseEvent& event)
 
 void AudioClipPanel::mouseDrag(const juce::MouseEvent& event)
 {
+    if (draggingNode >= 0)
+    {
+        dragEnvelope(event);
+        return;
+    }
     if (draggingMarker < 0) return;
     report(session.moveClipWarpMarker(clip, draggingMarker, warpTimeAtX(event.position.x)));
     warp = session.clipWarp(clip);
@@ -386,6 +408,11 @@ void AudioClipPanel::mouseDrag(const juce::MouseEvent& event)
 
 void AudioClipPanel::mouseUp(const juce::MouseEvent&)
 {
+    if (draggingNode >= 0 || envelopeGestureOpen)
+    {
+        endEnvelopeDrag();
+        return;
+    }
     if (draggingMarker < 0) return;
     draggingMarker = -1;
     if (warpGestureOpen)
@@ -398,8 +425,12 @@ void AudioClipPanel::mouseUp(const juce::MouseEvent&)
 
 void AudioClipPanel::mouseDoubleClick(const juce::MouseEvent& event)
 {
+    if (removeEnvelopeNodeAt(event.position)) return;
     if (!warpMarkersVisible() || !waveArea.contains(event.position.toInt())) return;
     if (warpMarkerAt(event.position) >= 0) return;
+    // Under an envelope the waveform is the envelope's, so a marker is
+    // placed from the bar across its top.
+    if (envelopeShown() && !markerBar.contains(event.position.toInt())) return;
     report(session.addClipWarpMarker(clip, sourceTimeForWarpTime(warpTimeAtX(event.position.x))));
 }
 

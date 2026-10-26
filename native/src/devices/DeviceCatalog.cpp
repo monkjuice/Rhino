@@ -9,6 +9,8 @@
 #include "audio/VocoderDevice.h"
 #include "midi/RhinoArpDevice.h"
 #include "infra/DjTrackPortDevices.h"
+#include "infra/ClipEnvelopeDevice.h"
+#include "infra/ClipPitchDevice.h"
 
 namespace rhino
 {
@@ -128,6 +130,18 @@ std::vector<DeviceDescriptor> buildCatalog()
     add({.id = "DjTrackOutput", .typeName = DjTrackTapDevice::xmlTypeName, .displayName = "DJ Output",
          .kind = DeviceKind::AudioEffect, .description = "Where a DJ deck leaves a track",
          .infrastructure = true, .create = factory<DjTrackTapDevice>()});
+
+    // ---- An audio clip's own envelopes ---------------------------------------
+    // Play a clip's Gain and Pan envelopes, and its Pitch envelope, from the
+    // head of the clip's own plugin list. Infrastructure: the session puts
+    // each on a clip while the clip has an envelope for it and takes it off
+    // again, and nothing offers them.
+    add({.id = "ClipEnvelope", .typeName = ClipEnvelopeDevice::xmlTypeName, .displayName = "Clip Envelope",
+         .kind = DeviceKind::AudioEffect, .description = "Plays an audio clip's Gain and Pan envelopes, and its fades",
+         .infrastructure = true, .create = factory<ClipEnvelopeDevice>()});
+    add({.id = "ClipPitch", .typeName = ClipPitchDevice::xmlTypeName, .displayName = "Clip Pitch",
+         .kind = DeviceKind::AudioEffect, .description = "Plays an audio clip's Pitch envelope",
+         .infrastructure = true, .create = factory<ClipPitchDevice>()});
 
     // ---- MIDI FX -----------------------------------------------------------
     add({.id = "RhinoArp", .typeName = RhinoArpDevice::xmlTypeName, .displayName = "Rhino Arp",

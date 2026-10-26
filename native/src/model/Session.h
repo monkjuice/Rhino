@@ -5,6 +5,7 @@
 #include "DeviceDisplay.h"
 #include "ClipGeometry.h"
 #include "VelocityCurve.h"
+#include "dsp/ClipEnvelope.h"
 #include <array>
 #include <functional>
 #include <map>
@@ -1242,6 +1243,10 @@ public:
         int warpMode = 0;
         double warpBeats = 0.0;
         std::vector<std::pair<double, double>> markers;
+        // audio only: the clip's envelopes by ClipEnvelopeKind, in seconds of
+        // its content, which a paste keeps as they are because the copy's
+        // offset already says where its content begins.
+        std::array<std::vector<AutomationPoint>, clipEnvelopeKindCount> envelopes;
         std::vector<Note> notes;                      // midi only
         // midi only: the catalog id of what its track played, or empty for a
         // track that played nothing - in which case the paste leaves the
@@ -1325,6 +1330,29 @@ public:
     juce::Result setAudioClipFadeOut(te::EditItemID, double seconds);
     juce::Result setAudioClipMuted(te::EditItemID, bool muted);
     juce::Result setAudioClipReversed(te::EditItemID, bool reversed);
+    // An audio clip's own envelopes, Live's clip envelopes (dsp/ClipEnvelope.h):
+    // Gain, Pan and Pitch, each moving the clip's knob of the same name over
+    // the clip's length. They are the clip's and not its track's - stored on
+    // the clip, so a move, a copy, a split, a merge and an undo all carry them
+    // - and the engine plays them, live and in every render, through hidden
+    // devices at the head of the clip's own plugin list.
+    //
+    // A point's time is in seconds of the clip's content: zero is where the
+    // clip's material begins, so the clip plays [offsetSeconds, offsetSeconds
+    // + lengthSeconds()) of it (AudioClipMix), and trimming the clip's left
+    // edge or splitting it leaves every point on the sound it was drawn
+    // against. An envelope with no points is the knob alone; one point holds
+    // its value across the whole clip.
+    using ClipEnvelope = ClipEnvelopeKind;
+    static constexpr int clipEnvelopeCount = clipEnvelopeKindCount;
+    std::vector<AutomationPoint> clipEnvelope(te::EditItemID, ClipEnvelope) const;
+    // Whether each envelope has any points, by ClipEnvelopeKind.
+    std::array<bool, clipEnvelopeCount> clipEnvelopesInUse(te::EditItemID) const;
+    // Replaces an envelope's points, put in time order and clamped to its
+    // range. One undo step, or part of the drag an audio clip gesture has open,
+    // and heard at once even mid-drag.
+    juce::Result setClipEnvelope(te::EditItemID, ClipEnvelope, std::vector<AutomationPoint>);
+    juce::Result clearClipEnvelope(te::EditItemID, ClipEnvelope);
     // Time warp: making an audio clip follow the song's tempo instead of
     // playing at the speed it happened to be recorded at. It is the same idea
     // Live calls warping, and it has three parts.
@@ -1812,6 +1840,11 @@ private:
     // and an unwarped one through the engine's default stretcher. Called
     // wherever a clip's warp or pitch is written.
     static void applyStretchPlayback(te::WaveAudioClip&);
+    // SessionClipEnvelopes.cpp. Writes every timeline clip's envelopes onto
+    // the engine curves of the hidden devices that play them, after any
+    // change that may have moved a clip. The helpers it shares with the rest
+    // of the model are in SessionInternal.h.
+    void mirrorClipEnvelopesToEngine();
     // Repitch is a speed ratio rather than a beat-based clip, so it is the one
     // mode that has to be rewritten when the song's tempo moves.
     void updateRepitchedClips();

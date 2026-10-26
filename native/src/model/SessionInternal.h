@@ -313,6 +313,49 @@ juce::Result renderTaskOutcome(const te::Renderer::RenderTask&, bool stalled, do
 // when ten thousand are taken.
 juce::File nextRenderFile(const juce::File& folder, const juce::String& trackName, const juce::String& kind);
 
+// An audio clip's own envelopes (SessionClipEnvelopes.cpp). Kept on the clip's
+// state as one child per envelope with points, in seconds of the clip's
+// content, and played by hidden devices at the head of the clip's own plugin
+// list: Clip Envelope for Gain and Pan, Clip Pitch for Pitch (devices/infra/).
+using ClipEnvelopePoints = std::array<std::vector<Session::AutomationPoint>, clipEnvelopeKindCount>;
+ClipEnvelopePoints clipEnvelopesOf(const te::WaveAudioClip&);
+// Replaces all of a clip's envelopes, then gives it the devices they need.
+void writeClipEnvelopes(te::WaveAudioClip&, const ClipEnvelopePoints&, juce::UndoManager*);
+// One of those hidden devices, which no count of a clip's effects includes.
+bool isClipEnvelopeDevice(const te::Plugin&);
+// Puts the hidden devices on a clip, or takes them off, to match the envelopes
+// it has, through the edit's undo manager inside the caller's transaction.
+// True when it changed the clip's plugins, which the playback graph has to be
+// built again for.
+bool syncClipEnvelopeDevices(te::WaveAudioClip&);
+// Writes a clip's envelopes onto its hidden devices' engine curves in edit
+// time. Outside the undo history, as the lanes' curves are: the envelopes are
+// the record, and these follow them.
+void mirrorClipEnvelopes(te::WaveAudioClip&);
+// Moves every point of a clip's envelopes to time * scale + shift: what
+// stretching the clip's content, or reversing it, does to where its material
+// sits.
+void retimeClipEnvelopes(te::WaveAudioClip&, double scale, double shift, juce::UndoManager*);
+// An envelope as edit-time points over the span the clip plays, or nothing
+// when it has no points.
+std::vector<Session::AutomationPoint> clipEnvelopeInEditTime(const te::WaveAudioClip&, ClipEnvelopeKind);
+// A clip's fades. While the clip has a Pitch envelope they are held on the
+// clip as Rhino's and Clip Envelope plays them, because the engine fades a
+// clip after its plugins and allows for none of Clip Pitch's delay; the
+// engine's own are zero then. Every reader and writer of a clip's fades goes
+// through these, so neither side ever sees the other's.
+double clipFadeInSeconds(const te::AudioClipBase&);
+double clipFadeOutSeconds(const te::AudioClipBase&);
+// Either or both, fitted to the clip as the engine fits its own, through the
+// edit's undo manager.
+void setClipFades(te::WaveAudioClip&, std::optional<double> in, std::optional<double> out);
+// What a cut does to fades - none where the clip was cut - for the fades
+// Rhino holds; the engine sees to its own.
+void clearHeldFadesAtCut(te::Clip& left, te::Clip* right);
+// Puts held fades where the engine plays them, outside the undo history, and
+// takes them back: for a render that leaves Clip Envelope out, a merge.
+void lendHeldFadesToEngine(te::WaveAudioClip&, bool lend);
+
 // Sets every control a preset names and every other to its default, clamped
 // and snapped to each control's range, inside whatever undo transaction is
 // open. Returns whether anything moved. In SessionDevicePresets.cpp.

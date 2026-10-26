@@ -416,7 +416,16 @@ void Session::setTempo(double bpm)
     // against. A tempo with one entry scales the whole timeline by one factor.
     const auto scale = previousBpm / bpm;
     for (auto* track : audioTracks())
+    {
         rescaleAutomationPoints(track->state, scale, &edit->getUndoManager());
+        // A warped clip's content stretches with the song, and its envelopes
+        // are drawn against that content. An unwarped clip plays at its own
+        // speed whatever the tempo, so its envelopes stay as they are, and a
+        // repitched one is rescaled with its speed below.
+        for (auto* clip : track->getClips())
+            if (auto* audio = dynamic_cast<te::WaveAudioClip*>(clip); audio != nullptr && audio->getAutoTempo())
+                retimeClipEnvelopes(*audio, scale, 0.0, &edit->getUndoManager());
+    }
     rescaleAutomationPoints(edit->state, scale, &edit->getUndoManager());
     if (manualLoop)
         manualLoopRange = {tracktion::core::TimePosition::fromSeconds(manualLoopRange.getStart().inSeconds() * scale),

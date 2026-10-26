@@ -104,6 +104,9 @@ int runArrangementTest()
         // Renders too, in a document of its own.
         scenario("clip pitch");
        #include "scenarios/ClipPitch.inc"
+        // Renders as well, in a document of its own.
+        scenario("clip envelopes");
+       #include "scenarios/ClipEnvelopes.inc"
         scenario("clip merge");
        #include "scenarios/ClipMerge.inc"
         scenario("bounce to new track");

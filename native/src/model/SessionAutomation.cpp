@@ -611,6 +611,9 @@ void Session::mirrorAutomationToEngine()
             engineCurve.addPoint(tracktion::core::TimePosition::fromSeconds(point.timeSeconds), point.value, 0.0f, nullptr);
     }
     mirroredCurves = std::move(wanted);
+    // A clip's own envelopes follow the clip, which any of the same changes
+    // may have moved (SessionClipEnvelopes.cpp).
+    mirrorClipEnvelopesToEngine();
 
     // Whoever has already heard this announcement read the value from before
     // the hand-back, so say it again.

@@ -58,6 +58,8 @@ AudioClipPanel::AudioClipPanel(Session& s) : session(s)
 AudioClipPanel::~AudioClipPanel()
 {
     stopTimer();
+    for (auto& slider : sliders)
+        slider.removeMouseListener(&knobMenu);
     session.listeners.remove(this);
     session.removeChangeListener(this);
 }
@@ -137,6 +139,7 @@ void AudioClipPanel::configureControls()
     addAndMakeVisible(mute);
     addAndMakeVisible(split);
     configureWarpControls();
+    configureEnvelopeControls();
     sync();
 }
 
@@ -171,6 +174,7 @@ void AudioClipPanel::sync()
     styleSwitch(reverse, mix.valid && mix.reversed, juce::Colour(accentColour));
     styleSwitch(mute, mix.valid && mix.muted, juce::Colour(0xff97634c));
     syncWarpControls();
+    syncEnvelope();
     pushValues();
     updateReadouts();
     refreshThumbnail();
@@ -311,7 +315,14 @@ void AudioClipPanel::editWillChange()
         warpGestureOpen = false;
         session.endAudioClipGesture();
     }
+    if (envelopeGestureOpen)
+    {
+        envelopeGestureOpen = false;
+        session.endAudioClipGesture();
+    }
     draggingMarker = -1;
+    draggingNode = -1;
+    envelopePoints.clear();
     clip = {};
     mix = {};
     warp = {};
@@ -326,7 +337,11 @@ void AudioClipPanel::resized()
 {
     auto area = getLocalBounds().reduced(6);
     auto header = area.removeFromTop(headerHeight);
-    subtitle.setBounds(header.removeFromRight(std::min(header.getWidth() / 2, 320)));
+    // The file's name gives way first, so the clip's name and the envelope
+    // chooser keep their room on a narrow panel.
+    subtitle.setBounds(header.removeFromRight(
+        juce::jlimit(0, 320, header.getWidth() - envelopeButtonWidth - 140)));
+    layoutEnvelopeControls(header);
     title.setBounds(header);
     area.removeFromTop(4);
     // The warp strip spans the panel along its foot, under both the mix
@@ -406,6 +421,7 @@ void AudioClipPanel::paint(juce::Graphics& g)
     }
     paintWaveform(g, waveArea);
     paintWarpMarkers(g);
+    paintEnvelope(g);
 }
 
 void AudioClipPanel::paintEmpty(juce::Graphics& g, juce::Rectangle<int> area)

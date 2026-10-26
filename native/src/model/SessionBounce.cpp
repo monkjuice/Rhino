@@ -538,9 +538,12 @@ void Session::finishBounce()
                 auto* inside = clip;
                 if (job.start - clip->getPosition().time.getStart().inSeconds() >= minimumSplitSeconds)
                     if (auto* right = tracks[job.track]->splitClip(*clip, at(job.start)))
+                    {
+                        clearHeldFadesAtCut(*clip, right);
                         inside = right;
+                    }
                 if (inside->getPosition().time.getEnd().inSeconds() - job.end >= minimumSplitSeconds)
-                    tracks[job.track]->splitClip(*inside, at(job.end));
+                    clearHeldFadesAtCut(*inside, tracks[job.track]->splitClip(*inside, at(job.end)));
                 inside->setMuted(true);
             }
         }

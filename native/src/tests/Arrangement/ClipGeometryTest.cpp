@@ -7,6 +7,7 @@
 #include "ui/shared/WallClock.h"
 #include "tests/PushProtocolTest.h"
 #include "tests/VelocityCurveTest.h"
+#include "tests/ClipEnvelopeTest.h"
 #include "tests/VelocityLaneTest.h"
 #include "tests/LayerLintTest.h"
 #include <algorithm>
@@ -346,6 +347,7 @@ int runArrangementGeometryTest()
         }
         checkPushProtocol();
         checkVelocityCurves();
+        checkClipEnvelopeRules();
         checkVelocityLane();
         // The dependency direction, read off the sources (LayerLintTest.cpp).
         runLayerLintTest();

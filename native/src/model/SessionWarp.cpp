@@ -170,6 +170,9 @@ void Session::rescaleWarpedClip(te::WaveAudioClip& clip, double previousContentS
     clip.setPosition({{tracktion::core::TimePosition::fromSeconds(start),
                        tracktion::core::TimePosition::fromSeconds(start + length * ratio)},
                       tracktion::core::TimeDuration::fromSeconds(offset * ratio)});
+    // The clip's envelopes are drawn against its content, which has just
+    // stretched by the same ratio.
+    retimeClipEnvelopes(clip, ratio, 0.0, &clip.edit.getUndoManager());
 }
 
 // The one place the engine's warp state is written. Everything else here

@@ -112,6 +112,9 @@ void keepOnItsBeats(te::Clip& clip, double scale)
     }
     clip.setPosition({{start, tracktion::core::TimePosition::fromSeconds(position.time.getEnd().inSeconds() * scale)},
                       tracktion::core::TimeDuration::fromSeconds(position.offset.inSeconds() * scale)});
+    // Its content stretched with it, and its envelopes are drawn against that.
+    if (auto* audio = dynamic_cast<te::WaveAudioClip*>(&clip))
+        retimeClipEnvelopes(*audio, scale, 0.0, nullptr);
 }
 }
 

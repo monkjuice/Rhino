@@ -276,8 +276,11 @@ juce::Result Session::splitClips(const std::vector<te::EditItemID>& ids, double 
     for (auto* clip : cutting)
     {
         auto* track = clip->getClipTrack();
-        if (track != nullptr && track->splitClip(*clip, split) != nullptr)
+        if (auto* right = track != nullptr ? track->splitClip(*clip, split) : nullptr)
+        {
+            clearHeldFadesAtCut(*clip, right);
             ++cut;
+        }
     }
     if (cut == 0)
         return juce::Result::fail("The right-hand split clip could not be created.");
@@ -449,7 +452,13 @@ int Session::clipPluginCount(te::Clip& clip)
     auto* audio = dynamic_cast<te::AudioClipBase*>(&clip);
     if (audio == nullptr || audio->getPluginList() == nullptr)
         return 0;
-    return audio->getPluginList()->size();
+    // The devices that play the clip's envelopes are not effects anyone put
+    // on it, and would read as one on the clip's FX badge.
+    int count = 0;
+    for (auto* plugin : *audio->getPluginList())
+        if (plugin != nullptr && !isClipEnvelopeDevice(*plugin))
+            ++count;
+    return count;
 }
 
 void Session::toggleTrackMute(int track)

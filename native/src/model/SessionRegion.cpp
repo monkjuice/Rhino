@@ -47,7 +47,11 @@ te::Clip* splitClipAt(te::ClipTrack& track, te::Clip& clip, double seconds)
 {
     const auto at = tracktion::core::TimePosition::fromSeconds(seconds);
     if (clip.getPosition().time.reduced(tracktion::core::TimeDuration::fromSeconds(0.001)).contains(at))
-        return track.splitClip(clip, at);
+    {
+        auto* right = track.splitClip(clip, at);
+        clearHeldFadesAtCut(clip, right);
+        return right;
+    }
     auto state = clip.state.createCopy();
     te::EditItemID::remapIDs(state, nullptr, clip.edit);
     auto* right = track.insertClipWithState(state);
@@ -57,6 +61,7 @@ te::Clip* splitClipAt(te::ClipTrack& track, te::Clip& clip, double seconds)
         audio->setFadeIn({});
     if (auto* audio = dynamic_cast<te::AudioClipBase*>(&clip))
         audio->setFadeOut({});
+    clearHeldFadesAtCut(clip, right);
     right->setStart(at, true, false);
     clip.setEnd(at, true);
     return right;
@@ -144,6 +149,9 @@ Session::ClipRegion Session::copyClipRegion(double startSeconds, double endSecon
                 snapshot.warpMarkers = warp.markersEnabled;
                 for (const auto& marker : warp.markers)
                     snapshot.markers.emplace_back(marker.sourceSeconds, marker.warpSeconds);
+                // Whole, as the notes are: the points are in the content's
+                // own seconds, which the snapshot's offset already places.
+                snapshot.envelopes = clipEnvelopesOf(*static_cast<te::WaveAudioClip*>(clip));
             }
             else
             {
@@ -443,6 +451,7 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
                 audio->setMuted(snapshot.muted);
                 audio->setFadeIn(tracktion::core::TimeDuration::fromSeconds(snapshot.fadeInSeconds));
                 audio->setFadeOut(tracktion::core::TimeDuration::fromSeconds(snapshot.fadeOutSeconds));
+                writeClipEnvelopes(*audio, snapshot.envelopes, &edit->getUndoManager());
             }
         }
         if (copy == nullptr)

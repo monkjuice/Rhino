@@ -24,8 +24,8 @@ Session::AudioClipMix Session::audioClipMix(te::EditItemID id) const
     mix.offsetSeconds = position.offset.inSeconds();
     mix.sourceLengthSeconds = clip->getSourceLength().inSeconds();
     mix.speedRatio = clip->getSpeedRatio();
-    mix.fadeInSeconds = clip->getFadeIn().inSeconds();
-    mix.fadeOutSeconds = clip->getFadeOut().inSeconds();
+    mix.fadeInSeconds = clipFadeInSeconds(*clip);
+    mix.fadeOutSeconds = clipFadeOutSeconds(*clip);
     mix.gainDb = clip->getGainDB();
     mix.pan = clip->getPan();
     mix.pitchSemitones = clip->getPitchChange();
@@ -108,15 +108,18 @@ juce::Result Session::setAudioClipPitch(te::EditItemID id, float semitones)
 }
 
 // The engine keeps the two fades from overlapping: a fade in long enough to
-// meet the fade out shortens the other one rather than being refused, so the
-// panel reads both back after either is set.
+// meet the fade out shortens both rather than being refused, so the panel
+// reads both back after either is set. A clip with a Pitch envelope keeps its
+// fades with Rhino (SessionClipEnvelopes.cpp), so they are set through it and
+// heard at once, even in the middle of a drag.
 juce::Result Session::setAudioClipFadeIn(te::EditItemID id, double seconds)
 {
     if (!std::isfinite(seconds) || seconds < 0.0)
         return juce::Result::fail("Invalid fade length.");
     return applyAudioClipEdit(id, "Clip fade in", [seconds](te::WaveAudioClip& clip)
     {
-        clip.setFadeIn(tracktion::core::TimeDuration::fromSeconds(seconds));
+        setClipFades(clip, seconds, std::nullopt);
+        mirrorClipEnvelopes(clip);
     });
 }
 
@@ -126,7 +129,8 @@ juce::Result Session::setAudioClipFadeOut(te::EditItemID id, double seconds)
         return juce::Result::fail("Invalid fade length.");
     return applyAudioClipEdit(id, "Clip fade out", [seconds](te::WaveAudioClip& clip)
     {
-        clip.setFadeOut(tracktion::core::TimeDuration::fromSeconds(seconds));
+        setClipFades(clip, std::nullopt, seconds);
+        mirrorClipEnvelopes(clip);
     });
 }
 
@@ -140,12 +144,18 @@ juce::Result Session::setAudioClipMuted(te::EditItemID id, bool muted)
 juce::Result Session::setAudioClipReversed(te::EditItemID id, bool reversed)
 {
     return applyAudioClipEdit(id, reversed ? "Reverse clip" : "Play clip forwards",
-                              [reversed](te::WaveAudioClip& clip)
+                              [this, reversed](te::WaveAudioClip& clip)
     {
         // Only a real change: the engine mirrors the clip's window into its
         // file whenever the property is written, even from absent to off.
-        if (clip.getIsReversed() != reversed)
-            clip.setIsReversed(reversed);
+        if (clip.getIsReversed() == reversed)
+            return;
+        const auto before = clip.getPosition().offset.inSeconds();
+        clip.setIsReversed(reversed);
+        // That mirror moves where the clip's content begins, and the clip's
+        // envelopes are drawn on the clip, not on the file, so they move with
+        // it and stay where they were on the timeline.
+        retimeClipEnvelopes(clip, 1.0, clip.getPosition().offset.inSeconds() - before, &edit->getUndoManager());
     });
 }
 

@@ -22,7 +22,9 @@
 // The one compromise is clip-local effects, which the engine gates with the
 // track's plugins rather than separately, so a clip carrying its own effects
 // is merged without them. MergeResult says when that happened rather than
-// letting it pass quietly.
+// letting it pass quietly. A clip's envelopes are played by hidden devices on
+// that same list, so they are left out of the file too - and carried onto the
+// merged clip instead, still envelopes, over the stretch each one covered.
 //
 // The rendered file outlives an undo, as a recorded take does: undoing a merge
 // brings the original clips back and leaves the file on disk unreferenced.
@@ -157,6 +159,9 @@ juce::Result Session::mergeClips(const std::vector<te::EditItemID>& ids, MergeRe
         juce::String name;
         juce::Colour colour;
         std::vector<te::EditItemID> sources;
+        // The sources' envelopes end to end, in the merged clip's content
+        // seconds, which start where it does.
+        ClipEnvelopePoints envelopes;
     };
     std::vector<Merged> merged;
     MergeResult result;
@@ -174,6 +179,16 @@ juce::Result Session::mergeClips(const std::vector<te::EditItemID>& ids, MergeRe
         const te::Edit::ScopedRenderStatus renderStatus(*edit, true);
         te::TransportControl::stopAllTransports(engine, false, true);
         te::Renderer::turnOffAllPlugins(*edit);
+        // A clip with a Pitch envelope keeps its fades with Clip Envelope,
+        // which this render leaves out, so the engine plays them for it.
+        const auto lendFades = [&groups](bool lend)
+        {
+            for (auto& group : groups)
+                for (auto* clip : group.clips)
+                    if (auto* audio = dynamic_cast<te::WaveAudioClip*>(clip))
+                        lendHeldFadesToEngine(*audio, lend);
+        };
+        lendFades(true);
         for (auto& group : groups)
         {
             std::sort(group.clips.begin(), group.clips.end(), [](const te::Clip* a, const te::Clip* b)
@@ -194,8 +209,38 @@ juce::Result Session::mergeClips(const std::vector<te::EditItemID>& ids, MergeRe
             {
                 allowed.add(clip);
                 rendered.sources.push_back(clip->itemID);
-                if (clip->getPluginList() != nullptr && clip->getPluginList()->size() > 0)
+                if (clipPluginCount(*clip) > 0)
                     result.lostClipEffects = true;
+            }
+            // Each source's envelope over the stretch it played, a source with
+            // none at the envelope's neutral, so the merged clip moves its
+            // knobs where the sources moved theirs and nowhere else. Sources
+            // never overlap, so where two touch the envelope steps.
+            for (int kind = 0; kind < clipEnvelopeCount; ++kind)
+            {
+                const auto envelope = static_cast<ClipEnvelope>(kind);
+                auto& joined = rendered.envelopes[static_cast<size_t>(kind)];
+                const auto any = std::any_of(group.clips.begin(), group.clips.end(), [envelope](te::Clip* clip)
+                {
+                    auto* audio = dynamic_cast<te::WaveAudioClip*>(clip);
+                    return audio != nullptr && !clipEnvelopeInEditTime(*audio, envelope).empty();
+                });
+                if (!any)
+                    continue;
+                const auto neutral = clipEnvelopeRange(envelope).neutral;
+                for (auto* clip : group.clips)
+                {
+                    auto* audio = dynamic_cast<te::WaveAudioClip*>(clip);
+                    auto points = audio != nullptr ? clipEnvelopeInEditTime(*audio, envelope)
+                                                   : std::vector<AutomationPoint>();
+                    if (points.empty())
+                    {
+                        const auto time = clip->getPosition().time;
+                        points = {{time.getStart().inSeconds(), neutral}, {time.getEnd().inSeconds(), neutral}};
+                    }
+                    for (const auto& point : points)
+                        joined.push_back({point.timeSeconds - group.start.inSeconds(), point.value});
+                }
             }
             rendered.track = group.track;
             rendered.startSeconds = group.start.inSeconds();
@@ -247,6 +292,7 @@ juce::Result Session::mergeClips(const std::vector<te::EditItemID>& ids, MergeRe
             result.sourceCount += static_cast<int>(rendered.sources.size());
             merged.push_back(std::move(rendered));
         }
+        lendFades(false);
         te::Renderer::turnOffAllPlugins(*edit);
     }
     // Nothing has been edited yet, so a render that failed halfway leaves the
@@ -273,6 +319,7 @@ juce::Result Session::mergeClips(const std::vector<te::EditItemID>& ids, MergeRe
         if (clip == nullptr)
             return juce::Result::fail("The merged clip could not be added.");
         setClipColour(*clip, rendered.colour, &edit->getUndoManager());
+        writeClipEnvelopes(*clip, rendered.envelopes, &edit->getUndoManager());
         // Only the invisible starter clips can be left in the span by now, but
         // the rule that a clip owns the ground it lands on lives in one place
         // and this is not the file to make an exception in.

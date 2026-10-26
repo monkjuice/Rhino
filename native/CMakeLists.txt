@@ -64,6 +64,7 @@ target_sources(RhinoNative PRIVATE
     src/model/SessionMeters.cpp
     src/model/SessionClips.cpp
     src/model/SessionAudioClips.cpp
+    src/model/SessionClipEnvelopes.cpp
     src/model/SessionWarp.cpp
     src/model/SessionRegion.cpp
     src/model/SessionRegionMove.cpp
@@ -137,6 +138,7 @@ target_sources(RhinoNative PRIVATE
     src/ui/browser/BrowserPanel.cpp
     src/ui/audioclip/AudioClipPanel.cpp
     src/ui/audioclip/AudioClipWarp.cpp
+    src/ui/audioclip/AudioClipEnvelope.cpp
     src/ui/rack/DeviceEditorPanel.cpp
     src/ui/rack/DeviceEditorPanelArp.cpp
     src/ui/rack/DeviceEditorPanelAutoTune.cpp
@@ -198,6 +200,7 @@ target_sources(RhinoNative PRIVATE
     src/tests/Arrangement/ClipGeometryTest.cpp
     src/tests/PushProtocolTest.cpp
     src/tests/VelocityCurveTest.cpp
+    src/tests/ClipEnvelopeTest.cpp
     src/tests/VelocityLaneTest.cpp
     src/tests/Arrangement/WorkflowTest.cpp)
 target_include_directories(RhinoNative PRIVATE src)

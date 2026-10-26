@@ -113,6 +113,10 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
     display = face == Face::Generated ? session.deviceDisplay(track, pluginSlot) : DeviceDisplay {};
     mappable = face == Face::Generic && session.deviceHasMappedParameters(track, pluginSlot);
     mapping = mappable && session.isMappingParameters(track, pluginSlot);
+    // A face of its own draws whatever routing it needs (the Vocoder's
+    // carrier); the plain grid and a generated face get the strip.
+    sidechained = (face == Face::Generic || face == Face::Generated)
+        && session.deviceTakesSidechain(track, pluginSlot);
     title.setText(deviceName, juce::dontSendNotification);
     power.setButtonText(device.enabled ? juce::String::fromUTF8("\xe2\x97\x8f") : juce::String::fromUTF8("\xe2\x97\x8b"));
     power.setColour(juce::TextButton::textColourOffId,
@@ -182,15 +186,15 @@ int DeviceEditorPanel::preferredWidth() const
     if (face == Face::DrumRack)
         return drumFaceWidth;
     if (face == Face::Generated)
-        return generatedWidth();
+        return generatedWidth() + sidechainWidth();
     if (face == Face::Arp)
         return 820;
     // A chosen list grows along the face, two rows deep once it passes six,
     // rather than stopping at the twelve the plain grid lays out.
     if (mappable)
-        return std::max(190, 46 + genericColumns() * 66);
+        return std::max(190, 46 + genericColumns() * 66) + sidechainWidth();
     const auto columns = std::max(2, std::min(6, visibleParameterCount()));
-    return juce::jlimit(190, 470, 46 + columns * 66);
+    return juce::jlimit(190, 470, 46 + columns * 66) + sidechainWidth();
 }
 
 int DeviceEditorPanel::genericColumns() const
@@ -284,6 +288,8 @@ void DeviceEditorPanel::mouseDown(const juce::MouseEvent& event)
             toggleParameterMapping();
             return;
         }
+        if (sidechained && handleSidechainClick(event))
+            return;
         if (face == Face::AutoTune && handleAutoTuneClick(event))
             return;
         if (face == Face::Vocoder && handleVocoderClick(event))
@@ -641,6 +647,10 @@ void DeviceEditorPanel::paint(juce::Graphics& g)
         g.setFont(uiFontBold(7.5f));
         drawSnappedText(g, "MAP", button, juce::Justification::centred);
     }
+    // Before the knobs too: a sidechain is routing, and stands whatever the
+    // face shows.
+    if (sidechained)
+        paintSidechain(g);
 
     if (parameters.empty())
     {
@@ -686,6 +696,7 @@ void DeviceEditorPanel::resized()
     power.setBounds(3, 2, 20, 19);
     title.setBounds(27, 1, getWidth() - 32 - (mappable ? 46 : 0), 21);
     contentArea = getLocalBounds().withTrimmedTop(24).reduced(4);
+    layoutSidechain();
     // A panel can be retargeted from one device to another without being
     // rebuilt, so the EQ's own knobs go away when the face does.
     if (face != Face::Eq)

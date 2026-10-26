@@ -28,7 +28,8 @@ inline std::optional<int> deviceChainDragSlot(const juce::String& description, i
 }
 
 // Hosts Rhino's native device faces. Unknown and third-party devices retain a
-// generic parameter surface; plug-in-owned editors remain available via Edit.
+// generic parameter surface, with a Sidechain strip when they take one;
+// plug-in-owned editors remain available via Edit.
 class DeviceEditorPanel final : public juce::Component,
                                 public juce::SettableTooltipClient,
                                 private juce::Timer
@@ -154,13 +155,32 @@ private:
     void tickEqSpectrum();
     // Rhino Vocoder's face is DeviceEditorPanelVocoder.cpp: a chooser that
     // decides where the carrier comes from, a bar per band of the filter bank,
-    // and two lamps that say whether either signal is arriving. The chooser is
-    // the one control on any face that edits the *routing* rather than a
-    // parameter, which is why it is drawn rather than made a knob.
+    // and two lamps that say whether either signal is arriving. The chooser
+    // edits the *routing* rather than a parameter, as the Sidechain strip
+    // below does, which is why both are drawn rather than made knobs.
     void layoutVocoder();
     void paintVocoder(juce::Graphics&);
     bool handleVocoderClick(const juce::MouseEvent&);
     void tickVocoder();
+    // Any other device that takes a sidechain - an external plugin with a
+    // sidechain input, Tracktion's compressor, a device on the SDK - and has
+    // no face of its own shows a Sidechain strip at the left of its face, as
+    // Live's plug-in devices do: the track whose audio drives it. In
+    // DeviceEditorPanelSidechain.cpp, which the Vocoder's chooser shares the
+    // menu of.
+    static constexpr int sidechainStripWidth = 112, sidechainGap = 6;
+    int sidechainWidth() const { return sidechained ? sidechainStripWidth + sidechainGap : 0; }
+    // Takes the strip off the left of contentArea, leaving the face the rest.
+    void layoutSidechain();
+    void paintSidechain(juce::Graphics&);
+    bool handleSidechainClick(const juce::MouseEvent&);
+    juce::String sidechainTooltip() const;
+    // The menu of sources, opened over `area`: None and every track the
+    // device may take audio from. `chosen` hears the pick, -1 for None.
+    void showSidechainMenu(juce::Rectangle<int> area, std::function<void(int)> chosen);
+    // What a pick on the strip does: routes it and says so in the status line.
+    // A test calls it in place of the menu.
+    juce::Result chooseSidechainSource(int sourceTrack);
     // The Drum Rack's face is DeviceEditorPanelDrums.cpp: a map of all 128
     // notes, sixteen pads of them at a time, each with its mute, play and
     // solo, and beside them the selected pad's sound in
@@ -271,6 +291,9 @@ private:
     // to add to it and Remove from rack on each knob; and whether its window
     // is being mapped from right now.
     bool mappable = false, mapping = false;
+    // The face carries the Sidechain strip, and where it and its chooser are.
+    bool sidechained = false;
+    juce::Rectangle<int> sidechainArea, sidechainSource;
     std::vector<Session::DeviceParameter> parameters;
     juce::OwnedArray<juce::Label> parameterLabels, parameterValues;
     juce::OwnedArray<juce::Slider> parameterSliders;

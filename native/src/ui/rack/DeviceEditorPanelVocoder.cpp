@@ -210,39 +210,26 @@ bool DeviceEditorPanel::handleVocoderClick(const juce::MouseEvent& event)
     if (!layout.source.contains(position) && !layout.sourceCaption.contains(position))
         return false;
 
-    const auto sources = session.deviceSidechainSources(track, pluginSlot);
-    const auto current = session.deviceSidechainSource(track, pluginSlot);
-    juce::PopupMenu menu;
-    menu.addSectionHeader("AUDIO FROM");
-    menu.addItem(1, "None", true, current < 0);
-    if (!sources.empty())
-        menu.addSeparator();
-    for (size_t i = 0; i < sources.size(); ++i)
-        menu.addItem(static_cast<int>(i) + 2, sources[i].name, true, sources[i].track == current);
-    if (sources.empty())
-        menu.addItem(1000, "Add another track to use as a carrier", false, false);
-
-    // The menu is asynchronous, so neither the panel nor the device can be
-    // assumed to still be there when it closes: the panel is guarded by a
-    // SafePointer and the device is looked up again through it.
+    // The menu is the Sidechain strip's (DeviceEditorPanelSidechain.cpp); what
+    // a pick is said to mean is the vocoder's own.
     const auto safe = juce::Component::SafePointer<DeviceEditorPanel>(this);
-    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this)
-                           .withTargetScreenArea(localAreaToGlobal(layout.source)),
-        [safe, sources] (int result)
-        {
-            if (safe == nullptr || result == 0 || result >= 1000) return;
-            const auto chosen = result == 1 ? -1 : sources[static_cast<size_t>(result - 2)].track;
-            const auto done = safe->session.setDeviceSidechainSource(safe->track, safe->pluginSlot, chosen);
+    showSidechainMenu(layout.source, [safe] (int chosen)
+    {
+        if (safe == nullptr) return;
+        auto& document = safe->session;
+        const auto report = safe->status;
+        const auto done = document.setDeviceSidechainSource(safe->track, safe->pluginSlot, chosen);
+        if (safe != nullptr)
             safe->repaint();
-            if (safe->status == nullptr) return;
-            if (done.failed())
-                safe->status(done.getErrorMessage());
-            else if (chosen < 0)
-                safe->status("Rhino Vocoder has no carrier: the voice passes through");
-            else
-                safe->status("Rhino Vocoder is played by " + safe->session.trackName(chosen)
-                             + ". Mute that track so you hear the vocoder rather than both.");
-        });
+        if (report == nullptr) return;
+        if (done.failed())
+            report(done.getErrorMessage());
+        else if (chosen < 0)
+            report("Rhino Vocoder has no carrier: the voice passes through");
+        else
+            report("Rhino Vocoder is played by " + document.trackName(chosen)
+                   + ". Mute that track so you hear the vocoder rather than both.");
+    });
     return true;
 }
 

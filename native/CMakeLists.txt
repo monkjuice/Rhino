@@ -142,6 +142,7 @@ target_sources(RhinoNative PRIVATE
     src/ui/rack/DeviceEditorPanelAutoTune.cpp
     src/ui/rack/DeviceEditorPanelEq.cpp
     src/ui/rack/DeviceEditorPanelVocoder.cpp
+    src/ui/rack/DeviceEditorPanelSidechain.cpp
     src/ui/rack/DeviceEditorPanelGenerated.cpp
     src/ui/rack/DeviceEditorPanelDisplay.cpp
     src/ui/rack/DeviceEditorPanelPresets.cpp

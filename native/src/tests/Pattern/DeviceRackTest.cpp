@@ -323,6 +323,80 @@ void runPatternDeviceRackTest()
     require(gapAt({second->getRight() + 12 - 2, 60}) == 2, "A drop right of a panel's centre lands behind it");
     require(gapAt({5000, 60}) == 4, "A drop past the last device lands at the end of the chain");
 
+    // A device that takes a sidechain and has no face of its own carries the
+    // Sidechain strip at the left of its face, as Live's plug-ins do: the
+    // compressor here. The reverb beside it takes none and carries none.
+    {
+        DeviceEditorPanel* compressorPanel = nullptr;
+        DeviceEditorPanel* reverbPanel = nullptr;
+        for (auto* panel : chainView.devicePanels)
+        {
+            if (panel->deviceId == "Compressor") compressorPanel = panel;
+            if (panel->deviceId == "Reverb") reverbPanel = panel;
+        }
+        require(compressorPanel != nullptr && reverbPanel != nullptr, "The compressor and the reverb each have a panel");
+        require(compressorPanel->sidechained && !reverbPanel->sidechained
+                    && !chainView.devicePanels.getFirst()->sidechained,
+                "Only the compressor, which takes a sidechain, carries the strip");
+        require(reverbPanel->sidechainArea.isEmpty(), "and a face without one keeps all its width for its knobs");
+        compressorPanel->setSize(compressorPanel->preferredWidth(), DeviceEditorPanel::standardHeight);
+        const auto strip = compressorPanel->sidechainArea;
+        require(!strip.isEmpty() && compressorPanel->getLocalBounds().contains(strip)
+                    && strip.getY() >= DeviceEditorPanel::headerHeight && strip.getX() < 12
+                    && strip.contains(compressorPanel->sidechainSource),
+                "The strip stands at the face's left under the name bar, its chooser inside it");
+        auto knobs = 0;
+        for (auto* child : compressorPanel->getChildren())
+            if (child->isVisible() && dynamic_cast<juce::Slider*>(child) != nullptr)
+            {
+                ++knobs;
+                require(child->getX() >= strip.getRight() && compressorPanel->getLocalBounds().contains(child->getBounds()),
+                        "and every knob stands inside the face, right of it");
+            }
+        require(knobs > 0, "The compressor keeps its knobs beside the strip");
+
+        const auto compressorSlot = compressorPanel->devicePluginIndex();
+        auto* compressor = dynamic_cast<te::CompressorPlugin*>(session.devicePlugin(0, compressorSlot));
+        require(compressor != nullptr && session.deviceSidechainSource(0, compressorSlot) == -1,
+                "A compressor just added takes no other track's audio");
+        const auto unrouted = compressorPanel->createComponentSnapshot(compressorPanel->getLocalBounds());
+        require(unrouted.getWidth() == compressorPanel->getWidth(), "The strip paints with nothing chosen");
+
+        // A pick in the menu is chooseSidechainSource; the menu itself is a
+        // popup no test opens.
+        juce::String said;
+        const auto savedStatus = compressorPanel->status;
+        compressorPanel->status = [&said](juce::String text) { said = std::move(text); };
+        require(compressorPanel->chooseSidechainSource(1).wasOk()
+                    && session.deviceSidechainSource(0, compressorSlot) == 1
+                    && compressor->useSidechainTrigger.get(),
+                "Picking a track on the strip routes it, and tells the compressor to listen to it");
+        require(said.contains(session.trackName(1)), "and the status line names the track");
+        Theme sidechainTheme;
+        compressorPanel->setLookAndFeel(&sidechainTheme);
+        const auto routed = compressorPanel->createComponentSnapshot(compressorPanel->getLocalBounds());
+        compressorPanel->setLookAndFeel(nullptr);
+        require(routed.getWidth() == compressorPanel->getWidth(), "The strip paints with a source chosen");
+        if (const auto path = juce::SystemStats::getEnvironmentVariable("RHINO_SIDECHAIN_SNAPSHOT", {});
+            path.isNotEmpty())
+        {
+            const juce::File file(path);
+            file.deleteFile();
+            if (auto stream = file.createOutputStream())
+                require(juce::PNGImageFormat().writeImageToStream(routed, *stream), "Sidechain snapshot is writable");
+            else
+                require(false, "Sidechain snapshot path is writable");
+        }
+        require(compressorPanel->chooseSidechainSource(0).failed() && session.deviceSidechainSource(0, compressorSlot) == 1,
+                "Its own track is refused, and the routing it had is kept");
+        require(said.isNotEmpty() && !said.contains("driven by"), "with the refusal in the status line");
+        require(compressorPanel->chooseSidechainSource(-1).wasOk()
+                    && session.deviceSidechainSource(0, compressorSlot) == -1
+                    && !compressor->useSidechainTrigger.get(),
+                "None takes the routing away, and the compressor listens to its own track again");
+        compressorPanel->status = savedStatus;
+    }
+
     // A face may put a control on the same row as the device's name, and the
     // name bar being the handle a chain is dragged by must not swallow it.
     require(session.addDevice("RhinoTune", 1).wasOk(), "An audio track takes Rhino Tune");

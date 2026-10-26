@@ -443,6 +443,8 @@ void Session::reconcileTrackGroups()
             output.setOutputToDefaultDevice(false);
         }
     }
+    // The audio has new paths, and a sidechain may now be one of them back.
+    clearSidechainLoops();
 }
 
 // Documents written before groups were buses carry a node on the edit and a

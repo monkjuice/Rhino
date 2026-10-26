@@ -480,6 +480,8 @@ juce::String DeviceEditorPanel::getTooltip()
     if (face == Face::DrumRack)
         if (const auto tip = drumTooltip(getMouseXYRelative()); tip.isNotEmpty())
             return tip;
+    if (sidechained && sidechainArea.contains(getMouseXYRelative()))
+        return sidechainTooltip();
     if (mappable && mapButtonArea().contains(getMouseXYRelative()))
         return mapping ? "Mapping from " + deviceName + "'s window: every control touched there joins this rack. "
                          "Click to stop"

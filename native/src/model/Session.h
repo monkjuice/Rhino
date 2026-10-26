@@ -715,17 +715,24 @@ public:
     // ends up, so moveDevice(track, 2, 0) puts the third device first.
     juce::Result moveDevice(int track, int fromDevice, int toDevice);
     // A device that takes audio from another track as well as from its own -
-    // a sidechain. Rhino Vocoder is the one that does today: the voice is on
-    // the track and the carrier is whatever synth is chosen here. The tap sits
-    // after the source track's devices and mixer and before its mute, so the
-    // usual move of muting the synth leaves the carrier running.
+    // a sidechain: Rhino Vocoder's carrier, Rhino Duck's Audio trigger,
+    // Tracktion's compressor ducking to a kick, any plugin with a sidechain
+    // input. The tap sits after the source track's devices and fader and
+    // before its mute, so the usual move of muting the source leaves the
+    // signal running.
     struct SidechainSource
     {
         int track = -1;
         juce::String name;
     };
+    // Whether the device has a sidechain input at all: it declares more
+    // inputs than its main bus. What the rack draws the chooser for.
+    bool deviceTakesSidechain(int track, int slot) const;
     // Empty for a device that takes no sidechain. Never includes the track the
-    // device is on: a track cannot play itself.
+    // device is on, nor any track that already carries its sound (its group's
+    // bus, a return it sends to, a track it is itself the sidechain of): the
+    // track's output would feed back into it. setDeviceSidechainSource
+    // refuses those too.
     std::vector<SidechainSource> deviceSidechainSources(int track, int slot) const;
     // The chosen source track, or -1 for none - which is also the answer once
     // the source track has been deleted.
@@ -1988,6 +1995,11 @@ private:
     // SessionSidechain.cpp - called as a track is deleted, so nothing is left
     // pointing at it. Inside the caller's transaction, so undo restores both.
     void clearSidechainSourcesNaming(te::EditItemID sourceTrack);
+    // And as tracks are grouped or moved (reconcileTrackGroups): a sidechain
+    // chosen before its source came to carry the device's own track - a
+    // member's device taking its group's bus - would now feed back, so it is
+    // cleared. Inside the caller's transaction too.
+    void clearSidechainLoops();
     te::ClipSlot* clipSlotAt(int track, int scene) const;
     // SessionSlots.cpp - why a lane may not take a clip of this kind, or ok.
     juce::Result clipLaneRefusal(int track, bool midi) const;

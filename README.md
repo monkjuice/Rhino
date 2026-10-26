@@ -121,7 +121,7 @@ cmake -S effects/rhino-duck -B effects/rhino-duck/build -G "Visual Studio 17 202
 cmake --build effects/rhino-duck/build --config Release --parallel 2 -- /p:BuildInParallel=false
 ```
 
-The bundle lands at `effects/rhino-duck/build/RhinoDuck_artefacts/Release/VST3/Rhino Duck.vst3`, for any VST3 host; Rhino does not list it in its own device catalog yet.
+Rhino discovers the development VST3 automatically and lists Rhino Duck in the browser's Audio FX tab. The bundle at `effects/rhino-duck/build/RhinoDuck_artefacts/Release/VST3/Rhino Duck.vst3` loads in any other VST3 host too.
 
 ## Verify a development build
 

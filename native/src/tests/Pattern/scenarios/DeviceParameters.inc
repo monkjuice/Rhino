@@ -108,4 +108,33 @@
                         && firstInstrument->getWrappedAudioProcessor()->getName().containsIgnoreCase("Forge"),
                         "The Forge VST3 is what the first track now plays");
             }
+            // Rhino Duck is the second external entry, an audio effect found
+            // the way Forge is and added by the browser's Audio FX row. Only
+            // where a Duck build is found.
+            const auto developmentDuck = juce::File(juce::String(RHINO_SOURCE_DIR))
+                .getChildFile("../effects/rhino-duck/build/RhinoDuck_artefacts/Release/VST3/Rhino Duck.vst3");
+            if (developmentDuck.exists())
+                require(parameterSession.isExternalAvailable("RhinoDuck"), "Rhino discovers the development Duck VST3 bundle");
+            if (parameterSession.isExternalAvailable("RhinoDuck"))
+            {
+                require(parameterSession.addDevice("RhinoDuck", 1).wasOk(),
+                        "The Audio FX row puts the independent Rhino Duck VST3 on the audio lane");
+                const auto duckSlots = parameterSession.deviceSlots(1);
+                require(!duckSlots.empty() && duckSlots.back().deviceId == "RhinoDuck"
+                            && duckSlots.back().kind == Session::DeviceKind::AudioEffect,
+                        "and the rack lists it last, as an audio effect under its catalog id");
+                const auto duckSlot = duckSlots.back().pluginIndex;
+                auto* duck = parameterSession.devicePlugin(1, duckSlot);
+                require(duck != nullptr && duck->getPluginType() == te::ExternalPlugin::xmlTypeName
+                            && duck->getWrappedAudioProcessor() != nullptr
+                            && duck->getWrappedAudioProcessor()->getName() == "Rhino Duck",
+                        "Duck is Tracktion's external-plugin wrapper round the VST3");
+                const auto duckParameters = parameterSession.deviceParameters(1, duckSlot);
+                require(duckParameters.size() == 9 && duckParameters.front().name == "Mix"
+                            && duckParameters.back().name == "Band solo",
+                        "and its rack shows the nine controls the catalog names, Mix first");
+                require(parameterSession.addDevice("RhinoDuck", 2).wasOk(), "Duck goes on a MIDI lane too, as any audio effect does");
+                require(parameterSession.addDevice("RhinoDuck", 2).wasOk(), "and a second one is another device, not a refusal");
+                require(parameterSession.deviceSlots(2).size() >= 2, "so the MIDI lane now runs two of them");
+            }
         }

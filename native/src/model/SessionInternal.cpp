@@ -248,18 +248,34 @@ const DeviceDescriptor* carriedInstrument(te::AudioTrack& track)
     auto* plugin = trackInstrument(track);
     if (plugin == nullptr)
         return nullptr;
-    // Forge is an external plugin, so it has no type name to look up.
-    if (isForgePlugin(*plugin))
-        return DeviceCatalog::byId("RhinoForge");
+    // An external plugin has no type name to look up.
+    if (const auto* external = externalDevice(*plugin))
+        return external;
     return DeviceCatalog::byTypeName(plugin->getPluginType());
+}
+
+const DeviceDescriptor* externalDevice(const te::Plugin& plugin)
+{
+    auto* processor = plugin.getWrappedAudioProcessor();
+    if (processor == nullptr)
+        return nullptr;
+    const auto name = processor->getName();
+    for (const auto& device : DeviceCatalog::all())
+    {
+        if (!device.external || device.pluginName.isEmpty())
+            continue;
+        // "Rhino Forge", or the bare "Forge" an older build called itself.
+        if (name.containsIgnoreCase(device.pluginName)
+            || name.equalsIgnoreCase(device.pluginName.fromLastOccurrenceOf(" ", false, false)))
+            return &device;
+    }
+    return nullptr;
 }
 
 bool isForgePlugin(const te::Plugin& plugin)
 {
-    if (auto* processor = plugin.getWrappedAudioProcessor())
-        return processor->getName().containsIgnoreCase("Rhino Forge")
-            || processor->getName().equalsIgnoreCase("Forge");
-    return false;
+    const auto* device = externalDevice(plugin);
+    return device != nullptr && device->id == "RhinoForge";
 }
 
 // A track has one instrument, as it does in Live and Logic. These two answer
@@ -269,8 +285,9 @@ bool isInstrumentPlugin(te::Plugin& plugin)
 {
     if (const auto* device = DeviceCatalog::byTypeName(plugin.getPluginType()))
         return device->kind == DeviceKind::Instrument;
-    // Forge is an external plugin, so it has no type name to look up.
-    return isForgePlugin(plugin);
+    // An external plugin has no type name to look up.
+    const auto* external = externalDevice(plugin);
+    return external != nullptr && external->kind == DeviceKind::Instrument;
 }
 
 te::Plugin* trackInstrument(te::AudioTrack& track)
@@ -387,7 +404,7 @@ void collapseStackedInstruments(te::Edit& edit)
 }
 
 juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, const DeviceDescriptor& device,
-                                   InstrumentSwitch& switched, const juce::PluginDescription* forgeDescription)
+                                   InstrumentSwitch& switched, const juce::PluginDescription* externalDescription)
 {
     // MIDI effects run ahead of the instrument, so a new one goes in after them.
     int instrumentInsertIndex = djInputEnd(track);
@@ -410,7 +427,10 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, const 
     const auto wants = [&device](te::Plugin& plugin)
     {
         if (device.external)
-            return isForgePlugin(plugin);
+        {
+            const auto* external = externalDevice(plugin);
+            return external != nullptr && external->id == device.id;
+        }
         return device.typeName.isNotEmpty() && plugin.getPluginType() == device.typeName;
     };
 
@@ -430,11 +450,11 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, const 
             instrumentInsertIndex = track.pluginList.indexOf(current);
         if (device.external)
         {
-            if (forgeDescription == nullptr)
-                return juce::Result::fail("Rhino Forge.vst3 was not found. Build or install the Forge VST3 first.");
-            auto created = edit.getPluginCache().createNewPlugin(te::ExternalPlugin::xmlTypeName, *forgeDescription);
+            if (externalDescription == nullptr)
+                return juce::Result::fail(device.bundle + " was not found. Build or install the " + device.displayName + " VST3 first.");
+            auto created = edit.getPluginCache().createNewPlugin(te::ExternalPlugin::xmlTypeName, *externalDescription);
             if (created == nullptr)
-                return juce::Result::fail("Rhino Forge.vst3 could not be loaded.");
+                return juce::Result::fail(device.bundle + " could not be loaded.");
             selected = created.get();
             track.pluginList.insertPlugin(created, juce::jlimit(0, track.pluginList.size(), instrumentInsertIndex), nullptr);
             switched.devices = true;
@@ -481,12 +501,12 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, const 
 }
 
 juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Session::Instrument instrument,
-                                   InstrumentSwitch& switched, const juce::PluginDescription* forgeDescription)
+                                   InstrumentSwitch& switched, const juce::PluginDescription* externalDescription)
 {
     const auto* device = descriptorFor(instrument);
     if (device == nullptr)
         return juce::Result::fail("That instrument is not in this build.");
-    return switchTrackInstrument(edit, track, *device, switched, forgeDescription);
+    return switchTrackInstrument(edit, track, *device, switched, externalDescription);
 }
 
 juce::Result checkClipFile(te::Clip& clip)

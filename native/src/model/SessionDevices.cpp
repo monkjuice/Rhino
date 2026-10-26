@@ -25,9 +25,9 @@ Session::DeviceKind deviceKind(te::Plugin& plugin)
 {
     if (const auto* device = DeviceCatalog::byTypeName(plugin.getPluginType()))
         return device->kind;
-    // Forge is an external plugin and has no type name to look up.
-    if (isForgePlugin(plugin))
-        return Session::DeviceKind::Instrument;
+    // An external plugin has no type name to look up.
+    if (const auto* external = externalDevice(plugin))
+        return external->kind;
     return Session::DeviceKind::AudioEffect;
 }
 
@@ -97,9 +97,17 @@ juce::Result Session::addDevice(const juce::String& deviceId, int trackIndex, co
     auto* list = pluginListForTrack(trackIndex);
     if (list == nullptr)
         return juce::Result::fail("Drop audio effects on a track.");
+    // An external effect may not have been scanned for yet, and is made from
+    // the description its scan found rather than from a type name.
+    if (device->external && !isExternalAvailable(device->id))
+        initialiseExternalPlugins(true);
+    const auto* external = device->external ? externalDescription(device->id) : nullptr;
+    if (device->external && external == nullptr)
+        return juce::Result::fail(device->bundle + " was not found. Build or install the " + name + " VST3 first.");
 
     edit->getUndoManager().beginNewTransaction("Add " + name);
-    auto plugin = edit->getPluginCache().createNewPlugin(type, {});
+    auto plugin = external != nullptr ? edit->getPluginCache().createNewPlugin(te::ExternalPlugin::xmlTypeName, *external)
+                                      : edit->getPluginCache().createNewPlugin(type, {});
     if (plugin == nullptr)
         return juce::Result::fail(name + " could not be created.");
     if (isMasterTrack(trackIndex))
@@ -136,6 +144,8 @@ juce::Result Session::addClipDevice(const juce::String& deviceId, te::EditItemID
     const auto* device = DeviceCatalog::byId(deviceId);
     if (device == nullptr || device->kind != DeviceKind::AudioEffect)
         return juce::Result::fail("Clip effects can only be audio effects.");
+    if (device->external)
+        return juce::Result::fail(device->displayName + " goes on a track, not on a clip.");
     const auto& name = device->displayName;
     const auto& type = device->typeName;
 
@@ -172,7 +182,7 @@ juce::Result Session::addInstrument(Instrument instrument, int trackIndex)
 juce::Result Session::addInstrumentDevice(const DeviceDescriptor& device, int trackIndex, const DevicePreset* preset)
 {
     // An external instrument may not have been scanned for yet.
-    if (device.external && !forgeDescription)
+    if (device.external && !isExternalAvailable(device.id))
         initialiseExternalPlugins(true);
 
     const auto tracks = audioTracks();
@@ -204,8 +214,7 @@ juce::Result Session::addInstrumentDevice(const DeviceDescriptor& device, int tr
     else
     {
         InstrumentSwitch switched;
-        const auto result = switchTrackInstrument(*edit, *track, device, switched,
-                                                  forgeDescription ? &*forgeDescription : nullptr);
+        const auto result = switchTrackInstrument(*edit, *track, device, switched, externalDescription(device.id));
         if (result.failed())
             return result;
         changed = switched.devices;
@@ -319,7 +328,9 @@ std::vector<Session::DeviceSlot> Session::deviceSlots(int track) const
         const auto type = plugin->getPluginType();
         if (isTrackInfrastructure(type))
             continue;
-        const auto* entry = isForgePlugin(*plugin) ? DeviceCatalog::byId("RhinoForge") : DeviceCatalog::byTypeName(type);
+        const auto* entry = externalDevice(*plugin);
+        if (entry == nullptr)
+            entry = DeviceCatalog::byTypeName(type);
         slots.push_back({plugin->getDisplayName(), type, deviceKind(*plugin), pluginIndex,
                          plugin->isEnabled(), true, entry != nullptr ? entry->id : juce::String(),
                          dynamic_cast<NativeDevice*>(plugin) != nullptr});

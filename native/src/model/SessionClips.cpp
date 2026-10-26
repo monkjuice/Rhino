@@ -123,7 +123,7 @@ juce::Result Session::editClipInEdit(te::EditItemID id, ClipGeometry next, ClipG
         {
             InstrumentSwitch switched;
             const auto result = switchTrackInstrument(*edit, *target, *instrument, switched,
-                                                      forgeDescription ? &*forgeDescription : nullptr);
+                                                      externalDescription(instrument->id));
             if (result.failed())
                 return result;
             // A drum clip brings its sounds too: a Drum Rack that arrives

@@ -477,7 +477,12 @@ public:
     juce::Result moveDrumPad(int track, int slot, int from, int to);
     // Auditions a drum preset exactly as a pad would play it.
     juce::Result previewDrumSound(const juce::File& preset);
-    bool isForgeAvailable() const { return forgeDescription.has_value(); }
+    // Whether an external device's VST3 has been found, by catalog id, and the
+    // description it was found as (SessionExternalPlugins.cpp). Forge's
+    // question survives for the callers that ask it by name.
+    bool isExternalAvailable(const juce::String& deviceId) const;
+    const juce::PluginDescription* externalDescription(const juce::String& deviceId) const;
+    bool isForgeAvailable() const { return isExternalAvailable("RhinoForge"); }
     juce::Result addMidiEffect(MidiEffect, int track);
     int trackCount() const;
     juce::String trackName(int track) const;
@@ -2127,7 +2132,8 @@ private:
     // Called by markModified for a change to a chain, which may have taken
     // the device being mapped from, and its processor, with it.
     void dropParameterMappingIfDeviceGone();
-    std::optional<juce::PluginDescription> forgeDescription;
+    // Every external device's VST3 found so far, by catalog id.
+    std::map<juce::String, juce::PluginDescription> externalPlugins;
     // Declared after the engine, so the preview is torn down before the device
     // manager it is registered with. The destructor detaches it either way.
     juce::TimeSliceThread previewThread {"Rhino preview"};

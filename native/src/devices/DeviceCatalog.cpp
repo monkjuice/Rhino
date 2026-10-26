@@ -39,10 +39,16 @@ std::vector<DeviceDescriptor> buildCatalog()
          .colour = 0xffd08a3c, .browsable = true, .create = factory<RhinoFmDevice>()});
 
     // Forge is a VST3 discovered by scanning, so it has no type name to
-    // create from -- see SessionExternalPlugins.cpp.
+    // create from -- see SessionExternalPlugins.cpp. Its rack shows the
+    // controls a synth is played by: the filter, the three oscillators'
+    // levels and the amplitude envelope.
     add({.id = "RhinoForge", .displayName = "Rhino Forge",
          .kind = DeviceKind::Instrument, .category = "Synths", .description = "Three-oscillator Forge synth",
-         .colour = 0xff3a9aa9, .browsable = true, .external = true});
+         .colour = 0xff3a9aa9, .browsable = true, .external = true,
+         .pluginName = "Rhino Forge", .bundle = "Rhino Forge.vst3",
+         .developmentArtefacts = "instruments/rhino-forge/build/RhinoForge_artefacts",
+         .rackParameters = { "Cutoff", "Resonance", "Osc A Level", "Osc B Level", "Osc C Level",
+                             "Env 1 Attack", "Env 1 Decay", "Env 1 Sustain", "Env 1 Release" }});
 
     // Keeps the id the drum instrument it replaced had, so Instrument::Drums,
     // the drum patterns and the note editor's drum rows still name it. The
@@ -64,6 +70,16 @@ std::vector<DeviceDescriptor> buildCatalog()
     add({.id = "Compressor", .typeName = te::CompressorPlugin::xmlTypeName, .displayName = "Compressor",
          .kind = DeviceKind::AudioEffect, .category = "Dynamics", .description = "Tracktion compressor",
          .browsable = true});
+
+    // Rhino Duck is the second independent plugin project, effects/rhino-duck,
+    // a VST3 found the way Forge is. Its rack shows the controls a duck is
+    // shaped by, Mix first.
+    add({.id = "RhinoDuck", .displayName = "Rhino Duck",
+         .kind = DeviceKind::AudioEffect, .category = "Dynamics", .description = "Sidechain ducking on a curve, no compressor",
+         .colour = 0xffff8a3d, .browsable = true, .external = true,
+         .pluginName = "Rhino Duck", .bundle = "Rhino Duck.vst3",
+         .developmentArtefacts = "effects/rhino-duck/build/RhinoDuck_artefacts",
+         .rackParameters = { "Mix", "Curve", "Length", "Trigger", "Loop", "End", "Band split", "Band cutoff", "Band solo" }});
 
     // Every track already carries one as its channel strip, so it is not
     // offered in the browser: a dropped Utility found the track's own and

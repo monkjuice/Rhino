@@ -796,7 +796,7 @@ void DeviceRack::showAddMenu()
     {
         const auto* device = entries[static_cast<size_t>(i)];
         // An external device can only be added once it has been found.
-        const auto enabled = !device->external || session.isForgeAvailable();
+        const auto enabled = !device->external || session.isExternalAvailable(device->id);
         auto& target = device->kind == DeviceKind::Instrument ? instruments
             : device->kind == DeviceKind::MidiEffect ? midiEffects : audioEffects;
         target.addItem(i + 1, device->displayName, enabled);

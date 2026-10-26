@@ -261,6 +261,10 @@ bool fillBlankDrumRack(te::AudioTrack&, const DrumKit&);
 // that plays nothing, which leaves the destination's instrument alone rather
 // than installing one.
 const DeviceDescriptor* carriedInstrument(te::AudioTrack& track);
+// The catalog entry of an external plugin, recognised by what its wrapped
+// processor calls itself, or null for anything that is not one. An external
+// plugin has no type name to look the entry up by.
+const DeviceDescriptor* externalDevice(const te::Plugin& plugin);
 bool isForgePlugin(const te::Plugin& plugin);
 bool isInstrumentPlugin(te::Plugin& plugin);
 te::Plugin* trackInstrument(te::AudioTrack& track);
@@ -279,11 +283,13 @@ struct InstrumentSwitch
     bool renamed = false;
 };
 // Takes a catalog entry, so an instrument that has no Session::Instrument
-// value can still be switched to. The enum overload is shorthand for it.
+// value can still be switched to. The enum overload is shorthand for it. An
+// external instrument is made from the description its scan found,
+// Session::externalDescription(device.id), and refused without one.
 juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, const DeviceDescriptor& device,
-                                   InstrumentSwitch& switched, const juce::PluginDescription* forgeDescription = nullptr);
+                                   InstrumentSwitch& switched, const juce::PluginDescription* externalDescription = nullptr);
 juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Session::Instrument instrument,
-                                   InstrumentSwitch& switched, const juce::PluginDescription* forgeDescription = nullptr);
+                                   InstrumentSwitch& switched, const juce::PluginDescription* externalDescription = nullptr);
 // Fails, naming the clip and its file, when the clip plays an audio file that
 // is not there: moved or deleted, or stored beside a document that has since
 // been moved away from it. An offline render waits until every clip's file

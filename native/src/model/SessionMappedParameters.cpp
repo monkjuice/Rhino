@@ -51,17 +51,17 @@ int pluginParameterNamed(const juce::AudioProcessor& processor, const juce::Stri
     return -1;
 }
 
-// What a device shows before anyone has mapped a knob. Forge's are the
-// controls a synth is played by: the filter, the three oscillators' levels
-// and the amplitude envelope. Anything else external shows its first twelve,
-// which is what the generic face showed before the list existed.
+// What a device shows before anyone has mapped a knob: the parameters its
+// catalog entry names, in that order (Forge's are the controls a synth is
+// played by, Duck's the ones a duck is shaped by). An external plugin whose
+// entry names none shows its first twelve, which is what the generic face
+// showed before the list existed.
 juce::StringArray defaultMappedIds(const te::Plugin& plugin, const juce::AudioProcessor& processor)
 {
     juce::StringArray ids;
-    if (isForgePlugin(plugin))
+    if (const auto* device = externalDevice(plugin); device != nullptr && !device->rackParameters.isEmpty())
     {
-        for (const auto* name : {"Cutoff", "Resonance", "Osc A Level", "Osc B Level", "Osc C Level",
-                                 "Env 1 Attack", "Env 1 Decay", "Env 1 Sustain", "Env 1 Release"})
+        for (const auto& name : device->rackParameters)
             if (const auto index = pluginParameterNamed(processor, name); index >= 0)
                 if (const auto id = idOf(*processor.getParameters()[index]); id.isNotEmpty())
                     ids.add(id);

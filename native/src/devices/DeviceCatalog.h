@@ -68,6 +68,20 @@ struct DeviceDescriptor
     // built-ins need none, since the engine already knows them, and neither
     // does an external plugin, which is found by scanning.
     std::function<te::Plugin::Ptr(te::PluginCreationInfo)> create;
+
+    // An external plugin only. What its processor calls itself, by which a
+    // loaded instance is recognised and a scan's description matched; its
+    // bundle's file name, looked for in the platform's VST3 folders; and the
+    // artefacts folder of its development build, relative to the repository
+    // root, under which <Release|Debug>/VST3/<bundle> is looked for first
+    // (Session::initialiseExternalPlugins).
+    juce::String pluginName;
+    juce::String bundle;
+    juce::String developmentArtefacts;
+    // The parameters its rack shows before anyone maps a knob onto it, by
+    // the names the plugin gives them, in this order. Empty shows the first
+    // twelve the plugin declares (SessionMappedParameters.cpp).
+    juce::StringArray rackParameters;
 };
 
 // The one list of Rhino's devices. Adding a device is a new file under

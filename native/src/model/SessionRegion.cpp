@@ -368,7 +368,7 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
             {
                 InstrumentSwitch switched;
                 const auto instrumentResult = switchTrackInstrument(*edit, *target, *instrument, switched,
-                                                                    forgeDescription ? &*forgeDescription : nullptr);
+                                                                    externalDescription(instrument->id));
                 if (instrumentResult.failed())
                     return rollBack(instrumentResult);
                 auto kitTaken = false;

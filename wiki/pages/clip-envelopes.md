@@ -1,7 +1,7 @@
 ---
 title: Clip envelopes
 type: component
-summary: Each audio clip carries its own Gain, Pan and Pitch envelopes, Live's clip envelopes, stored on the clip in seconds of its content, modulating the clip's knobs rather than replacing them, and played by two hidden devices at the head of the clip's own plugin list that exist only while the clip has an envelope for them.
+summary: Each audio clip carries its own Gain, Pan and Pitch envelopes, Live's clip envelopes, stored on the clip in seconds of its content, modulating the clip's knobs rather than replacing them, played by two hidden devices at the head of the clip's own plugin list that exist only while the clip has an envelope for them, with Pitch drawn on a square-root scale and snapped to semitones only with Ctrl.
 tags: [rhino, audio-clips, automation, devices, tracktion]
 sources: []
 updated: 2026-10-26
@@ -13,7 +13,7 @@ Added on 2026-10-26 in commit `a1c9607`. The user asked for automation of an aud
 
 ## Files
 
-- `native/src/core/dsp/ClipEnvelope.h`: the rules, a pure header that the model, the device and the editor all read ([Displays draw from the DSP](displays-draw-from-the-dsp.md)). It holds the ranges, the stored ids, the clamp, the pitch snap, `clipEnvelopeValueAt` (the engine's line; two points at one moment are a step) and `clipEnvelopeValueBefore` (the same line from the left), and the balance gains. Unit-tested by `tests/ClipEnvelopeTest.cpp` (`checkClipEnvelopeRules`, run by the geometry runner).
+- `native/src/core/dsp/ClipEnvelope.h`: the rules, a pure header that the model, the device and the editor all read ([Displays draw from the DSP](displays-draw-from-the-dsp.md)). It holds the ranges, the stored ids, the clamp, the pitch snap (`snapClipEnvelopeValue`, which snaps only when asked), `clipEnvelopeValueAt` (the engine's line; two points at one moment are a step) and `clipEnvelopeValueBefore` (the same line from the left), the balance gains, and the display scale (`clipEnvelopeDisplayPosition` and its inverse `clipEnvelopeValueAtDisplayPosition`; see [Drawing Pitch](#drawing-pitch)). Unit-tested by `tests/ClipEnvelopeTest.cpp` (`checkClipEnvelopeRules`, run by the geometry runner).
 - `native/src/model/SessionClipEnvelopes.cpp`: `Session::clipEnvelope`, `clipEnvelopesInUse`, `setClipEnvelope`, `clearClipEnvelope` and `mirrorClipEnvelopesToEngine`, plus the helpers in `SessionInternal.h` that the other clip paths call.
 - `native/src/devices/infra/ClipEnvelopeDevice.*` and `ClipPitchDevice.*`: the devices that play the envelopes.
 - `native/src/ui/audioclip/AudioClipEnvelope.cpp`: drawing and editing ([Audio clip editor](audio-clip-editor.md#envelopes)).
@@ -26,9 +26,13 @@ An envelope modulates its knob, as Live's do; it does not replace it.
 |---|---|---|
 | Gain | 0-100% | A share of the clip's Gain knob, so it can only take the clip down. |
 | Pan | -1 to 1 | A balance applied after the clip's own pan. Centre leaves both sides as they are. A mono clip has nothing to balance, just as its Pan knob does nothing. |
-| Pitch | ±24 st | Semitones added to the Pitch knob, on whole semitones unless Shift is held. |
+| Pitch | ±24 st | Semitones added to the Pitch knob. A node can sit between semitones; holding Ctrl (Cmd on a Mac) lands it on a whole one. |
 
 A single point holds its value across the whole clip. With no points, the knob plays alone. Fade In and Fade Out have no envelope, because they are lengths, not values over time.
+
+### Drawing Pitch
+
+Commit `5781ef0`, at the user's request. On a straight scale across ±24 st, +2 st sat only about 4% of the band above the middle, although +2 st is already a big move. Pitch is therefore drawn on a square-root scale either side of no shift: position = 0.5 ± 0.5·√(|st|/24), where 0 is the foot of the band and 1 the top. +1 st is drawn 0.204 of the way from the middle to the top, +2 st 0.289, +12 st 0.707. Gain and Pan stay linear. The engine still interpolates in semitones, so a straight stretch between two nodes is drawn as a curve ([Audio clip editor](audio-clip-editor.md#envelopes)). The same commit dropped Live's rule of snapping to whole semitones unless Shift is held, because the user rejected it.
 
 ## Storage
 
@@ -83,7 +87,7 @@ Clip Pitch works around three engine faults, measured at `4536d8a`:
 - a fade-out on a pitched clip takes down only the last hit;
 - a saved and reopened document keeps all of it, and clearing Pitch hands the fades back to the engine.
 
-The scenario then drives the editor with synthesised mouse events. `RHINO_CLIP_ENVELOPE_SNAPSHOT` writes the panel to a PNG ([Seeing the UI without taking the screen](headless-ui-snapshots.md)).
+The scenario then drives the editor with synthesised mouse events. Since `5781ef0` it also asserts that +2 st is drawn more than a quarter of the way from the middle to the top, that a pressed Pitch node lands between semitones and that Ctrl lands it on a whole one. It paints a ramp on every run as a smoke test of the curved line. `RHINO_CLIP_ENVELOPE_SNAPSHOT` writes the panel to a PNG ([Seeing the UI without taking the screen](headless-ui-snapshots.md)).
 
 ## Related
 

@@ -1369,3 +1369,9 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/time-warp.md (`rescaleWarpedClip` retimes envelope points)
 - updated: pages/tracktion-stretched-proxy-plays-late.md (Related: the pitch shifter's latency)
 - updated: index.md (Components: Clip envelopes; Gotchas: the three new pages; summaries of Audio clip editor and Session)
+
+## [2026-10-26] update | Clip envelopes: Pitch nodes sit between semitones (Ctrl snaps), drawn on a square-root scale (5781ef0)
+- source: the change brief (user report), checked against native/src/core/dsp/ClipEnvelope.h (`snapClipEnvelopeValue`, `clipEnvelopeDisplayPosition`, `clipEnvelopeValueAtDisplayPosition`), native/src/ui/audioclip/AudioClipEnvelope.cpp (`paintEnvelope`, the press and drag) and tests/ClipEnvelopeTest.cpp; committed as 5781ef0
+- updated: pages/clip-envelopes.md (summary; Pitch row: free, Ctrl/Cmd for whole semitones; the display scale in Files; a Drawing Pitch section with the formula, the figures and the rejected snap-unless-Shift rule; the new panel assertions and the ramp smoke paint)
+- updated: pages/audio-clip-editor.md (summary; Envelopes: the scale through the two converters, 3 px steps so the curve is the engine's line, the hairlines and labels, Ctrl snapping while placing and dragging, a drag carrying band position, not value)
+- updated: index.md (summaries of Clip envelopes and Audio clip editor)

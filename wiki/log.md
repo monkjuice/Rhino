@@ -1375,3 +1375,9 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/clip-envelopes.md (summary; Pitch row: free, Ctrl/Cmd for whole semitones; the display scale in Files; a Drawing Pitch section with the formula, the figures and the rejected snap-unless-Shift rule; the new panel assertions and the ramp smoke paint)
 - updated: pages/audio-clip-editor.md (summary; Envelopes: the scale through the two converters, 3 px steps so the curve is the engine's line, the hairlines and labels, Ctrl snapping while placing and dragging, a drag carrying band position, not value)
 - updated: index.md (summaries of Clip envelopes and Audio clip editor)
+
+## [2026-10-26] update | Arrangement: sweeps, the insert point and trims snap to clip edges as well as the grid (c1e61d1)
+- source: the change brief and its addendum (the design revised after the first test run), checked against native/src/ui/arrangement/ArrangementGeometry.cpp (the new `snappedDown`/`snappedUp`/`snapped` overloads, the shared `edgeSnapPixels`), Arrangement.h, ArrangementSelection.cpp and ArrangementGestures.cpp; committed as c1e61d1, all six CTest cases pass
+- updated: pages/arrangement-view.md (the snapping bullet: edges behind the pointer cut the cell and the nearest edge ahead within 14 px wins if nearer, trims to the nearest grid line or edge on their own track, what stays grid only, why both parts given the trim handle and why not a plain magnet, the test; updated date)
+- updated: pages/pointer-and-selection.md (a sweep snaps to clip edges on its rows; Alt bypasses that too; updated date)
+- updated: pages/region-editing.md (one sentence on sweep snapping, linking the arrangement's bullet; updated date)

@@ -135,6 +135,83 @@
                         "without moving it");
             }
 
+            // The start and end of a clip are snap lines too, so a clip that
+            // does not start on the grid can be swept from its start, and
+            // trimmed flush against, without Alt. Zoomed in so a sixteenth is
+            // about 30 px, a cell the pointer can be put inside.
+            {
+                view.viewStart = 5.5;
+                view.viewSpan = 3.0;
+                view.resized();
+                require(session.importAudioAt(source.getFile(), 1, 6.08).wasOk(), "Can place a clip off the grid");
+                view.sync();
+                auto* offGrid = clipAt(1, 6.08);
+                require(offGrid != nullptr && close(offGrid->getPosition().time.getStart().inSeconds(), 6.08),
+                        "The off-grid clip starts between two sixteenths");
+                const auto offGridID = offGrid->itemID;
+                const auto lowerRow = view.lane(1).getBottom() - 8.0f;
+                const auto clipStartX = view.xFor(6.08);
+                const auto click = [&drag](juce::Point<float> at) { drag(at, at); };
+                // Just inside its start is the clip's trim handle, so the press
+                // that has to find the start is one just short of it.
+                click({clipStartX - 4.0f, lowerRow});
+                require(!view.timeSelection.isRange() && close(view.timeSelection.start, 6.08),
+                        "A click just short of a clip that starts off the grid puts the line on its start");
+                click({clipStartX + 10.0f, lowerRow});
+                require(!view.timeSelection.isRange() && close(view.timeSelection.start, 6.08),
+                        "and so does one inside it, past the trim handle, in the cell its start cuts");
+                click({view.xFor(6.0) + 3.0f, lowerRow});
+                require(!view.timeSelection.isRange() && close(view.timeSelection.start, 6.0),
+                        "A click by the grid line before the clip still takes that line");
+                drag({clipStartX - 4.0f, lowerRow}, {view.xFor(7.08) + 4.0f, lowerRow});
+                require(close(view.timeSelection.start, 6.08) && close(view.timeSelection.end, 7.08)
+                            && view.selectedClipID() == offGridID,
+                        "A sweep from just short of its start to just past its end selects exactly the clip");
+                // Only the clips on the rows the region spans count: the same
+                // sweep on the empty lane above takes the grid alone.
+                const auto emptyRow = view.lane(0).getBottom() - 8.0f;
+                drag({clipStartX - 4.0f, emptyRow}, {view.xFor(7.08) + 4.0f, emptyRow});
+                require(close(view.timeSelection.start, 6.0) && close(view.timeSelection.end, 7.125),
+                        "A sweep over a lane with no clip there snaps to the grid alone");
+                const auto altLeft = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier
+                                                      | juce::ModifierKeys::altModifier);
+                const juce::Point<float> unsnapped {clipStartX - 4.0f, lowerRow};
+                view.mouseDown(event(unsnapped, unsnapped, false, altLeft));
+                view.mouseUp(event(unsnapped, unsnapped, false, altLeft));
+                require(std::abs(view.timeSelection.start - view.timeAt(unsnapped.x)) < 0.0001
+                            && view.timeSelection.start < 6.08 - 0.01,
+                        "Alt still puts the line where the pointer is");
+
+                // A trimmed edge lands flush against the next clip on its track.
+                // MIDI clips, because an audio clip cannot be pulled past the
+                // end of its file.
+                view.viewStart = 11.5;
+                view.viewSpan = 6.0;
+                view.resized();
+                te::EditItemID trimmedID, neighbourID;
+                require(session.createClip(0, 12.0, &trimmedID).wasOk()
+                            && session.createClip(0, 16.06, &neighbourID).wasOk(),
+                        "Can place a clip and an off-grid neighbour to trim against");
+                view.sync();
+                require(close(session.findClip(trimmedID)->getPosition().time.getEnd().inSeconds(), 14.0),
+                        "The clip to trim is one bar long");
+                const auto grabX = view.xFor(14.0) - 2.0f;
+                drag({grabX, clipRowY(0)}, {grabX + view.xFor(16.08) - view.xFor(14.0), clipRowY(0)});
+                require(close(session.findClip(trimmedID)->getPosition().time.getEnd().inSeconds(), 16.06),
+                        "A trimmed end lands on the start of the clip after it, off the grid");
+                require(close(session.findClip(neighbourID)->getPosition().time.getStart().inSeconds(), 16.06),
+                        "and leaves that clip where it was");
+                session.deleteClip(trimmedID);
+                session.deleteClip(neighbourID);
+                session.deleteClip(offGridID);
+                view.sync();
+                view.setSelection({});
+                view.clearTimeSelection();
+                view.viewStart = 0.0;
+                view.viewSpan = 24.0;
+                view.resized();
+            }
+
             // The pointer rule the note editor shares, in clips: a plain press
             // takes the clip under it - its own span, the selection a marquee
             // over exactly the clip would make - and drops the rest; Shift and

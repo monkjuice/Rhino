@@ -163,9 +163,11 @@ bool Arrangement::beginRegionGesture(const juce::MouseEvent& event)
     regionExtending = extending;
     // A press that has not moved yet is a line, not a span, so both edges take
     // the cell the pointer is inside; a shift-click is already a span, because
-    // the region it is widening was there before the press.
-    const auto start = snappedDown(std::min(regionAnchorTime, time), bypass);
-    setTimeSelection(start, extending ? snappedUp(std::max(regionAnchorTime, time), bypass) : start,
+    // the region it is widening was there before the press. The edges of the
+    // clips on the rows the region spans cut the grid's cells too.
+    const auto start = snappedDown(std::min(regionAnchorTime, time), bypass, regionAnchorTrack, track);
+    setTimeSelection(start,
+                     extending ? snappedUp(std::max(regionAnchorTime, time), bypass, regionAnchorTrack, track) : start,
                      regionAnchorTrack, track);
     focus = Focus::region;
     moveTransportToSelectionStart();
@@ -185,8 +187,8 @@ void Arrangement::dragRegionGesture(const juce::MouseEvent& event)
     const auto dragged = regionExtending || event.getDistanceFromDragStart() >= 3;
     const auto first = std::min(regionAnchorTime, time);
     const auto last = std::max(regionAnchorTime, time);
-    const auto start = snappedDown(first, bypass);
-    setTimeSelection(start, dragged ? snappedUp(last, bypass) : start, regionAnchorTrack, track);
+    const auto start = snappedDown(first, bypass, regionAnchorTrack, track);
+    setTimeSelection(start, dragged ? snappedUp(last, bypass, regionAnchorTrack, track) : start, regionAnchorTrack, track);
     moveTransportToSelectionStart();
     repaint();
 }

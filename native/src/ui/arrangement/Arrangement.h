@@ -428,6 +428,14 @@ private:
     // cells rather than stopping halfway through the one it ended in.
     double snappedDown(double seconds, bool bypass) const;
     double snappedUp(double seconds, bool bypass) const;
+    // The same rules with the start and end of every clip on the given tracks
+    // counted as lines of the grid, and a region edge pulled onto a clip edge
+    // just past the pointer, so a clip that does not start on the grid can
+    // still be swept from its start or trimmed flush against its neighbour.
+    // `except` is the clip being trimmed, whose own edges are not targets.
+    double snappedDown(double seconds, bool bypass, int firstTrack, int lastTrack) const;
+    double snappedUp(double seconds, bool bypass, int firstTrack, int lastTrack) const;
+    double snapped(double seconds, bool bypass, int track, te::EditItemID except) const;
     static float clipHeaderHeight(float boxHeight);
     juce::Rectangle<float> clipHeaderBounds(const ClipView&) const;
     ClipZone clipZoneAt(juce::Point<float>, const ClipView&) const;

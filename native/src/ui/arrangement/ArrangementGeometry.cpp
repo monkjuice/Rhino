@@ -1,8 +1,16 @@
 #include "Arrangement.h"
+#include <algorithm>
 #include <limits>
 
 namespace rhino
 {
+namespace
+{
+// How near a clip edge has to be to pull the pointer onto it: a moved clip's
+// edges, and a region's edges and the insert point just short of a clip.
+constexpr auto edgeSnapPixels = 14.0f;
+}
+
 // The lanes that scroll: what is left between the ruler and the pinned block
 // of returns over the main row.
 float Arrangement::laneContentHeight() const
@@ -221,6 +229,68 @@ double Arrangement::snappedUp(double seconds, bool bypass) const
     return session.beatsToSeconds(cell * grid);
 }
 
+// A clip edge inside the cell the pointer is in cuts that cell in two, so the
+// pointer takes the part it is inside. An edge just the other side of the
+// pointer, nearer than that, takes it as well, which is what lets a press just
+// short of a clip's start land on it: just inside the start is the clip's trim
+// handle, not lane. Only an edge nearer than the line the pointer would
+// otherwise take wins, so a grid line beside a clip edge is still in reach.
+double Arrangement::snappedDown(double seconds, bool bypass, int firstTrack, int lastTrack) const
+{
+    auto line = snappedDown(seconds, bypass);
+    if ((gridSettings.mode != GridMode::off) == bypass)
+        return line;
+    // The grid's own allowance for a pointer sitting exactly on a line.
+    const auto onLine = 1.0e-3 * snapUnitSeconds();
+    const auto reach = edgeSnapPixels / lane(0).getWidth() * viewSpan;
+    const auto [low, high] = std::minmax(firstTrack, lastTrack);
+    auto ahead = std::numeric_limits<double>::max();
+    for (const auto& clip : clips)
+        if (clip.track >= low && clip.track <= high)
+            for (const auto edge : {clip.position.start, clip.position.end})
+            {
+                if (edge <= seconds + onLine)
+                    line = std::max(line, edge);
+                else if (edge - seconds <= reach)
+                    ahead = std::min(ahead, edge);
+            }
+    return ahead - seconds < seconds - line ? ahead : line;
+}
+
+double Arrangement::snappedUp(double seconds, bool bypass, int firstTrack, int lastTrack) const
+{
+    auto line = snappedUp(seconds, bypass);
+    if ((gridSettings.mode != GridMode::off) == bypass)
+        return line;
+    const auto onLine = 1.0e-3 * snapUnitSeconds();
+    const auto reach = edgeSnapPixels / lane(0).getWidth() * viewSpan;
+    const auto [low, high] = std::minmax(firstTrack, lastTrack);
+    auto behind = std::numeric_limits<double>::lowest();
+    for (const auto& clip : clips)
+        if (clip.track >= low && clip.track <= high)
+            for (const auto edge : {clip.position.start, clip.position.end})
+            {
+                if (edge >= seconds - onLine)
+                    line = std::min(line, edge);
+                else if (seconds - edge <= reach)
+                    behind = std::max(behind, edge);
+            }
+    return seconds - behind < line - seconds ? behind : line;
+}
+
+double Arrangement::snapped(double seconds, bool bypass, int track, te::EditItemID except) const
+{
+    auto line = snapped(seconds, bypass);
+    if ((gridSettings.mode != GridMode::off) == bypass)
+        return line;
+    for (const auto& clip : clips)
+        if (clip.track == track && clip.id != except)
+            for (const auto edge : {clip.position.start, clip.position.end})
+                if (std::abs(edge - seconds) < std::abs(line - seconds))
+                    line = edge;
+    return line;
+}
+
 // Half of a short clip rather than a fixed strip: a row dragged right down
 // still has to have both of its rows, and the name has to fit on the one that
 // carries it.
@@ -252,7 +322,6 @@ double Arrangement::snappedClipMoveStart(double desiredStart, double length, int
     const auto desiredEnd = desiredStart + length;
     auto bestStart = desiredStart;
     auto bestPixels = std::numeric_limits<float>::max();
-    constexpr auto edgeSnapPixels = 14.0f;
 
     for (const auto& clip : clips)
     {

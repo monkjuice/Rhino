@@ -432,9 +432,11 @@ void Arrangement::mouseDrag(const juce::MouseEvent& event)
         targetTrack = std::min(targetTrack, session.firstReturnTrack() + originalTrack - timeSelection.firstTrack);
     }
     const auto rawStart = anchor + timeAt(event.position.x) - dragTime;
+    // A trimmed edge lands on the grid or flush against another clip on its
+    // track; the trimmed clip is the primary one.
     auto editTime = gesture == ClipGesture::move
         ? snappedClipMoveStart(rawStart, original.end - original.start, targetTrack, event.mods.isAltDown())
-        : snapped(rawStart, event.mods.isAltDown());
+        : snapped(rawStart, event.mods.isAltDown(), originalTrack, selected);
     // Nor may the selection's start leave the start of the song.
     if (gesture == ClipGesture::move)
         editTime = std::max(editTime, original.start - timeSelection.start);

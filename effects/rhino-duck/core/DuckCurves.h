@@ -57,7 +57,7 @@ struct Point
     float at = 1.0f;        // the phase the segment ends at
     float level = 1.0f;     // the gain reached there
     Shape shape = Shape::linear;
-    bool mobile = false;    // moves with Slope
+    bool mobile = false;    // part of the sloped part: moves with Hold, stretches with Release
 };
 
 struct CurveDef

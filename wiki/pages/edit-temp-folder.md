@@ -4,7 +4,7 @@ type: gotcha
 summary: Tracktion keeps an edit's cached renders in a folder named for its project id and purges it whenever an edit is built, so a second edit built from a document's state must not take the document's id; learnt from the DJ deck copies, removed on 2026-10-12.
 tags: [rhino, tracktion, dj, rendering, files]
 sources: []
-updated: 2026-10-12
+updated: 2026-10-26
 ---
 
 # An edit's project id names its temp folder
@@ -16,7 +16,7 @@ Read in the pinned engine (`4536d8a`: `Edit::getTempDirectory`, `TemporaryFileMa
 An edit keeps its cached renders in `edit_<project id>` under the engine's temp directory, which is `%APPDATA%\<engine name>\Temporary` (`Theda Native` for the app, `Rhino Native Tests` for the runners), not `%TEMP%`:
 
 - `proxy_<hash>.wav`: a compressed source decoded to WAV, for every file that is not WAV or AIFF (`AudioFileInfo::needsCachedProxy`).
-- `clip_0_<clip id>_<hash>.wav`: an unwarped clip pitched or stretched (`usesTimeStretchedProxy`). A warped clip has proxies off ([Time warp](time-warp.md)).
+- `clip_0_<clip id>_<hash>.wav`: a clip pitched or stretched (`usesTimeStretchedProxy`) that still allows proxies. Since commit `5c9c1e1` Rhino turns them off for every warped or pitched clip, because this copy plays late and cuts its end ([Tracktion's time-stretched proxy plays late and cuts its end](tracktion-stretched-proxy-plays-late.md)).
 - The render manager's files: a reversed clip reversed.
 
 A clip asks for its render while a render's graph is built, and starts it 600 ms later from a timer on the message thread; an offline render waits until every wave node's file opens (`WaveNode::isReadyToProcess`), so a missing render holds the render, and a missing source holds it for good ([Offline renders that never return](renders-that-never-return.md)).

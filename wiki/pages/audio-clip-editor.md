@@ -4,7 +4,7 @@ type: component
 summary: Edits one audio clip's own gain, pan, pitch, fades, mute and reverse as clip properties, with one undo step per knob drag.
 tags: [rhino, ui, audio-clips]
 sources: []
-updated: 2026-10-15
+updated: 2026-10-26
 ---
 
 # Audio clip editor
@@ -14,6 +14,8 @@ The editor for one audio clip: `native/src/ui/audioclip/AudioClipPanel.*` in the
 ## The clip's own mix
 
 Gain (-60 to +24 dB), pan, pitch (±24 semitones), fade in, fade out, mute and reverse are properties of the **clip**, not its track: they live on the clip's `ValueTree` through Tracktion's `AudioClipBase`, so they travel with the clip, undo with it and leave its lane-mates alone. A copy or a duplicate carries them, and the clip's warp, since commit `b5d17e0` ([Region editing](region-editing.md)). The track fader on the card is still how a whole lane moves ([Mixer](mixer.md)). The engine keeps the fades from overlapping by shortening the other one, so the panel reads both back after setting either. Writing reverse mirrors the clip's window into its file even when the value does not change, so `setAudioClipReversed` writes it only when it differs ([Writing a clip's reverse switch moves its window](writing-reverse-moves-a-clips-window.md)).
+
+**Pitch streams through a live stretcher and moves no hit.** Since commit `5c9c1e1`, `setAudioClipPitch` ends in `Session::applyStretchPlayback`, which turns the engine's proxy off for a pitched clip and sends an unwarped clip's pitch through Signalsmith. Before that, any pitch made Tracktion play a rendered copy. That copy was made with no allowance for the stretcher's latency, so every hit came about 120 ms late, which sounded like a change of BPM. Its last 120 ms were cut off hard, which clicked at the clip's end and at every loop wrap ([Tracktion's time-stretched proxy plays late and cuts its end](tracktion-stretched-proxy-plays-late.md)). `ClipPitch.inc` measures both.
 
 **One drag, one undo step.** A knob drag is bracketed by `Session::beginAudioClipGesture`/`endAudioClipGesture` (a depth counter, so nested brackets are safe). The bracket gives one undo entry and one change notification per drag; without it a fader pull left hundreds of undo entries and rebuilt the arrangement's clip cache on every mouse move. The clip-tempo field and warp-marker drags use the same bracket.
 
@@ -35,6 +37,7 @@ The waveform is `paintWaveformLanes` in `WaveformLanes.h`, shared with the arran
 ## Related
 
 - [Time warp](time-warp.md)
+- [Tracktion's time-stretched proxy plays late and cuts its end](tracktion-stretched-proxy-plays-late.md)
 - [Arrangement view](arrangement-view.md)
 - [App shell and control bar](app-shell.md)
 - [Clips never overlap](clip-placement.md)

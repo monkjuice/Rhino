@@ -1778,6 +1778,11 @@ private:
     // The one place the engine's warp state is written, from the switch and
     // the mode Rhino records on the clip.
     void applyWarpState(te::WaveAudioClip&, bool on, WarpMode);
+    // How the engine plays a clip that is stretched - warped, or pitched -
+    // derived from what Rhino records on it: live, never from a rendered copy,
+    // and an unwarped one through the engine's default stretcher. Called
+    // wherever a clip's warp or pitch is written.
+    static void applyStretchPlayback(te::WaveAudioClip&);
     // Repitch is a speed ratio rather than a beat-based clip, so it is the one
     // mode that has to be rewritten when the song's tempo moves.
     void updateRepitchedClips();

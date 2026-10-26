@@ -439,6 +439,7 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
                 audio->setGainDB(snapshot.gainDb);
                 audio->setPan(snapshot.pan);
                 audio->setPitchChange(snapshot.pitchSemitones);
+                applyStretchPlayback(*audio);
                 audio->setMuted(snapshot.muted);
                 audio->setFadeIn(tracktion::core::TimeDuration::fromSeconds(snapshot.fadeInSeconds));
                 audio->setFadeOut(tracktion::core::TimeDuration::fromSeconds(snapshot.fadeOutSeconds));

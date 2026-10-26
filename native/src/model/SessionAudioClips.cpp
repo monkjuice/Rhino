@@ -91,15 +91,20 @@ juce::Result Session::setAudioClipPan(te::EditItemID id, float pan)
     return applyAudioClipEdit(id, "Clip pan", [clamped](te::WaveAudioClip& clip) { clip.setPan(clamped); });
 }
 
-// Pitch is a resample rather than a transposition of anything written down, so
-// the engine renders a stretched proxy for the clip. It costs nothing until
-// the value leaves zero, which is why this is a clip property and not a device.
+// Pitch shifts the clip's audio through a stretcher and keeps its length, so
+// it moves no hit in time. It costs nothing until the value leaves zero, which
+// is why this is a clip property and not a device; from then on the clip
+// plays through a stretcher of its own (applyStretchPlayback).
 juce::Result Session::setAudioClipPitch(te::EditItemID id, float semitones)
 {
     if (!std::isfinite(semitones))
         return juce::Result::fail("Invalid clip pitch.");
     const auto clamped = juce::jlimit(-maximumClipPitchSemitones, maximumClipPitchSemitones, semitones);
-    return applyAudioClipEdit(id, "Clip pitch", [clamped](te::WaveAudioClip& clip) { clip.setPitchChange(clamped); });
+    return applyAudioClipEdit(id, "Clip pitch", [clamped](te::WaveAudioClip& clip)
+    {
+        clip.setPitchChange(clamped);
+        applyStretchPlayback(clip);
+    });
 }
 
 // The engine keeps the two fades from overlapping: a fade in long enough to

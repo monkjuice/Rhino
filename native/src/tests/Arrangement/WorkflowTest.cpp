@@ -100,6 +100,9 @@ int runArrangementTest()
         // the audio device.
         scenario("clip warp");
        #include "scenarios/ClipWarp.inc"
+        // Renders too, in a document of its own.
+        scenario("clip pitch");
+       #include "scenarios/ClipPitch.inc"
         scenario("clip merge");
        #include "scenarios/ClipMerge.inc"
         scenario("bounce to new track");

@@ -206,19 +206,38 @@ void Session::applyWarpState(te::WaveAudioClip& clip, bool on, WarpMode mode)
     {
         clip.setAutoTempo(false);
         clip.setSpeedRatio(1.0);
-        clip.setTimeStretchMode(engineModeFor(mode));
     }
-    // A warped clip stretches while it plays rather than through a rendered
-    // copy of itself. The engine offers both: with proxies on it renders a
-    // stretched file per clip and plays that back plainly, which is cheaper
-    // per block and wrong for this. Every tempo change and every warp marker
-    // drag invalidates that file, so the clip would fall silent or play its
-    // last version until the render caught up - and those are exactly the two
-    // things someone warping a clip does repeatedly while listening. The cost
-    // is one stretcher per warped clip while the transport rolls, which is
-    // what Live pays too.
-    clip.setUsesProxy(!on);
+    applyStretchPlayback(clip);
     rescaleWarpedClip(clip, before);
+}
+
+void Session::applyStretchPlayback(te::WaveAudioClip& clip)
+{
+    const auto warped = storedWarpOn(clip);
+    // The warp mode says how a clip is stretched to fit the tempo, and an
+    // unwarped clip is not, so only its pitch is stretched, and that goes
+    // through the engine's default. In this build that is Signalsmith, which
+    // lands a pitched hit within about 2 ms of where it was; SoundTouch, which
+    // Beats and Texture use, starts a pitched clip 13 to 21 ms early, so its
+    // first attack is already under way when the clip begins, a click on
+    // every entry (ClipPitch.inc measures both).
+    if (!warped && clip.getTimeStretchMode() != te::TimeStretcher::disabled)
+        clip.setTimeStretchMode(te::TimeStretcher::disabled);
+    // A stretched clip plays live rather than from a rendered copy of itself.
+    // The engine offers both, and its copy is wrong twice over. It is
+    // rendered without allowing for the stretcher's own delay, so everything
+    // in it plays about 120 ms late, a sixteenth at 125 BPM, and the last
+    // 120 ms fall off the copy's end, cut off hard: a click wherever the clip
+    // ends or the loop wraps. And it goes stale: every tempo change, warp
+    // marker drag and pitch step leaves the clip silent or playing its last
+    // version until the render catches up, which is exactly what someone
+    // warping or tuning a clip does while listening. The cost is one
+    // stretcher per stretched clip while the transport rolls, which is what
+    // Live pays too. The setting is the clip's own property, so it is saved,
+    // undone and copied with the clip.
+    const auto stretched = warped || clip.getPitchChange() != 0.0f;
+    if (clip.canUseProxy() == stretched)
+        clip.setUsesProxy(!stretched);
 }
 
 // Repitch is the one mode whose engine state depends on the song's tempo, so

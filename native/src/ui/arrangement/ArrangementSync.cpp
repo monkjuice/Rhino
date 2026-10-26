@@ -505,7 +505,8 @@ int Arrangement::returnTrackAt(int knob) const
 
 void Arrangement::updateScroll()
 {
-    const auto total = std::max({8.0, songEnd + 60.0 / session.tempo() * 4.0, viewSpan});
+    const auto bar = std::max(0.25, session.beatsPerBar()) * 60.0 / session.tempo();
+    const auto total = songEnd + timelineTailBars * bar + viewSpan;
     viewStart = std::clamp(viewStart, 0.0, std::max(0.0, total - viewSpan));
     scroll.setRangeLimits(0.0, total, juce::dontSendNotification);
     scroll.setCurrentRange(viewStart, viewSpan, juce::dontSendNotification);

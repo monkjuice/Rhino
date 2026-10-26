@@ -696,6 +696,11 @@ private:
     // longer, so the first step out from the default is never refused; zooming
     // in stops at deepestZoomPixelsPerBeat.
     static constexpr double defaultViewSeconds = 120.0;
+    // How far past the song's end the view's left edge can travel, clips or
+    // none, so there is room to scroll and drag into at any zoom. One bar past
+    // the end, the old tail, was a single screen or less once zoomed in, and an
+    // empty song could not scroll at all.
+    static constexpr double timelineTailBars = 32.0;
     double viewStart = 0.0, viewSpan = defaultViewSeconds, songEnd = 2.0, trackScroll = 0.0;
     GridSettings gridSettings;
     // What the snap toggle turns back on. Without it, switching snapping off

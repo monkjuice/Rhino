@@ -47,6 +47,24 @@
     view.viewStart = startedAt;
     view.updateScroll();
 
+    // The timeline runs a long tail of bars past the song's end, at any zoom:
+    // one bar, the old tail, was a screen or less zoomed in.
+    {
+        const auto spanBefore = view.viewSpan;
+        const auto bar = std::max(0.25, session.beatsPerBar()) * 60.0 / session.tempo();
+        for (const auto span : {bar, view.defaultViewSeconds * 2.0})
+        {
+            view.viewSpan = span;
+            view.viewStart = 1.0e6;
+            view.updateScroll();
+            require(std::abs(view.viewStart - (view.songEnd + view.timelineTailBars * bar)) < 0.001,
+                    "The view's left edge scrolls a long tail of bars past the song's end, zoomed in or out");
+        }
+        view.viewSpan = spanBefore;
+        view.viewStart = startedAt;
+        view.updateScroll();
+    }
+
     // The vertical half. It only has somewhere to go when the stack is taller
     // than the lanes, so the rows are made tall enough to scroll first.
     for (int track = 0; track < session.trackCount(); ++track)

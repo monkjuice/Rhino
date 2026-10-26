@@ -509,7 +509,7 @@ void Arrangement::updateScroll()
     viewStart = std::clamp(viewStart, 0.0, std::max(0.0, total - viewSpan));
     scroll.setRangeLimits(0.0, total, juce::dontSendNotification);
     scroll.setCurrentRange(viewStart, viewSpan, juce::dontSendNotification);
-    const auto trackTotal = static_cast<double>(rowsHeight);
+    const auto trackTotal = static_cast<double>(rowsHeight + laneTailHeight);
     const auto trackVisible = static_cast<double>(laneContentHeight());
     trackScroll = std::clamp(trackScroll, 0.0, std::max(0.0, trackTotal - trackVisible));
     trackScrollBar.setRangeLimits(0.0, std::max(trackVisible, trackTotal), juce::dontSendNotification);

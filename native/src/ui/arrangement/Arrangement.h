@@ -624,6 +624,11 @@ private:
     std::map<juce::String, float> clipNameWidths;
     std::vector<int> trackRowIndex;
     float rowsHeight = 0.0f;
+    // The stack scrolls this far past its last lane, as Live's does, so the
+    // last card's bottom edge can always be brought clear of the pinned block
+    // and dragged: scrolled to the end without it, that edge lay on the
+    // returns' rule, where it does not answer.
+    static constexpr float laneTailHeight = 40.0f;
     // The pinned block's height: the returns' rows, held to a share of the
     // panel so the lanes always keep room.
     float pinnedRowsHeight = 0.0f;

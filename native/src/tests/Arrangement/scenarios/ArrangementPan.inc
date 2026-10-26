@@ -61,6 +61,17 @@
     require(close(view.trackScroll, scrolledTo + 40.0), "Dragging up scrolls the rows down by the same pixels");
     pan(from, from.translated(0.0f, 4000.0f));
     require(close(view.trackScroll, 0.0), "A pan past the top of the stack stops there");
+    // The other end stops a little short of the returns pinned under the
+    // lanes, so the last card's bottom edge is a handle that can be grabbed
+    // rather than one lying on the block's own rule.
+    pan(from, from.translated(0.0f, -100000.0f));
+    const auto lastLane = view.firstPinnedTrack() - 1;
+    require(std::abs(view.returnsTop() - view.lastLaneBottom() - view.laneTailHeight) < 0.5f,
+            "A pan past the foot of the stack leaves a strip of lane under the last track");
+    require(view.cardResizeEdgeAt({20.0f, view.lane(lastLane).getBottom()}) == lastLane,
+            "where the last card's bottom edge resizes it");
+    view.trackScroll = 0.0;
+    view.updateScroll();
     for (int track = 0; track < session.trackCount(); ++track)
         session.setTrackLaneHeight(track, 0.0f);
     view.sync();

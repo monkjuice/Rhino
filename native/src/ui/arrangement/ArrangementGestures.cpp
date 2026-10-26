@@ -1144,7 +1144,7 @@ void Arrangement::mouseWheelMove(const juce::MouseEvent& event, const juce::Mous
         zoom(std::exp(-wheelDelta * 2.0f), timeAt(event.position.x));
     }
     else if (std::abs(wheel.deltaY) > std::abs(wheel.deltaX)
-             && rowsHeight > laneContentHeight() + 1.0f)
+             && rowsHeight + laneTailHeight > laneContentHeight() + 1.0f)
     {
         trackScroll += -wheel.deltaY * laneHeight() * 1.5;
         updateScroll();

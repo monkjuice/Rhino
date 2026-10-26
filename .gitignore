@@ -10,6 +10,7 @@ native/build/
 native/.tools/
 native/build-*/
 .vs/
+.vscode/
 __pycache__/
 *.py[cod]
 .env

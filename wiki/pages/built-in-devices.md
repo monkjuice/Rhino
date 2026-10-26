@@ -18,13 +18,13 @@ Every device in the [Device catalog](device-catalog.md) on 2026-10-26. Rhino's o
 | Rhino Forge | instrument | external VST3 | [Hosting Forge in Rhino](forge-hosting.md) |
 | Drum Rack | instrument | `instruments/DrumRackDevice.*` | [Drum Rack](drum-rack.md) |
 | Rhino EQ | audio FX | `audio/RhinoEqDevice.*` | [Rhino EQ](rhino-eq.md) |
-| Compressor, Reverb, Delay | audio FX | Tracktion built-ins | |
+| Compressor, Reverb, Delay | audio FX | Tracktion built-ins | The Compressor takes a sidechain from the rack's strip, which also switches on its `useSidechainTrigger` ([Sidechains](sidechains.md)) |
 | Rhino Duck | audio FX | external VST3, `effects/rhino-duck/` | [Rhino Duck](rhino-duck.md), the second external entry, since 2026-10-26 |
 | Utility | audio FX | `audio/UtilityDevice.*` | Gain trim inside every track's chain |
 | Rhino Space | audio FX | `audio/RhinoSpaceDevice.*` | Mix, size, smear, drive, width |
 | Rhino Bloom | audio FX | `audio/RhinoBloomDevice.*` | Bloom, chorus, clouds, plate, colour |
 | Rhino Tune | audio FX | `audio/AutoTuneDevice.*` | [Rhino Tune](rhino-tune.md) |
-| Rhino Vocoder | audio FX | `audio/VocoderDevice.*` | [Rhino Vocoder and sidechains](rhino-vocoder.md) |
+| Rhino Vocoder | audio FX | `audio/VocoderDevice.*` | [Rhino Vocoder](rhino-vocoder.md) |
 | Rhino Arp | MIDI FX | `midi/RhinoArpDevice.*` | [Rhino Arp](rhino-arp.md) |
 | DJ Input, DJ Output | hidden | `infra/DjTrackPortDevices.*` | The DJ booth's two ends of every track, since 2026-10-12: [DJ decks play live through the track's chain](dj-decks-play-live-through-the-track.md) |
 

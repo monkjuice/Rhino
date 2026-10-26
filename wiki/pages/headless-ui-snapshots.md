@@ -23,6 +23,7 @@ and the snapshot kept as a paint smoke test. Write a PNG only when an env var na
 `DeviceRackTest.cpp` (`RHINO_ARP_SNAPSHOT`) do. Give the panel a `Theme` with `setLookAndFeel` before the snapshot and
 clear it after: a test component otherwise paints in stock `LookAndFeel_V4`, and the Arp's reference PNG showed JUCE's
 knobs and number-less bars until commit `d28a687`.
+`RHINO_SIDECHAIN_SNAPSHOT` (commit `d9838b6`), also read by `DeviceRackTest.cpp`, writes the compressor's face with a source chosen in its Sidechain strip ([Sidechains](sidechains.md)).
 
 The Drum Rack face does the same in `runDrumRackFaceTest` (`tests/Pattern/DeviceRackTest.cpp`). Set
 `RHINO_DRUMS_SNAPSHOT` to an absolute path and run `ctest --test-dir native/build -C Release -R native_pattern_workflow`.

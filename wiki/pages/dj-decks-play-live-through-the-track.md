@@ -40,7 +40,7 @@ A deck on a track is heard through that track's chain, live, and plays only the 
 - One track plays one deck; a second is refused.
 - An audio cell plays the raw stretch of its file: the clip's gain, pan, pitch, fades, reverse and warp are not applied (a documented limit, which the review agreed is not a regression).
 - A deck moving to another track's audio cell keeps playing its old material, heard through the new track's chain until the worker's read lands; emptying it first stopped a playing deck, and was reverted.
-- While a deck holds a track and the song is stopped, the output clears the block before the engine's sidechain send, so the track is no sidechain carrier ([Rhino Vocoder and sidechains](rhino-vocoder.md)), and an audio track's monitored input is heard through the deck's channel, not the song's ([Track inputs and monitoring](inputs-and-monitoring.md)).
+- While a deck holds a track and the song is stopped, the output clears the block before the engine's sidechain send, so the track is no sidechain carrier ([Sidechains](sidechains.md)), and an audio track's monitored input is heard through the deck's channel, not the song's ([Track inputs and monitoring](inputs-and-monitoring.md)).
 - It relies on the song's graph processing a track's plugins with the transport stopped, once a playback context exists (`ensureContextAllocated` on bind): play-in-stop. Read at `4536d8a`, `Edit::playInStopEnabled` defaults to true and is backed by the transport's `IDs::endToEnd`, and `TransportControl::performStop` keeps the nodes unless it clears the devices, so the graph goes on running after the song stops. Proven through Tracktion's real graph since 2026-10-12, not only reasoned (below).
 
 ## Proven through the real graph

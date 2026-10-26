@@ -43,7 +43,8 @@ An audio effect dropped on an audio clip goes into that clip's own plugin list (
 
 - [Device rack and device editors](device-rack.md)
 - [One instrument per track](one-instrument-per-track.md)
-- [Rhino Vocoder and sidechains](rhino-vocoder.md)
+- [Rhino Vocoder](rhino-vocoder.md)
+- [Sidechains](sidechains.md)
 - [Track kinds: audio and MIDI](track-kinds.md)
 - [The main track](main-track.md)
 - [DJ decks play live through the track's chain](dj-decks-play-live-through-the-track.md)

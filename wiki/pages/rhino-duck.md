@@ -100,7 +100,10 @@ MAP adds more from its own window), and `SessionExternalPlugins.cpp` finds every
 Forge: a VST3 already in the engine's known-plugin list, else the development build under the repository, else the
 bundle in the platform's VST3 folders ([Hosting Forge in Rhino](forge-hosting.md), [Device catalog](device-catalog.md)).
 The scenario in `native/src/tests/Pattern/scenarios/DeviceParameters.inc` adds it to an audio lane and a MIDI lane
-where a Duck build is found, and requires it to be found when the development Release bundle exists. Outside Rhino it is an ordinary VST3 from `effects/rhino-duck/build/RhinoDuck_artefacts/Release/VST3/Rhino Duck.vst3`.
+where a Duck build is found, and requires it to be found when the development Release bundle exists.
+Duck's Audio trigger reads its stereo Sidechain bus. Tracktion enables that bus, so the hosted Duck has four inputs and its face carries the rack's Sidechain strip ([Sidechains](sidechains.md)).
+Until 2026-10-26 nothing could choose a source, and the host clears those channels when none is routed, so in Audio mode Duck passed the sound unducked.
+Sync mode needs no sidechain. A MIDI trigger from another track's notes cannot be routed yet. Outside Rhino it is an ordinary VST3 from `effects/rhino-duck/build/RhinoDuck_artefacts/Release/VST3/Rhino Duck.vst3`.
 As with Forge, a VST3 counts as shipped only after it has been loaded in a real host, and a running host locks the
 bundle against relinking ([LNK1104 means a running binary holds the file](locked-executable-lnk1104.md)).
 
@@ -136,4 +139,5 @@ renders the panel after two seconds of a bassline under a kick ([Seeing the UI w
 - [Displays draw from the DSP](displays-draw-from-the-dsp.md)
 - [Measure sound, don't read the DSP](measure-sound-dont-read-dsp.md)
 - [Real-time audio rules](real-time-audio-rules.md)
-- [Rhino Vocoder and sidechains](rhino-vocoder.md)
+- [Sidechains](sidechains.md)
+- [Rhino Vocoder](rhino-vocoder.md)

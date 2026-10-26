@@ -4,7 +4,7 @@ type: component
 summary: Live's return tracks - an ordinary track fed by an engine aux bus, kept with the other returns at the foot of the stack and drawn pinned between the scrolling lanes and the main row - and one post-fader send per return at the end of every other track's chain, set from -inf to 0 dB on a knob in a column between the card's meter and its buttons; a new document has A Delay and B Reverb, wholly wet, fed nothing.
 tags: [rhino, mixer, returns, sends, tracks, arrangement]
 sources: []
-updated: 2026-10-25
+updated: 2026-10-26
 ---
 
 # Return tracks and sends
@@ -26,6 +26,7 @@ Added in commit `b7bd73c` (2026-10-25), modelled on Ableton Live. The model side
 - **The foot of the stack.** In the model, the returns stay together under every other track and over the main row; the arrangement pins them ([below](#in-the-arrangement)). Each is lettered by its place among them (`returnTracks()`). `firstReturnTrack()` is the first return, or `trackCount()` when there is none, so the newest playing track is `firstReturnTrack() - 1`, not `trackCount() - 1`. `appendTrack` inserts above the returns. `addTrack` and `pasteTracks` asked to land below a return land at the foot, above the returns. `moveTrack` keeps a track above the returns and moves a return only among the returns. As a safety net, `reconcileTrackGroups` carries any return it finds above another track back down.
 - **Past the last lane.** A return's row, and the space under it, count as past the last lane. A clip dragged, moved or pasted there gets a new lane made above the returns: `editClip`, `moveClipRegion` and `pasteClipRegion` clamp the destination to `firstReturnTrack()`, and the arrangement's drag preview clamps and marks no refusal there. `importAudio` with no free lane imports onto the lane it made. A test found it still importing onto `trackCount() - 1`, which is now a return.
 - **What a return refuses** is what a group bus refuses, through `carriesOtherTracks`, `noClipsReason` and `audioEffectsOnlyReason`: instruments, MIDI effects, drum kits and sounds, clips, samples, patterns, clip slots and cells, arming and input (`trackRecordInput` none), and DJ decks (the deck's track menu lists no returns). It cannot be grouped (`groupTracks`, `addTracksToGroup`). It is not copied, duplicated or bounced (`copyTracks` leaves it out, and a cut leaves it in place), but it can be deleted.
+- **No return feeds an ordinary track's sidechain** (2026-10-26). Every track sends to every return, and a send stays in the graph even at -inf, so a return already carries the sound of every ordinary track's device. A device on a return may still take any ordinary track ([Sidechains](sidechains.md)).
 
 ## Mute and solo
 
@@ -82,3 +83,4 @@ The controls-column checks in `TrackManagement.inc`, `Recording.inc`, `VocoderCa
 - [Track groups (bus tracks)](track-groups.md)
 - [Arrangement view](arrangement-view.md)
 - [The main track](main-track.md)
+- [Sidechains](sidechains.md)

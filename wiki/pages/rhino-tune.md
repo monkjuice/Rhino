@@ -39,7 +39,7 @@ Thirteen automatable parameters cover correction, transposition, formants, vibra
 ## Related
 
 - [Built-in devices](built-in-devices.md)
-- [Rhino Vocoder and sidechains](rhino-vocoder.md)
+- [Rhino Vocoder](rhino-vocoder.md)
 - [Device rack and device editors](device-rack.md)
 - [Measure sound, don't read the DSP](measure-sound-dont-read-dsp.md)
 - [Real-time audio rules](real-time-audio-rules.md)

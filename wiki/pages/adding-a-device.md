@@ -4,7 +4,7 @@ type: guide
 summary: The three edits that add a device, the SDK base a new one is written on, the shape the older devices follow, and the enum-era code a new instrument still meets.
 tags: [rhino, devices, cmake, testing]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-26
 ---
 
 # Adding a device to Rhino
@@ -32,7 +32,7 @@ The other devices are still hand-written on `te::Plugin`, and this is what chang
 - Choosers and switches are state properties, not parameters, as in Rhino Tune and Rhino EQ.
 - `applyToBuffer` never allocates, locks or touches files ([Real-time audio rules](real-time-audio-rules.md)). Content is read on the message thread when it changes, as on the SDK above, and its absence is survived. The engine may hand `applyToBuffer` a block bigger than `initialise` was told: work through it in pieces of the prepared size, as `audio/RhinoSpaceDevice.cpp` does.
 - Leave the output unclamped, since the chain is floating point; limit only inside feedback lines. A device that rings on after its input stops reports `getTailLength`, as Rhino Bloom and Rhino Space do ([Built-in devices](built-in-devices.md)).
-- Report latency through `getLatencySeconds`, computed from the device's current settings rather than read back from what the audio thread last applied, and restart playback when it changes; the graph reads it only when built ([Rhino Tune](rhino-tune.md)). A sidechain is extra input channel names ([Rhino Vocoder and sidechains](rhino-vocoder.md)).
+- Report latency through `getLatencySeconds`, computed from the device's current settings rather than read back from what the audio thread last applied, and restart playback when it changes; the graph reads it only when built ([Rhino Tune](rhino-tune.md)). To take a sidechain, a hand-written device declares extra input channel names. The rack then shows the Sidechain strip, unless the device has a face of its own. The SDK cannot declare a sidechain yet ([Sidechains](sidechains.md)).
 
 ## DSP and its test
 

@@ -1,10 +1,10 @@
 ---
 title: Session, the model
 type: component
-summary: The message-thread facade over one Tracktion engine and edit, the one door the views and the shell reach the engine through, one class split across 40 files, where every rule and refusal lives.
+summary: The message-thread facade over one Tracktion engine and edit, the one door the views and the shell reach the engine through, one class split across 41 files, where every rule and refusal lives.
 tags: [rhino, model, tracktion, undo]
 sources: []
-updated: 2026-10-25
+updated: 2026-10-26
 ---
 
 # Session, the model
@@ -13,10 +13,10 @@ updated: 2026-10-25
 
 ## One class, many files
 
-`Session` is one class defined across 40 translation units, all in `native/src/model/` (the `src/model/Session*.cpp` lines under `# Session` in `native/CMakeLists.txt`, as of `b7bd73c`, 2026-10-25; [The source tree mirrors the layers](source-tree-mirrors-the-layers.md)), split by caller as [Keeping files small](keeping-files-small.md) describes:
+`Session` is one class defined across 41 translation units, all in `native/src/model/` (the `src/model/Session*.cpp` lines under `# Session` in `native/CMakeLists.txt`, as of `2220948`, 2026-10-26; [The source tree mirrors the layers](source-tree-mirrors-the-layers.md)), split by caller as [Keeping files small](keeping-files-small.md) describes:
 
 - `Session.cpp`: construction, the starter edit, `restoreProject`, `projectSnapshot`, undo and redo, `markModified`, the track cache and the relays of the engine's own announcements (`watchEditTree`).
-- Notes and patterns: `SessionNotes`, `SessionNoteChop` (since commit `f2ae477`: `chopNotes`, which removes the notes it is given and cuts each `NoteChop` on its own pitch, at the step lines inside it or into equal parts, announced once and opening no transaction of its own, so the note editor's bracket makes a chop adjusted many times one undo step; `gridChopParts`; [Note editor](note-editor.md#gestures)), `SessionPatternPresets`, `SessionPatches`.
+- Notes and patterns: `SessionNotes`, `SessionNoteChop` (since commit `f2ae477`: `chopNotes`, which removes the notes it is given and cuts each `NoteChop` on its own pitch, at the step lines inside it or into equal parts, announced once and opening no transaction of its own, so the note editor's bracket makes a chop adjusted many times one undo step; `gridChopParts`; [Note editor](note-editor.md#gestures)), `SessionNoteTools` (since commit `2220948`: `reverseNotes`, `legatoNotes` and `humanizeNotes` with a seed, Live's Pitch and Time Utilities on the named notes or the whole clip, written through one `placeNotes` that opens no transaction, so the editor's bracket makes each one undo step; [Note editor tools panel](note-editor-tools-panel.md)), `SessionPatternPresets`, `SessionPatches`.
 - Tracks and mixing: `SessionTracks`, `SessionTrackClipboard` (copying, pasting, duplicating and removing whole tracks; [Track clipboard](track-clipboard.md)), `SessionGroups`, `SessionMixer`, `SessionReturns` (return tracks, their sends and how mute and solo reach them; [Return tracks and sends](return-tracks.md)), `SessionMeters` (`takeOutputLevels`, what the card meters read; [Track level meters](level-meters.md)), `SessionAutomation`, `SessionTransport`.
 - Devices: `SessionDevices`, `SessionDevicePresets`, `SessionDrums` (the [Drum Rack](drum-rack.md)'s kits, pads, banks, slices and drops), `SessionSidechain`, `SessionExternalPlugins`, `SessionDeviceMacros` (the rack's curated knobs, 4OSC only; `DeviceMacros.cpp` until 2026-10-13), `SessionMappedParameters` (an external plugin's chosen knobs and mapping more from its window; [Mapped parameters](mapped-parameters.md)).
 - Clips: `SessionClips`, `SessionRegion` (copy, clear and paste of a region), `SessionRegionMove` (`moveClipRegion`, a selection carried by a clip header or nudged; split off on 2026-10-23 when it took `SessionRegion.cpp` to 630 lines; [Region editing](region-editing.md#moving-a-selection)), `SessionAudioClips`, `SessionWarp`, `SessionMerge`, `SessionBounce` ([Bounce to New Track](bounce-to-new-track.md)), `SessionExport` (Export WAV, stepped like the bounce; [Project files](project-files.md#wav-export)), `SessionSamples`, `SessionSlots`.

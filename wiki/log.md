@@ -1327,3 +1327,12 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/edit-temp-folder.md (`clip_` renders now come only from clips that still allow proxies)
 - updated: pages/measure-sound-dont-read-dsp.md (timing and clicks measured by onsets and edge steps)
 - updated: index.md (Gotchas: the new page)
+
+## [2026-10-26] update | Note editor: a tools panel down its left with the scale highlight, Humanize, Reverse and Legato (2220948)
+- source: the change brief, checked against native/src/ui/notes/NoteToolsPanel.h/.cpp, StepGridTools.cpp, native/src/model/SessionNoteTools.cpp, Session.h (`humanizeReachSteps`, `placeNotes`, `clipLengthSteps`), app/MainComponentLayout.cpp, native/CMakeLists.txt and tests/Arrangement/scenarios/NoteTools.inc
+- created: pages/note-editor-tools-panel.md (the panel as a sibling of the grid, the scale chooser it replaced and the twelve scales, the three tools' rules, focus, the tests, what is not done)
+- updated: pages/note-editor.md (summary, tags; nine units with `StepGridTools.cpp`, `SessionNoteTools.cpp` on the model side; a short section linking the new page)
+- updated: pages/session-model.md (summary and body: 41 units; `SessionNoteTools` among the notes units)
+- updated: pages/app-shell.md (The lower pane: the note editor's face is the panel and the grid side by side; the scale chooser left the strip)
+- updated: pages/headless-ui-snapshots.md (`RHINO_NOTE_TOOLS_SNAPSHOT`, and why it sets a `Theme`)
+- updated: index.md (Components: the new page; summaries of Note editor and Session)

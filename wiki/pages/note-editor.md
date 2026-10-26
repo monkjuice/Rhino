@@ -1,15 +1,15 @@
 ---
 title: Note editor (StepGrid)
 type: component
-summary: Edits the open MIDI clip's notes in steps under a bars-and-beats ruler, on rows of one height that a short pane scrolls rather than squeezes (a drum clip's only its rack's assigned keys), snapped unless Alt is held, with a draw mode, a right-button menu that never erases, a Ctrl+E chop set by dragging, a preview through the clip's own track, an insert line that pastes land on and a velocity lane, tied closely to Session by its caches.
-tags: [rhino, ui, notes, clipboard, snapping, preview, layout]
+summary: Edits the open MIDI clip's notes in steps under a bars-and-beats ruler, on rows of one height that a short pane scrolls rather than squeezes (a drum clip's only its rack's assigned keys), snapped unless Alt is held, with a draw mode, a right-button menu that never erases, a Ctrl+E chop set by dragging, a preview through the clip's own track, an insert line that pastes land on, a velocity lane and a tools panel down its left (the scale highlight, Humanize, Reverse, Legato), tied closely to Session by its caches.
+tags: [rhino, ui, notes, clipboard, snapping, preview, layout, scale]
 sources: []
-updated: 2026-10-25
+updated: 2026-10-26
 ---
 
 # Note editor (StepGrid)
 
-`StepGrid` edits the notes of the MIDI clip the editor is pointed at, `Session::pattern()`. A document with no MIDI track has no such clip: `Session::hasPatternClip()` says so, every note edit refuses with a message (a velocity edit included), and the grid draws an empty editor. It is one class across eight units in `native/src/ui/notes/`, its folder since 2026-10-13: `StepGrid.cpp`, `StepGridPainter.cpp`, `StepGridGestures.cpp` (pointer), `StepGridEditing.cpp` (selection, region, clipboard, modal tools), `StepGridMenu.cpp` (the right button's menus, commit `4783232`, 2026-10-25) and, since 2026-10-16, the velocity lane's `StepGridVelocity.cpp`, `StepGridVelocityGestures.cpp` (which also holds the keyboard's hover) and `StepGridVelocityPainter.cpp`. Private helpers are in `StepGridInternal.h`, and the lane's arithmetic is in `VelocityLaneGeometry.h`, a pure header. Its model side is `SessionNotes.cpp`, with `SessionNoteChop.cpp` (the chop) and `SessionNoteAudition.cpp` (the preview) since commit `f2ae477`. It opens in the shell's lower pane when a MIDI clip is double-clicked, and its first appearance in a run raises the pane to at least `StepGrid::openingHeight`, 327 px since commit `c257d42` (309 px from `d872f0b`, 293 px from `363af51`) ([Drawing](#drawing), [App shell and control bar](app-shell.md)). Since commit `4783232` (2026-10-25, a UX audit of the editor; a change this page dates 2026-10-25 without a hash is that commit, the audit's second round, the same day, is commit `f2ae477`, the same day's fixed row height, scrolling drum rows and marquee repaint are commit `d872f0b`, the 13 px rows with no scrollbar `c257d42`, and a drum clip's assigned-key rows and the Alt + wheel row height `3418c1b`) it says what a command did or why it refused ("Copied 3 notes", "Copy or cut notes first", "No room: a clip holds at most 512 steps in the note editor") through `StepGrid::status`, which `app/MainComponent.cpp` points at the readout as it does the arrangement's.
+`StepGrid` edits the notes of the MIDI clip the editor is pointed at, `Session::pattern()`. A document with no MIDI track has no such clip: `Session::hasPatternClip()` says so, every note edit refuses with a message (a velocity edit included), and the grid draws an empty editor. It is one class across nine units in `native/src/ui/notes/`, its folder since 2026-10-13: `StepGrid.cpp`, `StepGridPainter.cpp`, `StepGridGestures.cpp` (pointer), `StepGridEditing.cpp` (selection, region, clipboard, modal tools), `StepGridMenu.cpp` (the right button's menus, commit `4783232`, 2026-10-25), the velocity lane's `StepGridVelocity.cpp`, `StepGridVelocityGestures.cpp` (which also holds the keyboard's hover) and `StepGridVelocityPainter.cpp` (since 2026-10-16), and `StepGridTools.cpp` (the tools panel's commands, commit `2220948`, 2026-10-26). Private helpers are in `StepGridInternal.h`, and the lane's arithmetic is in `VelocityLaneGeometry.h`, a pure header. Its model side is `SessionNotes.cpp`, with `SessionNoteChop.cpp` (the chop) and `SessionNoteAudition.cpp` (the preview) since commit `f2ae477`, and `SessionNoteTools.cpp` (Reverse, Legato, Humanize) since `2220948`. It opens in the shell's lower pane when a MIDI clip is double-clicked, and its first appearance in a run raises the pane to at least `StepGrid::openingHeight`, 327 px since commit `c257d42` (309 px from `d872f0b`, 293 px from `363af51`) ([Drawing](#drawing), [App shell and control bar](app-shell.md)). Since commit `4783232` (2026-10-25, a UX audit of the editor; a change this page dates 2026-10-25 without a hash is that commit, the audit's second round, the same day, is commit `f2ae477`, the same day's fixed row height, scrolling drum rows and marquee repaint are commit `d872f0b`, the 13 px rows with no scrollbar `c257d42`, and a drum clip's assigned-key rows and the Alt + wheel row height `3418c1b`) it says what a command did or why it refused ("Copied 3 notes", "Copy or cut notes first", "No room: a clip holds at most 512 steps in the note editor") through `StepGrid::status`, which `app/MainComponent.cpp` points at the readout as it does the arrangement's.
 
 ## Gestures
 
@@ -57,6 +57,10 @@ Since `f2ae477`, the keyboard since `363af51`, and the rows' height and placemen
 ## Velocity lane
 
 Below the rows, a lane shows a marker for every note of the clip, including notes scrolled out of the pitch window, in MIDI 1-127. It is modelled on Live 12's velocity editor. A marker can be dragged, a group dragged with it, values painted in draw mode or swept up with a marquee, and every gesture is one undo step announced once. The lane folds away rather than leave the rows less than 128 px, sixteen rows of 8 px. Hovering a grid note lights its marker, and hovering a marker lights its key. Layout, model and gestures are in [Note editor velocity lane](note-velocity-lane.md).
+
+## Tools panel and the scale highlight
+
+Since commit `2220948` (2026-10-26) `NoteToolsPanel`, a 168 px sibling of the grid down its left in the lower pane, holds the scale highlight and three Live utilities. The scale moved there from the shell's "Scale: off / C Major ... B Minor" combo and now takes any root and twelve scales (`StepGrid::setScaleHighlight(bool shown, int root, MusicalScale)`); Humanize, Reverse and Legato act on the selected notes, or every note of the clip, in one undo step each, by rules in `SessionNoteTools.cpp`. Details in [Note editor tools panel](note-editor-tools-panel.md).
 
 ## The step region and the insert line
 
@@ -119,6 +123,7 @@ Of what the audit of 2026-10-25 recommended, `f2ae477` settled all but one: the 
 
 - [Note editor velocity lane](note-velocity-lane.md)
 - [Note editor drum rows](note-editor-drum-rows.md)
+- [Note editor tools panel](note-editor-tools-panel.md)
 - [Arrangement view](arrangement-view.md)
 - [Region editing](region-editing.md)
 - [Pointer and selection rules](pointer-and-selection.md)

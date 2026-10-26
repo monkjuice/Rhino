@@ -4,7 +4,7 @@ type: guide
 summary: Render a Rhino panel, the whole Rhino shell or Forge's editor to a PNG without a window, then measure it instead of eyeballing it.
 tags: [both, ui, testing, snapshots]
 sources: []
-updated: 2026-10-25
+updated: 2026-10-26
 ---
 
 # Seeing the UI without taking the screen
@@ -63,6 +63,10 @@ file first ([Note editor](note-editor.md#drawing)).
 `RHINO_NOTE_DRUMS_SNAPSHOT` writes the note editor at 1000 x `StepGrid::openingHeight` on the 808 Kit's drum clip, its
 rows the kit's assigned keys and the keys its notes are on, from `NoteDrumRows.inc` in the same case, deleting any old file first
 ([Note editor drum rows](note-editor-drum-rows.md)).
+`RHINO_NOTE_TOOLS_SNAPSHOT` (commit `2220948`) writes the note editor's tools panel beside the editor, as the shell lays
+them out, with two notes selected and D major lit, from `NoteTools.inc` in the same case, deleting any old file first
+([Note editor tools panel](note-editor-tools-panel.md)). It sets a `Theme` on both for the picture only: without one
+the panel showed JUCE's rounded stock buttons and no value text in the Humanize bar.
 
 A `juce::TreeView` cannot be seen this way opened: it lays out its rows asynchronously, so a snapshot shows an opened
 folder with no children, even after `setOpen`, `resized()` or a rebuild at a new width. Test the browser's rows and drag

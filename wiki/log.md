@@ -1284,6 +1284,8 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/arrangement-view.md (summary and intro: fifteen units with `ArrangementAutomationChooser.cpp`; a clip's body edits the shown curve; the card's third line, the A button gone; the fold link's anchor)
 - updated: pages/session-model.md (the lane a row shows among the view settings that skip undo and pass `ModelChange::none`)
 - updated: pages/headless-ui-snapshots.md (`RHINO_AUTOMATION_TRACK_SNAPSHOT`: track 0's row with a ramp on its shown lane, a paint smoke test when unset; added from the coordinator's second addendum, checked against AutomationLanes.inc)
+- updated (7261d28): pages/arrangement-view.md, pages/automation.md (third addendum, checked against ArrangementSync.cpp and ui/shared/Theme.h: both card choosers are a `ChooserButton` that draws its label through `drawSnappedText`, elided, with its own "v", and the labels lost the "  v" suffix)
+- updated (7261d28): pages/colours-and-typography.md (a stock `TextButton` blurs a label too wide for it through `drawFittedText`; paint it with `drawSnappedText` and elide)
 - updated: index.md (summaries of Track automation and Arrangement view)
 
 ## [2026-10-25] update | Arrangement: the send knobs stand in a column between the meter and the buttons, hidden rather than grown for (e6473f5)

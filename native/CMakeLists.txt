@@ -74,6 +74,7 @@ target_sources(RhinoNative PRIVATE
     src/model/SessionPreview.cpp
     src/model/SessionNoteAudition.cpp
     src/model/SessionNoteChop.cpp
+    src/model/SessionNoteTools.cpp
     src/model/SessionRecording.cpp
     src/model/SessionMidiInput.cpp
     src/model/SessionAudioInput.cpp
@@ -96,6 +97,8 @@ target_sources(RhinoNative PRIVATE
     src/ui/notes/StepGridVelocity.cpp
     src/ui/notes/StepGridVelocityGestures.cpp
     src/ui/notes/StepGridVelocityPainter.cpp
+    src/ui/notes/StepGridTools.cpp
+    src/ui/notes/NoteToolsPanel.cpp
     src/ui/arrangement/Arrangement.cpp
     src/ui/arrangement/ArrangementGeometry.cpp
     src/ui/arrangement/ArrangementPainter.cpp

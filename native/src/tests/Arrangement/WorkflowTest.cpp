@@ -11,6 +11,7 @@
 #include "app/ControlBarFields.h"
 #include "app/LoadingScreen.h"
 #include "ui/notes/StepGrid.h"
+#include "ui/notes/NoteToolsPanel.h"
 #include "ui/audioclip/AudioClipPanel.h"
 #include "ui/dj/DjView.h"
 #include "ui/shared/Playhead.h"
@@ -202,6 +203,8 @@ int runArrangementTest()
        #include "scenarios/NotePan.inc"
         scenario("note menu: the right button asks and never erases");
        #include "scenarios/NoteMenu.inc"
+        scenario("note tools: reverse, legato, humanize and the scale, from the panel beside the editor");
+       #include "scenarios/NoteTools.inc"
         scenario("note keys: the keyboard stays clear of the grid and names the key under the pointer");
        #include "scenarios/NoteKeys.inc"
         scenario("note grid: bars and beats, black keys, velocity shades, snapping, key clicks and the preview");

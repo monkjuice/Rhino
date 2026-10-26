@@ -1,6 +1,7 @@
 #pragma once
 #include "model/Session.h"
 #include "VelocityLaneGeometry.h"
+#include "dsp/ScaleQuantizer.h"
 #include <array>
 #include <bitset>
 #include <vector>
@@ -29,7 +30,19 @@ public:
     // editor's region, the notes it runs across are selected, as a marquee
     // over every pitch would select them, and the view is framed on it.
     void showTimeSpan(double startSeconds, double endSeconds);
-    void setScaleHighlight(int selection);
+    // Live's Highlight Scale: on a piano clip, the rows of the scale's notes
+    // are lit. A view setting of the editor's, set from the tools panel beside
+    // it (NoteToolsPanel), which until 2026-10-26 was a chooser in the shell's
+    // strip offering major and minor only.
+    void setScaleHighlight(bool shown, int root, MusicalScale scale);
+    // The tools panel's commands, Live's Pitch and Time Utilities: the
+    // selected notes, or with none selected every note in the clip, as Live's
+    // buttons act. Each is one undo step and says what it did, or why not, in
+    // the readout. Humanize's amount is 0-1 of Session::humanizeReachSteps.
+    // StepGridTools.cpp.
+    bool reverseNotes();
+    bool legatoNotes();
+    bool humanizeNotes(double amount);
     // Draw mode: the pointer becomes a pencil, so a press paints notes and a
     // drag paints a run of them. With it off the pointer selects, which is
     // what it does in the arrangement, and a note is put down by
@@ -287,6 +300,10 @@ private:
     // equal parts a note.
     bool chopSelection(int parts);
     std::vector<Session::NoteChop> chopsOfSelection(std::vector<juce::ValueTree>& originals) const;
+    // What every tools-panel command shares: the selection handed to the
+    // model's tool in one undo step, and the readout told what it did.
+    bool applyNoteTool(const juce::String& actionName, const juce::String& done, const juce::String& after,
+                       const std::function<juce::Result(const std::vector<juce::ValueTree>&)>& tool);
     void report(const juce::String&) const;
     juce::Result moveCurrentNotesBy(double stepDelta, int pitchDelta);
     juce::Result resizeCurrentNoteTo(int index);
@@ -495,7 +512,9 @@ private:
     // The lane marquee's anchor, in steps and velocity.
     double velocityAnchorStep = 0.0;
     float velocityAnchorValue = 0.0f;
-    int scaleHighlight = 1;
+    bool scaleShown = false;
+    int scaleRoot = 0;
+    MusicalScale scaleKind = MusicalScale::Major;
     float verticalAutoScroll = 0.0f;
     juce::Point<float> dragPosition {-1.0f, -1.0f};
     // Where the marquee was started, in steps and in lines rather than in

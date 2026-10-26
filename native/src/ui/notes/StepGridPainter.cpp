@@ -250,18 +250,13 @@ void StepGrid::paint(juce::Graphics& g)
     const auto perBeat = stepsPerBeat();
     const auto perBar = stepsPerBar();
     const auto drums = session.isPatternDrums();
-    const auto scaleIndex = scaleHighlight - 2;
-    const bool scaleEnabled = !session.isPatternDrums() && scaleIndex >= 0;
-    const auto root = scaleEnabled ? scaleIndex % 12 : 0;
-    const bool minor = scaleEnabled && scaleIndex >= 12;
-    static constexpr std::array<int, 7> major {0, 2, 4, 5, 7, 9, 11};
-    static constexpr std::array<int, 7> naturalMinor {0, 2, 3, 5, 7, 8, 10};
-    const auto& scale = minor ? naturalMinor : major;
+    const bool scaleEnabled = !drums && scaleShown;
+    // The same mask Rhino Tune corrects to and the Push lays its pads in.
+    const auto scale = maskForScale(scaleKind, scaleRoot);
     for (int row = 0; row < rows; ++row)
     {
         const auto pitch = pitchOfRow(row);
-        const auto pitchClass = pitchClassOf(pitch);
-        const bool inScale = !scaleEnabled || std::find(scale.begin(), scale.end(), (pitchClass - root + 12) % 12) != scale.end();
+        const bool inScale = !scaleEnabled || scale[static_cast<size_t>(pitchClassOf(pitch))];
         // Cells and notes stay inside their row's height, so a row the repaint
         // misses has nothing to draw.
         const auto rowTop = top + row * laneHeight;

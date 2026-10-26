@@ -180,16 +180,6 @@ MainComponent::MainComponent(Session& s)
     editorZoomIn.setTooltip("Zoom in to the note editor - fewer bars across the same width.");
     editorZoomOut.onClick = [this] { grid.zoomOut(); };
     editorZoomIn.onClick = [this] { grid.zoomIn(); };
-    scaleHighlight.addItem("Scale: off", 1);
-    static constexpr const char* roots[] {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
-    for (int root = 0; root < 12; ++root)
-        scaleHighlight.addItem(juce::String(roots[root]) + " Major", root + 2);
-    for (int root = 0; root < 12; ++root)
-        scaleHighlight.addItem(juce::String(roots[root]) + " Minor", root + 14);
-    scaleHighlight.setSelectedId(1, juce::dontSendNotification);
-    scaleHighlight.setTooltip("Highlight the rows of a scale in the note editor, so the notes that belong "
-                              "to it stand out from the ones that do not.");
-    scaleHighlight.onChange = [this] { grid.setScaleHighlight(scaleHighlight.getSelectedId()); };
     // Clip and Devices are two faces of one strip, so the one that is
     // showing is marked in grey rather than coloured in: a tab that lights
     // up teal in a neutral bar reads as a warning rather than as "you are
@@ -353,9 +343,9 @@ MainComponent::MainComponent(Session& s)
     });
     for (auto* component : std::initializer_list<juce::Component*>{
              &infoView, &position, &play, &stop, &record, &rewind,
-             &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &audioClip, &arrangement, &djView,
+             &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &noteTools, &audioClip, &arrangement, &djView,
              &djToggle, &arrangementToggle, &rack, &tempoBox, &signatureField, &undo, &redo, &metronome, &metronomeMenu,
-             &patternLabel, &editorResolution, &editorZoomOut, &editorZoomIn, &scaleHighlight,
+             &patternLabel, &editorResolution, &editorZoomOut, &editorZoomIn,
              &lowerSplitter})
         addAndMakeVisible(component);
     // Last, so it is above everything it covers.
@@ -441,7 +431,6 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster*)
     undo.setEnabled(session.canUndo());
     redo.setEnabled(session.canRedo());
     updateEditorLabel();
-    scaleHighlight.setVisible(lowerPane == LowerPane::notes && !session.isPatternDrums());
     // Dropping an instrument turns a bare track into a MIDI one without
     // moving the selection, and deleting or undoing a clip can take the one
     // the audio editor is showing. Both change which pane belongs here.

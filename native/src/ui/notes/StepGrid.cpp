@@ -275,13 +275,15 @@ void StepGrid::toggleDrawMode()
     setDrawMode(!drawMode);
 }
 
-void StepGrid::setScaleHighlight(int selection)
+void StepGrid::setScaleHighlight(bool shown, int root, MusicalScale scale)
 {
-    if (scaleHighlight != selection)
-    {
-        scaleHighlight = selection;
-        repaint();
-    }
+    root = pitchClassOf(root);
+    if (scaleShown == shown && scaleRoot == root && scaleKind == scale)
+        return;
+    scaleShown = shown;
+    scaleRoot = root;
+    scaleKind = scale;
+    repaint();
 }
 
 float StepGrid::timeAreaHeight() const

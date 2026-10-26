@@ -1058,6 +1058,28 @@ public:
     // How many pieces a chop on the grid cuts a note into: one more than the
     // step lines inside it.
     static int gridChopParts(double startSteps, double lengthSteps);
+    // The note editor's tools panel, Live's Pitch and Time Utilities. Each acts
+    // on the notes named, or on every note the editor shows when none are, as
+    // Live's buttons do, and announces the edit once; the caller brackets it in
+    // an undo step. Positions are the editor's, as editorNotes reports them, so
+    // a note shown from the clip's start moves from there. SessionNoteTools.cpp.
+    //
+    // Reverse mirrors the notes in time across their span, or across the whole
+    // clip when none are named, so the last comes first; what sounds past the
+    // clip's end is cut there first. It refuses to land a note on one that is
+    // staying put.
+    juce::Result reverseNotes(const std::vector<juce::ValueTree>&);
+    // Legato lengthens or shortens each note to reach the start of the next
+    // one, the last to the clip's end, never past the next note on its own
+    // pitch.
+    juce::Result legatoNotes(const std::vector<juce::ValueTree>&);
+    // Humanize moves each note's start by a random amount, at most
+    // humanizeReachSteps either way at amount 1 - a quarter of a step, Live's
+    // reach - never before the clip's start, past its end, or onto a
+    // neighbour on its own pitch. The seed decides the drift, so a test can
+    // repeat one.
+    static constexpr double humanizeReachSteps = 0.25;
+    juce::Result humanizeNotes(const std::vector<juce::ValueTree>&, double amount, juce::int64 seed);
     // movingWith names the other clips travelling in the same gesture, so a
     // clip carried onto ground another selected clip is still vacating cannot
     // delete it on the way past.
@@ -2212,6 +2234,10 @@ private:
     bool pointerHeld = false;
     // SessionNotes.cpp: the track the note editor's clip sits on, or -1.
     int patternTrackIndex() const;
+    // SessionNoteTools.cpp: each note put where the one beside it says, in the
+    // editor's steps, and the edit announced once. False when nothing moved.
+    bool placeNotes(const std::vector<EditorNote>&);
+    double clipLengthSteps() const;
     void djReset();
     void writeDjState();
     void readDjState();

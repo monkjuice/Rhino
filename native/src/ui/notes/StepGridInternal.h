@@ -5,7 +5,8 @@
 
 // Shared internals of the StepGrid implementation, which is defined across
 // StepGrid.cpp, StepGridPainter.cpp, StepGridGestures.cpp, StepGridEditing.cpp,
-// StepGridMenu.cpp and the velocity lane's StepGridVelocity*.cpp. Internal:
+// StepGridMenu.cpp, StepGridTools.cpp and the velocity lane's
+// StepGridVelocity*.cpp. Internal:
 // nothing outside those files should include it.
 //
 // The pointer rules come from SelectionInput.h, which the arrangement reads

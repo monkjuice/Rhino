@@ -119,7 +119,7 @@
             paintedGrid.setSize(900, 320);
             stack.sendSynchronousChangeMessage();
             paintedGrid.setSelectedStates({held});
-            paintedGrid.scaleHighlight = 2;
+            paintedGrid.setScaleHighlight(true, 0, MusicalScale::Major);
             paintedGrid.playhead = 300.0f;
             // The first note's marker starts on the gutter's edge, so its ring
             // is cut by the lane's clip.

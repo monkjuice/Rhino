@@ -167,11 +167,9 @@ void MainComponent::resized()
     rackToggle.setBounds(paneX + 66, arrangementBottom + 5, 72, 24);
     patternLabel.setVisible(notes || audio);
     patternLabel.setBounds(paneX + 148, arrangementBottom + 5, std::max(80, paneW - 500), 24);
-    // The scale, zoom and resolution controls belong to the note editor and
-    // mean nothing over a waveform, so they follow it rather than the pane.
-    scaleHighlight.setVisible(notes && !session.isPatternDrums());
-    if (notes && !session.isPatternDrums())
-        scaleHighlight.setBounds(paneX + std::max(260, paneW - 328), arrangementBottom + 7, 146, 20);
+    // The zoom and resolution controls belong to the note editor and mean
+    // nothing over a waveform, so they follow it rather than the pane. The
+    // scale chooser that stood beside them is in the editor's tools panel.
     editorZoomOut.setVisible(notes);
     editorZoomIn.setVisible(notes);
     editorResolution.setVisible(notes);
@@ -180,20 +178,25 @@ void MainComponent::resized()
     editorResolution.setBounds(paneX + std::max(510, paneW - 78), arrangementBottom + 7, 70, 20);
 
     grid.setVisible(notes);
+    noteTools.setVisible(notes);
     audioClip.setVisible(audio);
     rack.setVisible(devices);
     // The note editor, the audio editor and the Device View are three faces
     // of one pane: they share its rectangle and exactly one of them is ever
     // visible in it, so the pane is as tall as the thing being worked on.
     const juce::Rectangle<int> paneBounds {paneX, lowerTop, paneW, lowerH};
-    grid.setBounds(paneBounds);
+    // The note editor's tools stand down its left, as Live's Clip View
+    // panels do, and its keys and grid take the rest.
+    auto noteBounds = paneBounds;
+    noteTools.setBounds(noteBounds.removeFromLeft(std::min(NoteToolsPanel::width, paneW / 3)));
+    grid.setBounds(noteBounds);
     audioClip.setBounds(paneBounds);
     rack.setBounds(paneBounds);
     // Everything in the lower pane is layered over the arrangement, which
     // is a sibling that covers the same ground.
     lowerSplitter.setVisible(lowerPaneVisible());
     lowerSplitter.setBounds(paneX, lowerBandTop - 2, paneW, 8);
-    for (auto* component : std::initializer_list<juce::Component*>{&grid, &audioClip, &rack, &lowerSplitter})
+    for (auto* component : std::initializer_list<juce::Component*>{&grid, &noteTools, &audioClip, &rack, &lowerSplitter})
         component->toFront(false);
     browserToggle.toFront(false);
     editorToggle.toFront(false);

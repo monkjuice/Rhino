@@ -1,6 +1,7 @@
 #pragma once
 #include "model/Session.h"
 #include "ui/notes/StepGrid.h"
+#include "ui/notes/NoteToolsPanel.h"
 #include "ProjectFiles.h"
 #include "ui/shared/Theme.h"
 #include "ui/arrangement/Arrangement.h"
@@ -141,6 +142,8 @@ private:
     TransportDisplay position;
     BrowserPanel browser;
     StepGrid grid;
+    // Down the note editor's left in the same pane, after the grid it acts on.
+    NoteToolsPanel noteTools {session, grid};
     Arrangement arrangement;
     DjView djView;
     DeviceRack rack;
@@ -162,7 +165,6 @@ private:
     ViewToggle arrangementToggle {"Arrange", BinaryData::arrangement_view_svg, BinaryData::arrangement_view_svgSize};
     juce::ComboBox editorResolution;
     juce::TextButton editorZoomOut, editorZoomIn;
-    juce::ComboBox scaleHighlight;
     ComputerKeyboard computerKeyboard;
     juce::Component::SafePointer<juce::DialogWindow> preferences;
     PreferencesPanel::Tab lastPreferencesTab = PreferencesPanel::Tab::audio;

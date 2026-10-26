@@ -99,7 +99,7 @@
                 "Folding is a view setting: the audio still goes where it did");
 
         scenario("track groups: the disclosure folds and unfolds");
-        require(view.disclosureBounds(bus).getX() >= view.cardControlsWidth + view.cardDividerWidth
+        require(view.disclosureBounds(bus).getX() >= view.cardControlsRight() + view.cardDividerWidth
                     && view.disclosureBounds(bus).getRight() <= static_cast<float>(view.trackNameBounds(bus).getX()),
                 "The bus's arrow sits on the name side of its card, ahead of the name");
         clickAt(view.disclosureBounds(bus).getCentre());

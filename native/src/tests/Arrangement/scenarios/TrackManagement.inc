@@ -204,10 +204,10 @@
             // fills in on the next layout pass is the bug this covers.
             require(!view.mute[card]->getBounds().isEmpty() && !view.volume[card]->getBounds().isEmpty(),
                     "A new card is placed as soon as its track exists");
-            require(view.mute[card]->getRight() <= static_cast<int>(view.cardControlsWidth)
-                        && view.arm[card]->getRight() <= static_cast<int>(view.cardControlsWidth)
-                        && view.volume[card]->getRight() <= static_cast<int>(view.cardControlsWidth)
-                        && view.pan[card]->getRight() <= static_cast<int>(view.cardControlsWidth),
+            require(view.mute[card]->getRight() <= static_cast<int>(view.cardControlsRight())
+                        && view.arm[card]->getRight() <= static_cast<int>(view.cardControlsRight())
+                        && view.volume[card]->getRight() <= static_cast<int>(view.cardControlsRight())
+                        && view.pan[card]->getRight() <= static_cast<int>(view.cardControlsRight()),
                     "Every control stays in the controls column, clear of the name");
             require(view.volume[card]->getWidth() == view.pan[card]->getWidth(),
                     "The two faders are the same width");
@@ -247,8 +247,8 @@
                     && view.masterVolume.getBottom() <= view.masterLane().getBottom()
                     && view.masterPan.getBottom() <= view.masterLane().getBottom(),
                 "The main level and pan sit on that line beside its name");
-        require(view.masterVolume.getX() == Arrangement::cardControlLeft
-                    && view.masterPan.getRight() <= static_cast<int>(Arrangement::cardControlsWidth),
+        require(view.masterVolume.getX() == view.cardControlsLeft()
+                    && view.masterPan.getRight() <= static_cast<int>(view.cardControlsRight()),
                 "The main row is a card: its faders over a track's, its name in the card's other column");
 
         // The main row is pinned at the bottom, so it is dragged from the top
@@ -364,8 +364,8 @@
             const auto cardOf = [&view](juce::Rectangle<float> row)
             {
                 return row.withTrimmedBottom(view.trackDividerThickness).toNearestInt()
-                          .withLeft(static_cast<int>(view.cardControlsWidth) - 6)
-                          .withRight(static_cast<int>(view.cardControlsWidth));
+                          .withLeft(static_cast<int>(view.cardControlsRight()) - 6)
+                          .withRight(static_cast<int>(view.cardControlsRight()));
             };
             require(view.lane(1).getBottom() <= view.lanesTop + view.laneContentHeight(), "Both rows are on screen");
             const auto firstSelected = picture(0);

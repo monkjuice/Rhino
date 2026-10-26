@@ -297,15 +297,15 @@ void Arrangement::paintTrackCards(juce::Graphics& g)
             // colour. The clips on the track keep whatever colours they were given.
             // A card inside a group starts at its indent instead of at the edge.
             const auto indent = trackIndent(track);
-            const auto nameColumn = juce::Rectangle<float>(indent + cardControlsWidth + cardDividerWidth, row.getY(),
-                                                           headerWidth - indent - cardControlsWidth - cardDividerWidth,
+            const auto nameColumn = juce::Rectangle<float>(indent + cardControlsRight() + cardDividerWidth, row.getY(),
+                                                           headerWidth - indent - cardControlsRight() - cardDividerWidth,
                                                            row.getHeight());
             const auto colour = factsFor(track).colour;
             const auto cardColour = colour.isTransparent() ? palette::control.brighter(0.18f) : colour;
             g.setColour(cardColour);
             g.fillRect(nameColumn);
             g.setColour(palette::border);
-            g.fillRect(indent + cardControlsWidth, row.getY(), cardDividerWidth, row.getHeight());
+            g.fillRect(indent + cardControlsRight(), row.getY(), cardDividerWidth, row.getHeight());
             paintGroupGutter(g, track, row);
             if (isTrackArmed(track))
             {
@@ -437,12 +437,12 @@ void Arrangement::paint(juce::Graphics& g)
         g.setColour(palette::trackCard);
         g.fillRect(band.withWidth(headerWidth));
         const auto cardColour = mainColour.isTransparent() ? palette::control.brighter(0.18f) : mainColour;
-        const auto nameColumn = band.withX(cardControlsWidth + cardDividerWidth)
-                                    .withWidth(headerWidth - cardControlsWidth - cardDividerWidth);
+        const auto nameColumn = band.withX(cardControlsRight() + cardDividerWidth)
+                                    .withWidth(headerWidth - cardControlsRight() - cardDividerWidth);
         g.setColour(cardColour);
         g.fillRect(nameColumn);
         g.setColour(palette::border);
-        g.fillRect(cardControlsWidth, band.getY(), cardDividerWidth, band.getHeight());
+        g.fillRect(cardControlsRight(), band.getY(), cardDividerWidth, band.getHeight());
         // Selected, it is lit along its row as a track is.
         if (isMasterSelected())
         {

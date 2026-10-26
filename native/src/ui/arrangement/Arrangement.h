@@ -874,9 +874,15 @@ private:
     // it: cardMeterInset from the card's edge, and what is left before
     // cardControlLeft between it and the controls.
     static constexpr int cardMeterInset = 9;
-    // The send knobs' first line, from the top of the controls: level with
-    // the faders, across the name column, under the name.
-    static constexpr int sendLineTop = 21;
+    // The send knobs stand in a column of their own between the meter and the
+    // controls, one return under another from the button line down. While the
+    // song has returns that column pushes every card's controls right, the
+    // main row's and the returns' included so the columns stay aligned, and
+    // the name column starts that much later. A knob the row is too short for
+    // is left off until the row is made taller; the card never grows for one.
+    int sendColumnWidth() const;
+    int cardControlsLeft() const { return cardControlLeft + sendColumnWidth(); }
+    float cardControlsRight() const { return cardControlsWidth + static_cast<float>(sendColumnWidth()); }
     // A return's row until it is resized: the mixer line and no more, so the
     // pinned block takes little from the lanes. The block gives up its rows'
     // height in proportion past half the room above the main row.

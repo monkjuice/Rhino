@@ -182,12 +182,12 @@
             require(view.trackInput[static_cast<size_t>(voiceTrack)]->getButtonText().startsWith("Default In"),
                     "while the audio track's shows what it records");
             require(view.trackInput[static_cast<size_t>(carrierTrack)]->getRight()
-                        <= static_cast<int>(view.trackIndent(carrierTrack) + view.cardControlsWidth),
+                        <= static_cast<int>(view.trackIndent(carrierTrack) + view.cardControlsRight()),
                     "Both stay inside the controls column with the rest");
             require(view.monitor.size() == static_cast<size_t>(session.trackCount()),
                     "and every card carries the monitor control beside it");
             require(view.monitor[static_cast<size_t>(carrierTrack)]->getRight()
-                        <= static_cast<int>(view.trackIndent(carrierTrack) + view.cardControlsWidth),
+                        <= static_cast<int>(view.trackIndent(carrierTrack) + view.cardControlsRight()),
                     "which stays in the column too");
 
             scenario("vocoder: putting the session back");

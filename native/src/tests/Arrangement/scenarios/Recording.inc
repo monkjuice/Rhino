@@ -66,7 +66,7 @@
             // A card inside a group is pushed right, controls and all, so the
             // column it has to stay inside moves with it.
             require(view.arm[static_cast<size_t>(member)]->getRight()
-                        <= static_cast<int>(view.trackIndent(member) + view.cardControlsWidth),
+                        <= static_cast<int>(view.trackIndent(member) + view.cardControlsRight()),
                     "and the dot stays in the controls column with the rest");
 
             scenario("recording: pressing record with nothing armed says so");

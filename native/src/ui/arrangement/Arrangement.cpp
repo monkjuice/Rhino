@@ -144,7 +144,7 @@ void Arrangement::resized()
         const auto top = static_cast<int>(row.getY() - areaTop) + cardControlsTop;
         // A card inside a group is pushed right, controls and all, so the step
         // in the left edge is unbroken down the whole group.
-        const auto left = cardControlLeft + static_cast<int>(trackIndent(i));
+        const auto left = cardControlsLeft() + static_cast<int>(trackIndent(i));
         const auto right = left + cardControlWidth + cardControlGap;
         const auto mixerVisible = row.getHeight() >= mixerLaneHeight;
         // A track that takes an input gets both of the lines that describe it:
@@ -189,24 +189,21 @@ void Arrangement::resized()
         meters[index]->setBounds(cardMeterInset + static_cast<int>(trackIndent(i)), top, LevelMeter::width,
                                  std::max(0, static_cast<int>(row.getHeight() - trackDividerThickness)
                                                  - 2 * cardControlsTop));
-        // The sends sit under the name, from where it starts, level with the
-        // faders, wrapping onto a line below while the row has room for one;
-        // a row too short for a line keeps its knobs off the card, as one too
-        // short for the faders keeps those.
-        if (index < sends.size() && !sends[index].empty())
+        // The sends stand in their column between the meter and the controls,
+        // one return under another from the button line down. A knob the row
+        // has no room for is left off rather than the card grown for it: a
+        // row dragged taller brings it back.
+        if (index < sends.size())
         {
             const auto& knobs = sends[index];
-            const auto first = static_cast<int>(disclosureBounds(i).getRight() + disclosureGap);
+            const auto column = cardControlLeft + static_cast<int>(trackIndent(i));
             const auto pitch = SendKnob::size + cardControlGap;
-            const auto perLine = std::max(1, (static_cast<int>(headerWidth) - 6 - first + cardControlGap) / pitch);
+            const auto room = row.getHeight() - trackDividerThickness;
             for (size_t knob = 0; knob < knobs.size(); ++knob)
             {
-                const auto line = static_cast<int>(knob) / perLine;
-                const auto offset = sendLineTop + line * pitch;
-                knobs[knob]->setBounds(first + (static_cast<int>(knob) % perLine) * pitch, top + offset,
-                                       SendKnob::size, SendKnob::size);
-                knobs[knob]->setVisible(visible && row.getHeight() >= static_cast<float>(cardControlsTop + offset
-                                                                                       + SendKnob::size + 4));
+                const auto offset = static_cast<int>(knob) * pitch;
+                knobs[knob]->setBounds(column, top + offset, SendKnob::size, SendKnob::size);
+                knobs[knob]->setVisible(visible && static_cast<float>(cardControlsTop + offset + SendKnob::size) <= room);
             }
         }
     }
@@ -216,8 +213,8 @@ void Arrangement::resized()
         // name on its colour in the card's other column.
         const auto master = masterLane();
         const auto controlsY = static_cast<int>(master.getY()) + 5;
-        masterVolume.setBounds(cardControlLeft, controlsY, cardControlWidth, 16);
-        masterPan.setBounds(cardControlLeft + cardControlWidth + cardControlGap, controlsY, cardControlWidth, 16);
+        masterVolume.setBounds(cardControlsLeft(), controlsY, cardControlWidth, 16);
+        masterPan.setBounds(cardControlsLeft() + cardControlWidth + cardControlGap, controlsY, cardControlWidth, 16);
         masterMeter.setBounds(cardMeterInset, controlsY, LevelMeter::width,
                               std::max(0, static_cast<int>(master.getBottom()) - 5 - controlsY));
     }
@@ -235,6 +232,11 @@ void Arrangement::resized()
                              std::max(1, pinnedTop - static_cast<int>(lanesTop)));
     updateScroll();
     updatePlayhead();
+}
+
+int Arrangement::sendColumnWidth() const
+{
+    return returns.empty() ? 0 : SendKnob::size + cardControlGap;
 }
 
 juce::Component& Arrangement::headerFor(int track)

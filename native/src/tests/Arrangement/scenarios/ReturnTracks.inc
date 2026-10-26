@@ -194,6 +194,9 @@
                 cards.sync();
                 for (const auto& knobs : cards.sends)
                     require(knobs.empty(), "and no card shows a send knob");
+                require(cards.mute[0]->getX() == Arrangement::cardControlLeft
+                            && std::abs(cards.cardControlsRight() - Arrangement::cardControlsWidth) < 0.001f,
+                        "nor gives up room for a column of them");
             }
             int added = -1;
             require(song.addReturnTrack(&added).wasOk() && added == 4 && song.isReturnTrack(4)
@@ -361,13 +364,15 @@
                 const auto& knobs = cards.sends[static_cast<size_t>(track)];
                 require(knobs.size() == (track < first ? size_t {2} : size_t {0}),
                         "Two knobs on every card but a return's, which sends to no other");
+                const auto index = static_cast<size_t>(track);
                 for (size_t knob = 0; knob < knobs.size(); ++knob)
                 {
-                    const auto bounds = knobs[knob]->getBounds().translated(0, static_cast<int>(Arrangement::lanesTop));
-                    const auto name = cards.trackNameBounds(track);
-                    require(knobs[knob]->isVisible() && bounds.getX() >= name.getX() && bounds.getRight() <= static_cast<int>(Arrangement::headerWidth)
-                                && bounds.getY() >= name.getBottom() && static_cast<float>(bounds.getBottom()) <= cards.lane(track).getBottom(),
-                            "under the name, on the card");
+                    const auto bounds = knobs[knob]->getBounds();
+                    require(knobs[knob]->isVisible() && knobs[knob]->getParentComponent() == cards.mute[index]->getParentComponent()
+                                && bounds.getX() > cards.meters[index]->getRight() && bounds.getRight() < cards.mute[index]->getX()
+                                && bounds.getRight() < cards.volume[index]->getX()
+                                && bounds.getY() == cards.mute[index]->getY() + static_cast<int>(knob) * (SendKnob::size + Arrangement::cardControlGap),
+                            "in a column of their own between the meter and the buttons, one under another");
                     require(knobs[knob]->letter() == (knob == 0 ? "A" : "B")
                                 && knobs[knob]->getValue() <= Session::minimumSendDb,
                             "lettered for its return, and at nothing");
@@ -376,6 +381,21 @@
             require(cards.factsFor(first).returnLetter == "A" && cards.factsFor(first + 1).returnLetter == "B"
                         && cards.factsFor(0).returnLetter.isEmpty(),
                     "A return's card is called by its letter");
+            require(cards.mute[static_cast<size_t>(first)]->getX() == cards.mute[0]->getX()
+                        && cards.masterVolume.getX() == cards.volume[0]->getX(),
+                    "and its controls, and the main row's, line up with the cards that carry knobs");
+            // A row too short for a knob leaves it off rather than growing:
+            // a taller row, made by hand, brings it back.
+            require(song.setTrackLaneHeight(0, Arrangement::minimumLaneHeight).wasOk(), "A track at its one line");
+            cards.sync();
+            cards.resized();
+            require(std::abs(cards.lane(0).getHeight() - Arrangement::minimumLaneHeight) < 0.001f
+                        && cards.sends[0][0]->isVisible() && !cards.sends[0][1]->isVisible(),
+                    "keeps the knob that fits and leaves the other off, at the height it was given");
+            require(song.setTrackLaneHeight(0, 0.0f).wasOk(), "and back to its fitted height");
+            cards.sync();
+            cards.resized();
+            require(cards.sends[0][1]->isVisible(), "which has room for both");
             require(!cards.arm[static_cast<size_t>(first)]->isVisible() && !cards.trackInput[static_cast<size_t>(first)]->isVisible(),
                     "and has no record dot and no input");
 

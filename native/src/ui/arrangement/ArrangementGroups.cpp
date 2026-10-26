@@ -121,7 +121,7 @@ void Arrangement::toggleTrackSelection(int track)
 juce::Rectangle<float> Arrangement::disclosureBounds(int track) const
 {
     const auto row = lane(track);
-    return {trackIndent(track) + cardControlsWidth + cardDividerWidth + disclosureLeft,
+    return {trackIndent(track) + cardControlsRight() + cardDividerWidth + disclosureLeft,
             row.getY() + cardControlsTop + 2.0f, disclosureSize, disclosureSize};
 }
 

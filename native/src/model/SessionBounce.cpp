@@ -70,32 +70,6 @@ namespace
 // that can never finish keeps the window waiting.
 constexpr double bounceStallSeconds = 15.0;
 
-// A property written for the length of a render and put back after it,
-// outside the undo history.
-class ScopedProperty
-{
-public:
-    ScopedProperty(juce::ValueTree tree, const juce::Identifier& id, const juce::var& value)
-        : state(std::move(tree)), property(id), had(state.hasProperty(id)), previous(state.getProperty(id))
-    {
-        state.setProperty(property, value, nullptr);
-    }
-    ~ScopedProperty()
-    {
-        if (had)
-            state.setProperty(property, previous, nullptr);
-        else
-            state.removeProperty(property, nullptr);
-    }
-
-private:
-    juce::ValueTree state;
-    juce::Identifier property;
-    bool had = false;
-    juce::var previous;
-    JUCE_DECLARE_NON_COPYABLE(ScopedProperty)
-};
-
 tracktion::core::TimePosition at(double seconds)
 {
     return tracktion::core::TimePosition::fromSeconds(seconds);
@@ -118,10 +92,7 @@ struct RenderInFlight
         {
             if (auto* volume = alone->getVolumePlugin())
                 fader.emplace(volume->state, te::IDs::enabled, false);
-            // Where TrackOutput keeps the name of what the track plays into.
-            const auto output = alone->state.getChildWithName(te::IDs::OUTPUTDEVICES).getChildWithName(te::IDs::DEVICE);
-            if (!alone->getOutput().usesDefaultAudioOut() && output.isValid())
-                route.emplace(output, te::IDs::name, te::DeviceManager::getDefaultAudioOutDeviceName(false));
+            route.emplace(*alone);
         }
         te::Renderer::Parameters parameters(edit);
         parameters.destFile = file;
@@ -151,7 +122,8 @@ struct RenderInFlight
     te::Track::Array tracks;
     const te::FreezePointPlugin::ScopedTrackSoloIsolator isolator;
     const te::Renderer::ScopedClipSlotDisabler slotDisabler;
-    std::optional<ScopedProperty> fader, route;
+    std::optional<ScopedProperty> fader;
+    std::optional<ScopedStraightOut> route;
     juce::File destination;
     std::atomic<float> progress {0.0f};
     juce::WavAudioFormat wav;

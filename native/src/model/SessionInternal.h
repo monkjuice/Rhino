@@ -325,6 +325,49 @@ juce::Result renderTaskOutcome(const te::Renderer::RenderTask&, bool stalled, do
 // when ten thousand are taken.
 juce::File nextRenderFile(const juce::File& folder, const juce::String& trackName, const juce::String& kind);
 
+// A property written for the length of a render and put back after it,
+// outside the undo history.
+class ScopedProperty
+{
+public:
+    ScopedProperty(juce::ValueTree tree, const juce::Identifier& id, const juce::var& value)
+        : state(std::move(tree)), property(id), had(state.hasProperty(id)), previous(state.getProperty(id))
+    {
+        state.setProperty(property, value, nullptr);
+    }
+    ~ScopedProperty()
+    {
+        if (had)
+            state.setProperty(property, previous, nullptr);
+        else
+            state.removeProperty(property, nullptr);
+    }
+
+private:
+    juce::ValueTree state;
+    juce::Identifier property;
+    bool had = false;
+    juce::var previous;
+    JUCE_DECLARE_NON_COPYABLE(ScopedProperty)
+};
+
+// A track that feeds another, a group's member feeding its bus, is built only
+// as an input of the track it feeds: createNodeForEdit at 4536d8a skips any
+// track whose output names another track, so a render of the track on its own
+// finds no audio at all ("Didn't find any audio to render"). For as long as
+// this lives the track plays straight to the main output instead, written
+// outside the undo history; a track already going there is left alone. Make
+// it before the render task, which builds its graph when it is made, and let
+// it go after.
+class ScopedStraightOut
+{
+public:
+    explicit ScopedStraightOut(te::AudioTrack&);
+
+private:
+    std::optional<ScopedProperty> route;
+};
+
 // An audio clip's own envelopes (SessionClipEnvelopes.cpp). Kept on the clip's
 // state as one child per envelope with points, in seconds of the clip's
 // content, and played by hidden devices at the head of the clip's own plugin

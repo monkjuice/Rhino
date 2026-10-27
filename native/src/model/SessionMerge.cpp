@@ -26,6 +26,10 @@
 // that same list, so they are left out of the file too - and carried onto the
 // merged clip instead, still envelopes, over the stretch each one covered.
 //
+// A track in a group is pointed straight at the main output for the render,
+// as a bounce's is (ScopedStraightOut), so its clips are heard without the
+// bus; without that the engine finds no audio to render on a grouped track.
+//
 // The rendered file outlives an undo, as a recorded take does: undoing a merge
 // brings the original clips back and leaves the file on disk unreferenced.
 
@@ -264,6 +268,9 @@ juce::Result Session::mergeClips(const std::vector<te::EditItemID>& ids, MergeRe
             isolated.add(track);
             const te::FreezePointPlugin::ScopedTrackSoloIsolator isolator(*edit, isolated);
             const te::Renderer::ScopedClipSlotDisabler slotDisabler(*edit, isolated);
+            // A track in a group feeds its bus, and rendered on its own like
+            // that it renders nothing at all.
+            const ScopedStraightOut straightOut(*track);
 
             te::Renderer::Parameters parameters(*edit);
             parameters.destFile = rendered.file;

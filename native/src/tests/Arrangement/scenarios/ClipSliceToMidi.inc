@@ -180,4 +180,22 @@
                         "Struck in order, the slices play what the clip played");
             }
         }
+        // A clip on a grouped track is rendered straight out, as a merge's is:
+        // through its bus the engine finds no audio, and the transients are
+        // only found in what is heard.
+        {
+            Session grouped;
+            grouped.projectFile = sliceScratch.getChildFile("grouped.rhinoedit");
+            grouped.setTempo(120.0);
+            require(grouped.importAudio(sliceFixture).wasOk(), "The fixture imports for the group case");
+            require(grouped.groupTracks({1}, "Bus").wasOk(), "and its track is given a bus");
+            const auto group = grouped.trackGroups().front();
+            auto* lane = te::getAudioTracks(*grouped.edit)[group.firstTrack];
+            auto* bus = te::getAudioTracks(*grouped.edit)[group.busTrack];
+            Session::SliceResult made;
+            require(grouped.sliceClipToNewMidiTrack(lane->getClips().getFirst()->itemID, Session::sliceAtTransients, &made)
+                        .wasOk() && made.slices == 6,
+                    "A clip on a grouped track slices at its transients as any other does");
+            require(lane->getOutput().getDestinationTrack() == bus, "and its track feeds the bus again after the render");
+        }
         sliceScratch.deleteRecursively();

@@ -61,6 +61,9 @@ juce::Result renderClip(te::Edit& edit, te::AudioTrack& track, te::WaveAudioClip
         isolated.add(&track);
         const te::FreezePointPlugin::ScopedTrackSoloIsolator isolator(edit, isolated);
         const te::Renderer::ScopedClipSlotDisabler slotDisabler(edit, isolated);
+        // A track in a group feeds its bus, and rendered on its own like that
+        // it renders nothing at all.
+        const ScopedStraightOut straightOut(track);
         juce::WavAudioFormat wav;
         te::Renderer::Parameters parameters(edit);
         parameters.destFile = file;

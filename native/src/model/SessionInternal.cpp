@@ -576,4 +576,12 @@ juce::File nextRenderFile(const juce::File& folder, const juce::String& trackNam
     return {};
 }
 
+ScopedStraightOut::ScopedStraightOut(te::AudioTrack& track)
+{
+    // Where TrackOutput keeps the name of what the track plays into.
+    const auto output = track.state.getChildWithName(te::IDs::OUTPUTDEVICES).getChildWithName(te::IDs::DEVICE);
+    if (!track.getOutput().usesDefaultAudioOut() && output.isValid())
+        route.emplace(output, te::IDs::name, te::DeviceManager::getDefaultAudioOutDeviceName(false));
+}
+
 }

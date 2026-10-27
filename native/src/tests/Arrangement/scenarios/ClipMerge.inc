@@ -125,6 +125,43 @@
                     "The merged clip covers all three");
         }
 
+        // A track in a group feeds its bus, and the engine builds such a track
+        // only as an input of the bus, so rendered on its own it used to render
+        // nothing: "Didn't find any audio to render", and no merge on any
+        // grouped lane. It is heard straight out for the render, as a bounce is.
+        {
+            Session grouped;
+            scratchProject(grouped, "grouped");
+            require(grouped.importAudio(source.getFile()).wasOk(), "A file imports for the group fixture");
+            require(grouped.groupTracks({1}, "Bus").wasOk(), "The track is given a bus");
+            const auto group = grouped.trackGroups().front();
+            auto* lane = te::getAudioTracks(*grouped.edit)[group.firstTrack];
+            auto* bus = te::getAudioTracks(*grouped.edit)[group.busTrack];
+            require(lane->getOutput().getDestinationTrack() == bus, "and feeds it");
+            const auto leftID = lane->getClips().getFirst()->itemID;
+            require(grouped.importAudioAt(source.getFile(), group.firstTrack, 1.0).wasOk(), "A clip flush against it");
+            const auto rightID = lane->getClips().getLast()->itemID;
+
+            Session::MergeResult merged;
+            require(grouped.mergeClips({leftID, rightID}, &merged).wasOk(), "Two clips on a grouped track merge");
+            require(merged.clips.size() == 1 && lane->getClips().size() == 1, "into one clip");
+            require(lane->getOutput().getDestinationTrack() == bus, "and the track feeds its bus again after the render");
+            juce::AudioFormatManager formats;
+            formats.registerBasicFormats();
+            std::unique_ptr<juce::AudioFormatReader> reader(
+                formats.createReaderFor(grouped.audioClipMix(merged.clips.front()).sourceFile));
+            require(reader != nullptr, "The grouped merge's file can be read back");
+            juce::AudioBuffer<float> audio(static_cast<int>(reader->numChannels),
+                                           static_cast<int>(reader->lengthInSamples));
+            require(reader->read(&audio, 0, audio.getNumSamples(), 0, true, true), "Read the grouped merge's samples");
+            const auto rate = reader->sampleRate;
+            const auto loudHalf = [&audio, rate](double fromSeconds)
+            {
+                return audio.getRMSLevel(0, static_cast<int>(fromSeconds * rate), static_cast<int>(0.35 * rate));
+            };
+            require(loudHalf(0.6) > 0.2f && loudHalf(1.6) > 0.2f, "and both clips are in the file at full level");
+        }
+
         // The keyboard and the selection, through the arrangement rather than
         // the model: Ctrl+J has to reach the command, and the selection has to
         // land on what the merge made, since what it was pointing at is gone.

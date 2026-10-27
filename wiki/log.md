@@ -1414,3 +1414,12 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/renders-that-never-return.md (`ClipLoop.inc` among the scenarios before `GesturesAndPersistence.inc`)
 - updated: pages/headless-ui-snapshots.md (`RHINO_NOTE_PLAYING_KEYS_SNAPSHOT`)
 - updated: index.md (Components: Clip Loop switch; summaries of Note editor and Session)
+
+## [2026-10-27] update | The clip Loop switch moves from the note editor's footer to the head of the tools panel, larger (640d90c)
+- source: the coordinator's follow-up brief (the user's request and mid-turn correction: keep the ⟳ song-loop button, add the new switch as separate functionality), checked against native/src/ui/notes/NoteToolsPanel.h/.cpp (`LoopSwitch`, `loopHeight`, `sync`, `resized`), StepGridTools.cpp (`toggleClipLoop`), StepGrid.cpp (the ⟳ button's tooltip) and tests/Arrangement/scenarios/NotePlayingKeys.inc; committed and pushed as 640d90c, all six CTest cases pass
+- updated: pages/clip-loop.md (summary; where the switch is and why; the ⟳ button kept by the user's correction; `toggleClipLoop` and how the light follows the model; drum clips loop too; the panel-based tests; Related)
+- updated: pages/note-editor-tools-panel.md (summary, tags; a CLIP section for the Loop switch: size, `LoopSwitch` painting, the click, the tooltip; enabled on drum clips; Legato's end on a looped clip is the loop's end; tests; Related)
+- updated: pages/note-editor.md (summary; The Loop switch: the footer toggle gone, the hint back at 132 px, the switch in the tools panel; the tools-panel section; the playing-keys snapshot shows a looping clip, not a footer switch)
+- updated: pages/headless-ui-snapshots.md (`RHINO_NOTE_TOOLS_SNAPSHOT` shows the switch; `RHINO_NOTE_PLAYING_KEYS_SNAPSHOT` wording)
+- updated: pages/writing-rhino-tests.md (rule 24: a scenario's locals must not shadow the enclosing scopes', C4456)
+- updated: index.md (summaries of Clip Loop switch, Note editor and Note editor tools panel)

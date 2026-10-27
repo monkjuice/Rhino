@@ -65,13 +65,14 @@ file first ([Note editor](note-editor.md#drawing)).
 rows the kit's assigned keys and the keys its notes are on, from `NoteDrumRows.inc` in the same case, deleting any old file first
 ([Note editor drum rows](note-editor-drum-rows.md)).
 `RHINO_NOTE_TOOLS_SNAPSHOT` (commit `2220948`) writes the note editor's tools panel beside the editor, as the shell lays
-them out, with two notes selected and D major lit, from `NoteTools.inc` in the same case, deleting any old file first
+them out, with two notes selected and D major lit, from `NoteTools.inc` in the same case, deleting any old file first.
+Since commit `640d90c` the panel in that picture opens with the clip Loop switch under its CLIP heading
 ([Note editor tools panel](note-editor-tools-panel.md)). It sets a `Theme` on both for the picture only: without one
 the panel showed JUCE's rounded stock buttons and no value text in the Humanize bar.
 `RHINO_CLIP_ENVELOPE_SNAPSHOT` (commit `a1c9607`) writes the audio clip editor with an envelope drawn over its waveform,
 with the `Theme` look set, from `ClipEnvelopes.inc` in the arrangement case ([Clip envelopes](clip-envelopes.md)).
 `RHINO_NOTE_PLAYING_KEYS_SNAPSHOT` (commit `4a6a17b`) writes the note editor with a white key and a black key lit as
-keys the track is playing, with the footer's Loop switched on, from `NotePlayingKeys.inc` in the arrangement case
+keys the track is playing, on a looping clip, from `NotePlayingKeys.inc` in the arrangement case
 ([Note editor](note-editor.md#keys-the-track-is-playing)).
 
 A `juce::TreeView` cannot be seen this way opened: it lays out its rows asynchronously, so a snapshot shows an opened

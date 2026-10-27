@@ -4,7 +4,7 @@ type: guide
 summary: Choose between a unit check and a workflow scenario, follow the rules that keep scenarios sharing one Session honest, and time the interface with --profile-ui and --profile-stress.
 tags: [rhino, testing, conventions]
 sources: []
-updated: 2026-10-25
+updated: 2026-10-27
 ---
 
 # Writing Rhino tests
@@ -211,6 +211,10 @@ every scenario of `DjLiveChain.inc`).
     read earlier in the shared document, which may now be a return: `TrackManagement.inc`'s "a new card arrives
     complete" removed a return through a stale `before` and now removes the card it added
     ([Return tracks and sends](return-tracks.md#in-the-arrangement)).
+24. **Give a scenario's locals names the enclosing scopes do not already use.** A scenario's block sits inside the
+    runner's function, so a local with the same name as one declared further out hides it and raises warning C4456.
+    `ClipLoop.inc` and `NotePlayingKeys.inc` did this when they were added in `4a6a17b`, and `640d90c` renamed their
+    locals.
 
 ## Timing, not checking
 

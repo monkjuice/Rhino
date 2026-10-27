@@ -29,7 +29,7 @@ It works because `TrackOutput` recomputes its destination synchronously when tha
 
 ## Who uses it
 
-- **[Bounce to New Track](bounce-to-new-track.md)**, `RenderInFlight` in `SessionBounce.cpp`, for a track rendered before its mixer. It also holds a `ScopedProperty` setting the track's `VolumeAndPanPlugin` `enabled` to false, so the fader and pan stay out of the file; the graph builder passes a disabled plugin through (`createNodeForPlugin`, unless `includeBypassedPlugins`). The writes stay in place across the bounce's slices, safe only because nothing can edit meanwhile ([A long command runs in slices behind a modal screen](long-commands-run-in-slices.md)).
+- **[Bounce to New Track](bounce-to-new-track.md)**, `RenderInFlight` in `SessionBounce.cpp`, on the source track of **every** job since nested groups (2026-10-27, commit `7965c72`): a plain track rendered before its fader, and a group's bus rendered with its fader on. On a bus that already plays to the main output it does nothing; on a nested group's bus, which feeds the outer bus, it is what makes the render produce audio at all ([Track groups](track-groups.md#nesting)). For a plain track only, it also holds a `ScopedProperty` setting the track's `VolumeAndPanPlugin` `enabled` to false, so the fader and pan stay out of the file; the graph builder passes a disabled plugin through (`createNodeForPlugin`, unless `includeBypassedPlugins`). The writes stay in place across the bounce's slices, safe only because nothing can edit meanwhile ([A long command runs in slices behind a modal screen](long-commands-run-in-slices.md)).
 - **Ctrl+J merge**, `SessionMerge.cpp`, per track rendered ([Audio clip editor](audio-clip-editor.md#commands-that-reach-past-it)).
 - **[Slice to New MIDI Track](slice-to-new-midi-track.md)**, `SessionSliceToMidi.cpp`.
 
@@ -37,7 +37,7 @@ The merge and slice renders therefore leave out the bus, its fader and its devic
 
 ## Tests
 
-`ClipBounce.inc` checks that a member feeds its bus again after its render and that a bounced track's fader is switched back on. `ClipMerge.inc` merges two clips on a grouped member, checks both are at full level in the file and that the track feeds its bus afterwards. `ClipSliceToMidi.inc` slices a grouped member's clip at its transients (six slices) and checks the same routing afterwards.
+`ClipBounce.inc` checks that a member feeds its bus again after its render and that a bounced track's fader is switched back on, and that a nested group bounces at the same level while the outer bus's fader sits at -40 dB. `ClipMerge.inc` merges two clips on a grouped member, checks both are at full level in the file and that the track feeds its bus afterwards. `ClipSliceToMidi.inc` slices a grouped member's clip at its transients (six slices) and checks the same routing afterwards.
 
 ## Related
 

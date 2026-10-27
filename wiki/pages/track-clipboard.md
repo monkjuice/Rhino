@@ -4,7 +4,7 @@ type: component
 summary: Cut, copy, paste, duplicate and delete on whole track cards; a copy is the track's own state, pasted with new engine ids and new device keys, a bus standing for its whole group; pasted into another opened document it keeps its audio, its beats and only the sidechains that came along.
 tags: [rhino, arrangement, editing, clipboard, groups, tempo]
 sources: []
-updated: 2026-10-25
+updated: 2026-10-27
 ---
 
 # Track clipboard (cards)
@@ -25,7 +25,9 @@ Rhino's own names are renewed too:
 
 ## Groups and placement
 
-A bus stands for its whole group in all five commands, as for Bounce. A pasted bus takes a new `rhinoGroupBus` id, one past the highest in the document, and its copied members follow it. Placement is `addTrack`'s rule ([Track groups](track-groups.md)): under an open group's bus or member, plain copies join it by an explicit `trackGroupMemberID`; under a collapsed group they land below all of it; a clipboard carrying a bus always lands below the whole target group, because groups do not nest. `reconcileTrackGroups` then rewrites routing, which the copies carry by position.
+A bus stands for its whole group in all five commands, as for Bounce. A pasted bus takes a new `rhinoGroupBus` id, one past the highest in the document, and its copied members follow it, groups inside it included. Placement is `addTrack`'s rule, `Session::landingUnder` ([Track groups](track-groups.md)): under a group's bus or member, the copies' leading tracks join the innermost group there by an explicit `trackGroupMemberID`; under anything a collapsed group hides they land below the outermost collapsed group. Since 2026-10-27 (commit `7965c72`) **a copied group nests where it lands**, as any copy joins the group there; until then a clipboard carrying a bus always landed below the whole target group, because groups did not nest. A paste that would nest past ten levels is refused before anything lands ("Groups nest at most 10 levels deep."). `reconcileTrackGroups` then rewrites routing, which the copies carry by position.
+
+**Duplicate lands beside its source, at the same level.** `duplicateTracks` passes the copied tracks to `landingUnder(below, copied)`, which skips any group whose bus is being copied. Without that, a duplicated group landed under its own last member and nested inside the original.
 
 ## Into another document
 
@@ -53,7 +55,7 @@ Open: the clipboard is in-process, so two RhinoDAW instances cannot share it (th
 - **The card methods take the list by value**, because the shortcuts pass `selectedTracks`, which the session's synchronous announcement rebuilds mid-call ([What a change costs the interface](ui-cost-of-a-change.md)).
 - Pasted cards become the selection, the last the working track, so a second paste lands under the first. After a delete the card that moved into the first gap keeps the selection and focus, so Delete again takes the next.
 
-`tests/Arrangement/scenarios/TrackClipboard.inc` covers the model, groups and the shortcuts, and since `c790287` a paste of two tracks from a 120 BPM document into a 90 BPM one, both written to disk and opened: a MIDI clip and a relative sample at beat 4, a lane from beat 4 to 8, two vocoders sidechained from a copied and an uncopied track, and one undo. Untested: a track hosting Forge, and the card menu's async callback (it calls the same methods).
+`tests/Arrangement/scenarios/TrackClipboard.inc` covers the model, groups (a group pasted under a member nests; a duplicate lands beside its source, the original keeping its members) and the shortcuts; `GroupNesting.inc` duplicates a nested group and checks the copy lands beside it, inside the outer group. Since `c790287` `TrackClipboard.inc` also covers a paste of two tracks from a 120 BPM document into a 90 BPM one, both written to disk and opened: a MIDI clip and a relative sample at beat 4, a lane from beat 4 to 8, two vocoders sidechained from a copied and an uncopied track, and one undo. Untested: a track hosting Forge, and the card menu's async callback (it calls the same methods).
 
 ## Related
 

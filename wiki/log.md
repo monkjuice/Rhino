@@ -1527,3 +1527,15 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - created: pages/proprietary-licence.md (the decision and holder; what it covers; third-party files it does not; the open question of Tracktion's, JUCE's and the other compiled-in libraries' licences)
 - updated: pages/tracktion-and-juce.md (the "detail for a personal project" framing no longer holds; link to the decision; date, Related)
 - updated: index.md (the new decision)
+
+## [2026-10-27] update | Track groups nest, up to ten levels (7965c72)
+- source: the main agent's brief and its addendum, checked against native/src/model/GroupTree.h, SessionGroups.cpp (`landingUnder`, `reconcileTrackGroups`), SessionTrackClipboard.cpp, SessionBounce.cpp, Session.cpp (`refreshAfterUndoRedo`) and Arrangement.h
+- created: pages/tracktion-track-output-resolves-on-change.md (the "track N" text resolved only on change; the nested-ungroup symptom; the `reconcileTrackGroups` fix and the top-down re-resolve after undo and redo)
+- updated: pages/track-groups.md (summary; claims and reconciling; Ctrl+G on buses and inside a group; add/remove/move/landing rules; new Nesting section: levels, the limit, queries, GroupTree.h, indent and gutter bands, card menu, dragging a bus, tests; "No nesting" removed; bus-claim and "track N" pitfalls; Related)
+- updated: pages/group-is-a-bus-track.md (summary; "Groups do not nest" superseded, and why nesting stayed cheap; the routing consequence links the new gotcha)
+- updated: pages/track-clipboard.md (a copied group nests where it lands; the depth refusal; Duplicate lands beside its source via `landingUnder(below, copied)`; tests)
+- updated: pages/bounce-to-new-track.md (a nested group's bounce joins the parent group; `RenderInFlight` always straight out, fader off only for a plain track; any-ancestor bus drops a chosen track)
+- updated: pages/arrangement-view.md (the card's group indent per level)
+- updated: pages/session-model.md (`SessionGroups` over the pure header `GroupTree.h`)
+- updated: pages/bus-member-renders-nothing-alone.md (Bounce applies `ScopedStraightOut` to every job's source track, a nested group's bus included, fader off only for a plain track; the nested `ClipBounce.inc` check)
+- updated: index.md (the two group summaries; the new gotcha)

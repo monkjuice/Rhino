@@ -1,5 +1,6 @@
 #include "ArrangementInternal.h"
 #include "ui/shared/Playhead.h"
+#include <algorithm>
 #include <optional>
 #include <set>
 #include <utility>
@@ -901,22 +902,35 @@ void Arrangement::showTrackMenu(int track)
                                                                                : "Bounce to New Track")
                         + "       Ctrl+B", !returning);
     menu.addSeparator();
-    // A bus is the group, so what it offers is what happens to the group. The
-    // cards under it offer what happens to their membership.
+    // A bus is the group, so it offers what happens to the group. Any card in
+    // a group, a bus inside another among them, offers what happens to its
+    // membership, and any card but a return can be grouped: inside a group,
+    // that makes a group inside it.
     if (const auto busOf = session.trackGroupBusId(track); busOf > 0)
     {
         menu.addItem(6, groupById(busOf) != nullptr && groupById(busOf)->collapsed ? "Expand" : "Collapse");
         menu.addItem(7, "Ungroup       Ctrl+Shift+G");
     }
-    else if (session.trackGroupId(track) > 0)
+    if (session.trackGroupId(track) > 0)
         menu.addItem(4, "Remove " + subject + " from group");
-    else if (!returning)
+    if (!returning)
     {
         menu.addItem(5, "Group " + subject + "       Ctrl+G");
+        // Every group but one a chosen bus would have to go inside itself to
+        // join, indented by how deep it is.
         juce::PopupMenu existing;
         for (int i = 0; i < static_cast<int>(groups.size()); ++i)
-            existing.addItem(100 + i, groups[static_cast<size_t>(i)].name);
-        if (!groups.empty())
+        {
+            const auto& group = groups[static_cast<size_t>(i)];
+            const auto insideItself = std::any_of(targets.begin(), targets.end(), [&group, this](int target)
+            {
+                const auto* own = groupForBus(target);
+                return own != nullptr && own->covers(group.busTrack);
+            });
+            if (!insideItself)
+                existing.addItem(100 + i, juce::String::repeatedString("    ", group.level - 1) + group.name);
+        }
+        if (existing.getNumItems() > 0)
             menu.addSubMenu("Add " + subject + " to group", existing);
     }
     const auto anchor = localPointToGlobal(lane(track).getTopLeft().toInt());

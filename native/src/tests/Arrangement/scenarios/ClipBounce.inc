@@ -151,6 +151,27 @@
                     "and the bus's fader and the member's are both in the file");
             require(grouped.bounceTracksToNewTracks({group.busTrack}).failed(),
                     "A muted bus is refused rather than bounced to silence");
+
+            // A group inside another feeds the outer bus, so the engine would
+            // render nothing for it alone: it is heard after its own bus and
+            // before the outer one, and its bounce lands where it played.
+            grouped.setTrackMuted(group.busTrack, false);
+            require(grouped.groupTracks({group.busTrack}, "Outer").wasOk(), "The group goes inside another");
+            const auto outer = grouped.trackGroups().front();
+            const auto inner = grouped.trackGroups()[1];
+            require(outer.busTrack == group.busTrack && inner.parent == outer.id && inner.trackCount == 1,
+                    "a level down, its member with it");
+            require(grouped.setTrackVolumeDb(outer.busTrack, -40.0f).wasOk(), "The outer bus is turned right down");
+            require(grouped.bounceTracksToNewTracks({inner.busTrack}, &made).wasOk() && made.group,
+                    "The inner group bounces");
+            const auto nestedBelow = made.tracks.front();
+            require(nestedBelow == inner.lastTrack() + 1 && grouped.trackGroupId(nestedBelow) == outer.id
+                        && te::getAudioTracks(*grouped.edit)[nestedBelow]->getOutput().getDestinationTrack()
+                               == te::getAudioTracks(*grouped.edit)[outer.busTrack],
+                    "to a track under it inside the outer group, feeding the outer bus as the inner one did");
+            const auto nestedLevel = bounceRms(grouped.audioClipMix(made.clips.front()).sourceFile, 0.6, 0.95);
+            require(nestedLevel > groupLevel * 0.5f && nestedLevel < groupLevel * 2.0f,
+                    "and the file is the inner group after its bus, untouched by the outer bus's fader");
         }
 
         // The shortcut, through the arrangement: the selection says what is

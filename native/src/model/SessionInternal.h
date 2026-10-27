@@ -58,6 +58,13 @@ extern const juce::Identifier trackShownAutomationID;
 extern const juce::Identifier trackGroupBusID;
 extern const juce::Identifier trackGroupMemberID;
 extern const juce::Identifier trackGroupCollapsedID;
+// The stack as the group rules in GroupTree.h read it, one slot per track:
+// whose bus it is, which group it claims, and whether it is a return.
+// SessionGroups.cpp.
+std::vector<GroupSlot> groupSlotsOf(const juce::Array<te::AudioTrack*>& tracks);
+// Refuses a stack that would nest groups past maxGroupLevels once reconciled,
+// with the sentence every group command gives for it.
+juce::Result refuseDeepNesting(const std::vector<GroupSlot>& planned);
 // A return track, and the engine's aux bus it returns: the bus every track's
 // send to it names. Absent on every other track. SessionReturns.cpp.
 extern const juce::Identifier trackReturnBusID;

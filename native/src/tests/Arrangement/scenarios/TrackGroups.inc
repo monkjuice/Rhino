@@ -68,9 +68,10 @@
         require(session.insertAudioFileInSlot(source.getFile(), bus, 0).failed(),
                 "and has no cells to fill either");
 
-        scenario("track groups: one level only");
-        require(session.groupTracks({bus, 4}).failed(), "A group cannot go inside another group");
-        require(session.addTracksToGroup({bus}, bandId).failed(), "nor be added to one");
+        scenario("track groups: a group never goes inside itself");
+        require(session.addTracksToGroup({bus}, bandId).failed(), "A group cannot be added to itself");
+        require(session.trackGroups().size() == 1 && session.trackGroups().front().trackCount == 2,
+                "and refusing leaves it as it was");
 
         scenario("track groups: the cards read as one block");
         view.sync();

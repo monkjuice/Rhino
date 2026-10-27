@@ -44,6 +44,27 @@
             session.setTrackMuted(checked.busTrack, false);
             require(renderClipRms(*routed) > heard * 0.5f, "and unmuting the bus brings it back");
 
+            // A group inside another: the bus feeds the outer bus, so muting
+            // the outer one silences the member two buses away.
+            require(session.groupTracks({checked.busTrack}, "Outer check").wasOk(),
+                    "The bus can go inside a group of its own");
+            const auto outerBus = checked.busTrack;
+            require(session.trackGroupId(outerBus + 1) == session.trackGroupBusId(outerBus),
+                    "which opens where the bus was, with the bus inside it");
+            routed = session.findAudioClip(routed->itemID);
+            session.setTrackMuted(outerBus, false);
+            require(routed != nullptr && renderClipRms(*routed) > heard * 0.5f,
+                    "The member is heard through both buses");
+            session.setTrackMuted(outerBus, true);
+            require(renderClipRms(*routed) < heard * 0.05f,
+                    "and muting the outer bus silences it, which says the inner bus feeds the outer one");
+            session.setTrackMuted(outerBus, false);
+            require(session.ungroupTracks(session.trackGroupBusId(outerBus)).wasOk(), "The outer group can go again");
+            routed = session.findAudioClip(routed->itemID);
+            require(routed != nullptr && session.trackGroupBusId(outerBus) == checked.id
+                        && session.trackGroupId(outerBus) == 0,
+                    "leaving the first group where it was, at the top of the stack");
+
             require(session.ungroupTracks(checked.id).wasOk(), "The check group can be taken away");
             routed = session.findAudioClip(routed->itemID);
             require(routed != nullptr && renderClipRms(*routed) > heard * 0.5f,

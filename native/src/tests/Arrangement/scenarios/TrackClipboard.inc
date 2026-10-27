@@ -82,6 +82,8 @@
             auto groups = stack.trackGroups();
             require(groups.size() == 2 && groups[1].busTrack == 3 && groups[1].trackCount == 2 && groups[1].id != band,
                     "as a second group with an id of its own");
+            require(groups[0].trackCount == 2 && groups[1].parent == 0,
+                    "beside the first rather than inside it");
             require(destinationOf(4) == trackAt(3) && destinationOf(5) == trackAt(3) && destinationOf(1) == trackAt(0),
                     "whose members feed its own bus, while the first group's still feed theirs");
 
@@ -90,22 +92,29 @@
                         && stack.trackGroupId(2) == band && destinationOf(2) == trackAt(0),
                     "A member duplicated alone lands under itself, inside its group");
 
-            // [Bus, M, M, A, Bus, M, A, M, A]: a group cannot go inside another.
+            // [Bus, M, M, A, Bus, M, A, M, A], and a copy of the first group
+            // pasted under its own first member: it nests there.
             const auto whole = stack.copyTracks({0});
             require(whole.tracks.size() == 4, "Copying a bus copies its members");
-            require(stack.pasteTracks(whole, 1, &made).wasOk() && made.front() == 4 && stack.isGroupBusTrack(4)
-                        && stack.trackGroups().size() == 3 && stack.trackGroups()[0].trackCount == 3,
-                    "A group pasted onto a member lands below the whole group, not inside it");
+            require(stack.pasteTracks(whole, 1, &made).wasOk() && made == std::vector<int> {2, 3, 4, 5}
+                        && stack.isGroupBusTrack(2),
+                    "A group pasted onto a member lands under it");
+            groups = stack.trackGroups();
+            require(groups.size() == 3 && groups[0].trackCount == 7 && groups[1].busTrack == 2
+                        && groups[1].parent == band && groups[1].level == 2 && groups[1].trackCount == 3,
+                    "inside that group, a group within it with its own members");
+            require(destinationOf(2) == trackAt(0) && destinationOf(3) == trackAt(2) && destinationOf(6) == trackAt(0),
+                    "its members feeding its bus and its bus feeding the group around it");
 
             const auto before = stack.trackCount();
-            require(stack.removeTracks({4}).wasOk() && stack.trackCount() == before - 4
-                        && stack.trackGroups().size() == 2,
-                    "Deleting a bus deletes its group with it");
+            require(stack.removeTracks({2}).wasOk() && stack.trackCount() == before - 4
+                        && stack.trackGroups().size() == 2 && stack.trackGroups()[0].trackCount == 3,
+                    "Deleting a bus deletes its group with it, and nothing of the group around it");
             stack.undo();
             groups = stack.trackGroups();
-            require(stack.trackCount() == before && groups.size() == 3 && groups[1].busTrack == 4
-                        && groups[1].trackCount == 3 && destinationOf(5) == trackAt(4),
-                    "and one undo brings the whole group back, routed into its bus");
+            require(stack.trackCount() == before && groups.size() == 3 && groups[1].busTrack == 2
+                        && groups[1].trackCount == 3 && destinationOf(3) == trackAt(2) && destinationOf(2) == trackAt(0),
+                    "and one undo brings the whole group back inside the other, routed into its bus");
             stack.releaseAudioDevice();
         }
 

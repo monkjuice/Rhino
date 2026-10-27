@@ -152,32 +152,20 @@ juce::Result Session::duplicateTracks(const std::vector<int>& chosen, std::vecto
                                       ? "A return track is not duplicated: add another from the + menu."
                                       : "Select a track to duplicate.");
     return insertTrackCopies(copyTracks(covered), covered.back(), duplicated,
-                             covered.size() == 1 ? "Duplicate track" : "Duplicate tracks");
+                             covered.size() == 1 ? "Duplicate track" : "Duplicate tracks", covered);
 }
 
 juce::Result Session::insertTrackCopies(const TrackClipboard& clipboard, int below, std::vector<int>* inserted,
-                                        const juce::String& action)
+                                        const juce::String& action, const std::vector<int>& copied)
 {
     if (clipboard.isEmpty())
         return juce::Result::fail("Copy one or more tracks first.");
-    const auto carriesGroup = std::any_of(clipboard.tracks.begin(), clipboard.tracks.end(), [](const juce::ValueTree& state)
-    {
-        return static_cast<int>(state.getProperty(trackGroupBusID, noGroup)) != noGroup;
-    });
 
-    // addTrack's rule for where a new track goes, with one more case: a copied
-    // group cannot go inside another, so it lands below the whole of one.
-    // Under a return is the foot of the stack, which is above the returns.
-    auto after = juce::isPositiveAndBelow(below, firstReturnTrack()) ? below : -1;
-    auto joining = noGroup;
-    const auto groupId = trackGroupBusId(after) != noGroup ? trackGroupBusId(after) : trackGroupId(after);
-    if (const auto group = trackGroup(groupId))
-    {
-        if (group->collapsed || carriesGroup)
-            after = std::max(group->busTrack, group->lastTrack());
-        else
-            joining = group->id;
-    }
+    // addTrack's rule for where a new track goes, a copied group nesting
+    // where it lands as any copy joins the group there. A duplicate lands
+    // beside what it copies, so the groups it copies are not landed in. Under
+    // a return is the foot of the stack, which is above the returns.
+    const auto [after, joining] = landingUnder(below, copied);
 
     // One past the highest id in the document, as grouping takes, and one more
     // for each bus pasted.
@@ -215,22 +203,38 @@ juce::Result Session::insertTrackCopies(const TrackClipboard& clipboard, int bel
         // A copy that recorded the moment it landed would be a surprise, and
         // two tracks armed on one input record the same take twice.
         state.removeProperty(trackArmedID, nullptr);
-        // A pasted bus is a new group, and the members copied with it follow
-        // it there; any other track is in the group it lands in, or none.
+        // A pasted bus is a new group, and what was copied inside it follows
+        // it there, groups inside it included; any other track, and a bus
+        // copied without the group around it, is in the group it lands in,
+        // or none. Buses come before their members, so a group's new id is
+        // known before anything names it.
+        const auto claim = static_cast<int>(state.getProperty(trackGroupMemberID, noGroup));
         if (const auto bus = static_cast<int>(state.getProperty(trackGroupBusID, noGroup)); bus != noGroup)
         {
             copiedGroups[bus] = nextGroupId;
             state.setProperty(trackGroupBusID, nextGroupId++, nullptr);
-            state.removeProperty(trackGroupMemberID, nullptr);
         }
-        else if (const auto found = copiedGroups.find(static_cast<int>(state.getProperty(trackGroupMemberID, noGroup)));
-                 found != copiedGroups.end())
+        if (const auto found = copiedGroups.find(claim); claim != noGroup && found != copiedGroups.end())
             state.setProperty(trackGroupMemberID, found->second, nullptr);
         else if (joining != noGroup)
             state.setProperty(trackGroupMemberID, joining, nullptr);
         else
             state.removeProperty(trackGroupMemberID, nullptr);
         copies.push_back(state);
+    }
+    // A copied group nests where it lands, which may not take it past the
+    // limit. Checked before anything lands, so a refusal leaves no trace.
+    {
+        auto planned = groupSlotsOf(audioTracks());
+        std::vector<GroupSlot> landing;
+        for (const auto& state : copies)
+            landing.push_back({static_cast<int>(state.getProperty(trackGroupBusID, noGroup)),
+                               static_cast<int>(state.getProperty(trackGroupMemberID, noGroup)), false});
+        const auto at = after >= 0 ? after + 1 : firstReturnTrack();
+        planned.insert(planned.begin() + juce::jlimit(0, static_cast<int>(planned.size()), at),
+                       landing.begin(), landing.end());
+        if (const auto refused = refuseDeepNesting(planned); refused.failed())
+            return refused;
     }
     // A device played by a track that came along is played by its copy, and
     // one played by a track left in the other document by nothing.

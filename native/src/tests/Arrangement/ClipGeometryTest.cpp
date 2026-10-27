@@ -9,6 +9,7 @@
 #include "tests/VelocityCurveTest.h"
 #include "tests/ClipEnvelopeTest.h"
 #include "tests/VelocityLaneTest.h"
+#include "tests/GroupTreeTest.h"
 #include "tests/LayerLintTest.h"
 #include <algorithm>
 #include <cmath>
@@ -349,6 +350,7 @@ int runArrangementGeometryTest()
         checkVelocityCurves();
         checkClipEnvelopeRules();
         checkVelocityLane();
+        checkGroupTree();
         // The dependency direction, read off the sources (LayerLintTest.cpp).
         runLayerLintTest();
 

@@ -573,7 +573,10 @@ private:
     // ArrangementGroups.cpp
     const Session::TrackGroup* groupById(int groupId) const;
     const Session::TrackGroup* groupForBus(int track) const;
+    // The innermost group a track is inside, and how many it is inside.
     const Session::TrackGroup* groupContaining(int track) const;
+    int groupDepth(int track) const;
+    // Inside a folded group at any level.
     bool isTrackHidden(int track) const;
     float trackIndent(int track) const;
     bool isTrackSelected(int track) const;
@@ -887,8 +890,10 @@ private:
     static constexpr float countTick = 12.0f, rulerMinorTick = 4.0f;
     // A group's members are pushed right by groupIndent, and the gap that opens
     // up is filled with the bus's colour. The step in the left edge is what
-    // tells a card inside a group from one below it at a glance.
-    static constexpr float groupIndent = 13.0f, groupSpineLeft = 3.0f;
+    // tells a card inside a group from one below it at a glance. Each group
+    // further in pushes its cards right by nestedGroupIndent more, a narrower
+    // band in its own colour, so ten levels still leave the card its name.
+    static constexpr float groupIndent = 13.0f, groupSpineLeft = 3.0f, nestedGroupIndent = 4.0f;
     // The fold arrow every card carries before its name, and the room the name
     // gives up to it.
     static constexpr float disclosureSize = 13.0f, disclosureLeft = 2.0f, disclosureGap = 4.0f;

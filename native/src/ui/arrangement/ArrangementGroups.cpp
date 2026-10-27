@@ -8,8 +8,8 @@
 // and no row type of its own: the group's row is an ordinary card with an
 // ordinary fader, mute, solo and name, drawn from the same code as every other
 // card. What this file adds is only what makes the grouping legible - the
-// disclosure that folds the members away, the step in the left edge that says
-// which cards are inside, and the multi-card selection that grouping acts on.
+// disclosure that folds the members away, the steps in the left edge, one per
+// group a card is inside, and the multi-card selection that grouping acts on.
 // The disclosure is the same arrow every card carries before its name, which on
 // any other card folds the row itself down to its one line.
 //
@@ -45,25 +45,42 @@ const Session::TrackGroup* Arrangement::groupForBus(int track) const
     return nullptr;
 }
 
+// The groups are in stack order, so a group inside another comes after it and
+// the last one holding the track is the innermost.
 const Session::TrackGroup* Arrangement::groupContaining(int track) const
 {
+    const Session::TrackGroup* innermost = nullptr;
     for (const auto& group : groups)
         if (group.contains(track))
-            return &group;
-    return nullptr;
+            innermost = &group;
+    return innermost;
 }
 
+// The groups holding a track are one inside another, a level each, so the
+// deepest level among them is how many there are.
+int Arrangement::groupDepth(int track) const
+{
+    auto depth = 0;
+    for (const auto& group : groups)
+        if (group.contains(track))
+            depth = std::max(depth, group.level);
+    return depth;
+}
+
+// Folding any group a track is inside hides it, however far in it is.
 bool Arrangement::isTrackHidden(int track) const
 {
-    const auto* group = groupContaining(track);
-    return group != nullptr && group->collapsed;
+    return std::any_of(groups.begin(), groups.end(),
+                       [track](const Session::TrackGroup& group) { return group.collapsed && group.contains(track); });
 }
 
-// A card inside a group starts further right. Its bus does not: the step in the
-// left edge is what says which side of the group a card is on.
+// A card inside a group starts further right, and further again for each group
+// further in. Its bus does not: the step in the left edge is what says which
+// side of the group a card is on.
 float Arrangement::trackIndent(int track) const
 {
-    return groupContaining(track) != nullptr ? groupIndent : 0.0f;
+    const auto depth = groupDepth(track);
+    return depth == 0 ? 0.0f : groupIndent + static_cast<float>(depth - 1) * nestedGroupIndent;
 }
 
 bool Arrangement::isTrackArmed(int track) const
@@ -173,13 +190,20 @@ void Arrangement::paintDisclosure(juce::Graphics& g, int track, juce::Colour col
 }
 
 // What tells a group's members apart on the cards: the colour of their bus
-// filling the step every member is pushed right by.
+// filling the step every member is pushed right by, one band for each group a
+// card is inside, outermost at the edge. A pixel is left between nested
+// bands, so two groups in the default colour still read as two.
 void Arrangement::paintGroupGutter(juce::Graphics& g, int track, juce::Rectangle<float> row)
 {
-    if (const auto* member = groupContaining(track))
+    for (const auto& group : groups)
     {
-        g.setColour(bandColour(*member).withAlpha(0.9f));
-        g.fillRect(groupSpineLeft, row.getY(), groupIndent - groupSpineLeft, row.getHeight());
+        if (!group.contains(track))
+            continue;
+        const auto left = group.level == 1 ? groupSpineLeft
+                                           : groupIndent + static_cast<float>(group.level - 2) * nestedGroupIndent + 1.0f;
+        const auto right = groupIndent + static_cast<float>(group.level - 1) * nestedGroupIndent;
+        g.setColour(bandColour(group).withAlpha(0.9f));
+        g.fillRect(left, row.getY(), right - left, row.getHeight());
     }
 }
 

@@ -209,6 +209,7 @@ target_sources(RhinoNative PRIVATE
     src/tests/VelocityCurveTest.cpp
     src/tests/ClipEnvelopeTest.cpp
     src/tests/VelocityLaneTest.cpp
+    src/tests/GroupTreeTest.cpp
     src/tests/Arrangement/WorkflowTest.cpp)
 target_include_directories(RhinoNative PRIVATE src)
 target_compile_definitions(RhinoNative PRIVATE

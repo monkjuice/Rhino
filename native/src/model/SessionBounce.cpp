@@ -78,22 +78,22 @@ tracktion::core::TimePosition at(double seconds)
 // One job's render, and everything it holds in place while it runs. The task
 // is the last member, so it goes before anything it relies on is put back.
 //
-// `alone` names a track rendered before its mixer: its fader is switched off
-// and, if it feeds a bus, it is sent straight out instead. A group is rendered
-// with no track alone, its members feeding its bus as they do in the song.
+// `alone` names the track whose output is the render. If it feeds a bus it is
+// sent straight out instead, since the engine renders nothing for a track
+// that plays into another. A track is rendered before its mixer, its fader
+// switched off; a group, `afterFader`, is its bus with the fader on, its
+// members feeding it as they do in the song.
 struct RenderInFlight
 {
-    RenderInFlight(te::Edit& edit, te::Track::Array rendered, te::AudioTrack* alone,
+    RenderInFlight(te::Edit& edit, te::Track::Array rendered, te::AudioTrack& alone, bool afterFader,
                    const juce::Array<te::Clip*>& clips, tracktion::core::TimeRange span,
                    const juce::File& file, double sampleRate, int blockSize)
         : tracks(std::move(rendered)), isolator(edit, tracks), slotDisabler(edit, tracks), destination(file)
     {
-        if (alone != nullptr)
-        {
-            if (auto* volume = alone->getVolumePlugin())
+        if (!afterFader)
+            if (auto* volume = alone.getVolumePlugin())
                 fader.emplace(volume->state, te::IDs::enabled, false);
-            route.emplace(*alone);
-        }
+        route.emplace(alone);
         te::Renderer::Parameters parameters(edit);
         parameters.destFile = file;
         parameters.audioFormat = &wav;
@@ -276,12 +276,16 @@ juce::Result Session::startBounceTracks(const std::vector<int>& requested)
     chosen.erase(std::unique(chosen.begin(), chosen.end()), chosen.end());
     if (chosen.empty())
         return juce::Result::fail("Select a track or a group to bounce. The main row cannot be bounced.");
-    // A member chosen with its own bus is already in the group's bounce.
+    // A track chosen with the bus of a group it is inside, however deep, is
+    // already in that group's bounce.
     const auto asked = chosen;
-    std::erase_if(chosen, [this, &asked](int track)
+    const auto groups = trackGroups();
+    std::erase_if(chosen, [&groups, &asked](int track)
     {
-        const auto group = trackGroup(trackGroupId(track));
-        return group.has_value() && std::find(asked.begin(), asked.end(), group->busTrack) != asked.end();
+        return std::any_of(groups.begin(), groups.end(), [track, &asked](const TrackGroup& group)
+        {
+            return group.contains(track) && std::find(asked.begin(), asked.end(), group.busTrack) != asked.end();
+        });
     });
 
     std::vector<BounceJob> jobs;
@@ -296,11 +300,14 @@ juce::Result Session::startBounceTracks(const std::vector<int>& requested)
         if (const auto group = trackGroup(trackGroupBusId(track)))
         {
             // After the bus, at unity: the bus's own fader is in the file.
+            // Groups inside it are rendered with it, and a group inside
+            // another lands in that one, where its bus played.
             job.group = true;
             for (auto member = group->firstTrack; member <= group->lastTrack(); ++member)
                 job.members.push_back(member);
             playing = job.members;
             job.after = group->trackCount > 0 ? group->lastTrack() : group->busTrack;
+            job.joinGroup = trackGroupId(track);
         }
         else
         {
@@ -412,7 +419,7 @@ bool Session::continueBounce(double milliseconds)
             juce::Array<te::Clip*> clips;
             for (auto* clip : job.clips)
                 clips.add(clip);
-            run.render = std::make_unique<RenderInFlight>(*edit, rendered, job.group ? nullptr : tracks[job.track], clips,
+            run.render = std::make_unique<RenderInFlight>(*edit, rendered, *tracks[job.track], job.group, clips,
                                                           tracktion::core::TimeRange(at(job.start), at(job.end)),
                                                           job.file, run.sampleRate, run.blockSize);
         }

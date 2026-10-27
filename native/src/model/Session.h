@@ -4,6 +4,7 @@
 #include "DeviceCatalog.h"
 #include "DeviceDisplay.h"
 #include "ClipGeometry.h"
+#include "GroupTree.h"
 #include "VelocityCurve.h"
 #include "dsp/ClipEnvelope.h"
 #include <array>
@@ -546,8 +547,9 @@ public:
     // track arrives where the person is working; with no track named - the
     // main row, or -1 - it goes at the foot of the stack. A group folded away
     // shows as one row, so a track added under any part of it lands under
-    // the whole group rather than out of sight inside it. `added`, when
-    // given, receives the new track's index.
+    // the whole of the outermost folded group, in the group around that,
+    // rather than out of sight inside it. `added`, when given, receives the
+    // new track's index.
     juce::Result addTrack(TrackType, int below = -1, int* added = nullptr);
     // Shorthand for addTrack(TrackType::audio), kept because most callers - an
     // import, a drop below the last lane - want a track for audio and say so.
@@ -574,9 +576,9 @@ public:
     };
     TrackClipboard copyTracks(const std::vector<int>& tracks) const;
     // Lands the copies directly under `below`, by addTrack's rule: under an
-    // open group's bus or one of its members the copies join that group,
-    // under a folded one they go below all of it, and a copied group, which
-    // cannot go inside another, always goes below the whole group. Nothing
+    // open group's bus or anything inside it the copies join that group, a
+    // copied group nesting there, and under a folded one they go below all of
+    // it. Refused when a copied group would nest past maxGroupLevels. Nothing
     // named lands them at the foot of the stack. One undo step; `pasted`
     // receives the new tracks' indices, top to bottom.
     //
@@ -634,36 +636,52 @@ public:
     // reaches a bus without a second code path - but it takes audio effects
     // only: a sum has nothing for an instrument to play, no sequence for a MIDI
     // effect to act on, and nowhere to put a clip.
+    //
+    // A bus can itself be inside another group, so groups nest - up to
+    // maxGroupLevels (GroupTree.h) deep - and a nested bus feeds the bus of
+    // the group it is in. Every command that could nest one deeper than that
+    // refuses instead.
     struct TrackGroup
     {
         int id = 0;
         int busTrack = -1;
+        int parent = 0;  // the group its bus is inside, or 0 at the top of the stack
+        int level = 1;   // 1 at the top of the stack, 2 inside a group, and so on
         juce::String name;
         juce::Colour colour;
         bool collapsed = false;
-        int firstTrack = 0;  // the first member, always busTrack + 1
-        int trackCount = 0;  // the members, not counting the bus
+        int firstTrack = 0;  // the first track inside it, always busTrack + 1
+        int trackCount = 0;  // everything inside it, nested groups whole, not counting the bus
         int lastTrack() const { return firstTrack + trackCount - 1; }
         bool contains(int track) const { return trackCount > 0 && track >= firstTrack && track <= lastTrack(); }
         bool covers(int track) const { return track == busTrack || contains(track); }
     };
-    // In track order, one entry per bus. A bus with no members is still a group.
+    // In track order, one entry per bus, so a group comes before every group
+    // inside it. A bus with no members is still a group.
     std::vector<TrackGroup> trackGroups() const;
     std::optional<TrackGroup> trackGroup(int groupId) const;
     // Zero is "not in a group", so it can never be mistaken for a group index.
-    // A bus is not a member of its own group: it answers the second of these.
+    // The first is the group a track is directly inside; a bus answers the
+    // second with its own group and the first with the group it is inside.
     int trackGroupId(int track) const;
     int trackGroupBusId(int track) const;
     bool isGroupBusTrack(int track) const;
-    // Grouping makes a bus and carries the tracks under it: they end up as one
-    // run starting where the topmost of them already was.
+    // Grouping makes a bus and carries the tracks under it, a bus among them
+    // bringing its whole group: they end up as one run starting where the
+    // topmost of them already was, inside whatever group that was in. A
+    // selection inside a group therefore makes a group inside it.
     juce::Result groupTracks(std::vector<int> tracks, const juce::String& name = {});
+    // The group stays where it is and the tracks join it at the end of its
+    // run, a bus with its whole group. A group never goes inside itself.
     juce::Result addTrackToGroup(int track, int groupId);
     juce::Result addTracksToGroup(std::vector<int> tracks, int groupId);
+    // A track, or a bus with its whole group, steps out of the group it is
+    // directly inside to just below it, into the group around that one.
     juce::Result removeTrackFromGroup(int track);
     juce::Result removeTracksFromGroup(std::vector<int> tracks);
-    // Deletes the bus and hands its members back to the main output. The tracks
-    // themselves survive: what goes is the mixing point.
+    // Deletes the bus and hands its members to the group around it, or the
+    // main output. The tracks themselves survive: what goes is the mixing
+    // point.
     juce::Result ungroupTracks(int groupId);
     juce::Result setTrackGroupCollapsed(int groupId, bool collapsed);
     // Return tracks, as Live has them (SessionReturns.cpp): a track whose
@@ -2126,13 +2144,29 @@ private:
     // calls can move several tracks inside one of their own.
     void moveTrackInEdit(int track, int destination);
     void arrangeTrackOrder(const std::vector<te::EditItemID>& desired);
-    juce::Result assignTracksToGroup(std::vector<int> tracks, int groupId);
-    // A group's members let go and routed to the main output, inside the
-    // caller's transaction and before its bus is deleted.
+    // A group command's move, as gatherTracks planned it from the stack as it
+    // is now: the tracks laid out in the plan's order, the plan's -1 being
+    // `newBus`, each given the claim the plan says, then reconciled. Inside
+    // the caller's transaction.
+    void applyGroupGathering(const GroupGathering&, te::AudioTrack* newBus);
+    // Where a track made under `below` lands - after which track, inside
+    // which group - by addTrack's rule, which a paste shares. A group whose
+    // bus is among `copied` is passed over, so a duplicate lands beside the
+    // group it copies rather than inside it.
+    struct TrackLanding
+    {
+        int after = -1;
+        int joining = 0;
+    };
+    TrackLanding landingUnder(int below, const std::vector<int>& copied = {}) const;
+    // A group's members let go into the group around it, or routed to the
+    // main output, inside the caller's transaction and before its bus is
+    // deleted.
     void dissolveGroupInEdit(int groupId);
-    // A group is a bus followed by one run of members, and a member's audio
-    // goes to its bus. Anything that reorders or removes tracks can break both,
-    // so this repairs the runs and then makes the routing follow them.
+    // A group is a bus followed by the run of tracks inside it, and a
+    // member's audio goes to its bus. Anything that reorders or removes
+    // tracks can break both, so this repairs the runs (reconcileGroupClaims)
+    // and then makes the routing follow them.
     void reconcileTrackGroups();
     void migrateLegacyTrackGroups();
     void ensureSceneSlots(int minimumScenes = defaultScenes);
@@ -2149,9 +2183,11 @@ private:
     // row needs.
     te::AudioTrack* appendTrack(TrackType, int after = -1);
     // SessionTrackClipboard.cpp - the half of a paste and a duplicate that
-    // differs only in what the undo step is called.
+    // differs only in what the undo step is called and, for a duplicate, the
+    // tracks being copied, whose own groups the copies land beside rather
+    // than inside.
     juce::Result insertTrackCopies(const TrackClipboard&, int below, std::vector<int>* inserted,
-                                   const juce::String& action);
+                                   const juce::String& action, const std::vector<int>& copied = {});
     void initialiseExternalPlugins(bool retry = false);
     juce::ValueTree automationOwnerState(int track) const;
     juce::ValueTree findTrackAutomationState(DeviceTarget) const;

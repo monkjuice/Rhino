@@ -87,21 +87,11 @@ juce::Result Session::addTrack(TrackType type, int below, int* added)
 {
     const auto kind = trackTypeName(type);
     // Under a return is under the last track that plays: the returns keep
-    // the foot of the stack.
-    auto after = juce::isPositiveAndBelow(below, firstReturnTrack()) ? below : -1;
-    auto joining = 0;
-    const auto groupId = trackGroupBusId(after) != 0 ? trackGroupBusId(after) : trackGroupId(after);
-    if (const auto group = trackGroup(groupId))
-    {
-        // Under a folded group means under all of it: inside, the track would
-        // be made and never seen. Under an open one it joins, explicitly,
-        // because under the last member is not between two of them and
-        // reconciling alone would leave it outside.
-        if (group->collapsed)
-            after = std::max(group->busTrack, group->lastTrack());
-        else
-            joining = group->id;
-    }
+    // the foot of the stack. Under a folded group means under all of it:
+    // inside, the track would be made and never seen. Under an open one it
+    // joins, explicitly, because under the last member is not between two of
+    // them and reconciling alone would leave it outside.
+    const auto [after, joining] = landingUnder(below);
     edit->getUndoManager().beginNewTransaction("Add " + kind.toLowerCase() + " track");
     auto* track = appendTrack(type, after);
     if (track == nullptr)
@@ -362,8 +352,26 @@ juce::Result Session::moveTrack(int track, int destination)
                                        : juce::jlimit(0, std::max(0, laneEnd - 1), destination);
     if (destination == track)
         return juce::Result::ok();
+    // The stack as the move leaves it. The track keeps its group only where
+    // that group is still open: a claim left on the group it was carried out
+    // of would pull the track above it into that group (claimHolds). Let go
+    // of, it joins whatever group it lands in the middle of, and a bus
+    // carried into a group nests there, which may not go past the limit.
+    auto planned = groupSlotsOf(tracks);
+    {
+        const auto moved = planned[static_cast<size_t>(track)];
+        planned.erase(planned.begin() + track);
+        planned.insert(planned.begin() + destination, moved);
+    }
+    const auto keepsGroup = claimHolds(planned, destination);
+    if (!keepsGroup)
+        planned[static_cast<size_t>(destination)].claim = 0;
+    if (const auto refused = refuseDeepNesting(planned); refused.failed())
+        return refused;
     edit->getUndoManager().beginNewTransaction("Move track");
     moveTrackInEdit(track, destination);
+    if (!keepsGroup)
+        audioTracks()[destination]->state.removeProperty(trackGroupMemberID, &edit->getUndoManager());
     // Where a track lands decides which group it is in: carried into a group it
     // joins, carried out of one it leaves. Inside the move's own transaction,
     // so undoing the move undoes that too.

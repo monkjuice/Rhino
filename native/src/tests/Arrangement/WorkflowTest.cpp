@@ -190,6 +190,8 @@ int runArrangementTest()
        #include "scenarios/TrackGroups.inc"
         scenario("group undo and new lanes");
        #include "scenarios/GroupUndo.inc"
+        scenario("nested groups");
+       #include "scenarios/GroupNesting.inc"
         scenario("track clipboard: whole tracks cut, copied, pasted, duplicated and deleted");
        #include "scenarios/TrackClipboard.inc"
         scenario("clip edits are whole");

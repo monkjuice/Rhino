@@ -301,6 +301,16 @@ void Session::refreshAfterUndoRedo(bool changed)
     if (changed) markModified(-1, ModelChange::unknown);
     // A solo or a mute may have come back, on a return or under one soloed.
     if (changed) followReturnSolo(true);
+    // A track's output names a bus as "track N", resolved by the engine the
+    // moment the name is put back - partway through the replay, maybe before
+    // the tracks are back in their places. Resolved again now they are, which
+    // writes nothing (reconcileTrackGroups). Down the stack, since resolving
+    // asks whether the bus already feeds the track, and only for a track that
+    // names one: for any other output the engine restarts playback instead.
+    if (changed)
+        for (auto* track : audioTracks())
+            if (auto& output = track->getOutput(); !output.usesDefaultAudioOut())
+                output.updateOutput();
     repairPatternClip();
     edit->tempoSequence.updateTempoData();
     refreshLoop();

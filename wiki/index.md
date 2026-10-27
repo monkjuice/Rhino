@@ -115,7 +115,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 
 - [Adding a device to Rhino](pages/adding-a-device.md) — The three edits that add a device, the SDK base a new one is written on, the shape the older devices follow, and the enum-era code a new instrument still meets.
 - [Build and test Forge](pages/build-and-test-forge.md) — Configure Forge against the JUCE and zstd checkouts Rhino's script fetches, build around the toolchain's traps, fix /W4 warnings at their source, run one test area at a time, audition or convert any preset from the command line, and time a preset load and the browser with --profile-browser.
-- [Build and test Rhino](pages/build-and-test-rhino.md) — Fetch the pinned engine, build with Visual Studio 2022, and run the six CTest cases without being fooled by a stale or locked build.
+- [Build and test Rhino](pages/build-and-test-rhino.md) — Fetch the pinned engine, build with Visual Studio 2022 from the shell or from VS Code's CMake Tools, and run the six CTest cases without being fooled by a stale or locked build.
 - [Comparing Forge with Serum](pages/comparing-forge-with-serum.md) — Settle "it sounds different in Serum" by capturing and measuring both synths, reading screenshots by pixel, and using Serum's own tables.
 - [Debugging a crash only one project triggers](pages/debugging-a-crashing-project.md) — Turn a project file that crashes Rhino into a ten-second repro, name the faulting module, and bisect the XML against a control.
 - [Development environment and reference material](pages/development-environment.md) — What the Windows development machine offers (shells, CMake, Python, ffmpeg, PDF tools, the reference manuals) and the habits it demands.

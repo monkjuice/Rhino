@@ -2,7 +2,7 @@
 title: Build and test Forge
 type: guide
 summary: Configure Forge against the JUCE and zstd checkouts Rhino's script fetches, build around the toolchain's traps, fix /W4 warnings at their source, run one test area at a time, audition or convert any preset from the command line, and time a preset load and the browser with --profile-browser.
-tags: [forge, build, testing, windows, warnings]
+tags: [forge, build, testing, windows, warnings, vscode]
 sources: []
 updated: 2026-10-25
 ---
@@ -36,6 +36,9 @@ cmake --build instruments/rhino-forge/build --config Release --parallel 2 -- /p:
   stop and cap it ([A build's `--parallel` does not cap the compiler](build-parallel-does-not-cap-compiler.md)).
 - `CMAKE_SUPPRESS_REGENERATION ON` is set here too, so re-run the configure line after editing `CMakeLists.txt`
   ([A new source file needs an explicit CMake configure](cmake-does-not-reconfigure.md)).
+- From VS Code, choose Forge as CMake Tools' *Active Project*: the shared, gitignored settings reuse this build tree
+  and pass `/p:BuildInParallel=false`, and the launch target is `RhinoForge_Standalone`
+  ([Build and test Rhino](build-and-test-rhino.md#from-vs-code) has the settings and the kit to pick).
 - `VST3_AUTO_MANIFEST FALSE` is deliberate: the pinned JUCE generator's manifest-helper project fails before the VST3
   target runs. Development hosts do not need the manifest; re-enable it for release packaging.
 - Every source compiles against the precompiled `src/ForgePch.h` (JUCE and the standard library, no Forge header),

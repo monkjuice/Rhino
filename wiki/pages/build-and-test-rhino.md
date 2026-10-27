@@ -1,8 +1,8 @@
 ---
 title: Build and test Rhino
 type: guide
-summary: Fetch the pinned engine, build with Visual Studio 2022, and run the six CTest cases without being fooled by a stale or locked build.
-tags: [rhino, build, testing, windows]
+summary: Fetch the pinned engine, build with Visual Studio 2022 from the shell or from VS Code's CMake Tools, and run the six CTest cases without being fooled by a stale or locked build.
+tags: [rhino, build, testing, windows, vscode]
 sources: []
 updated: 2026-10-25
 ---
@@ -69,10 +69,11 @@ ctest --test-dir native/build -C Release -R native_arrangement_workflow --output
 | `native_device_correctness` | `--self-test` | 30 s |
 | `native_device_conformance` | `--device-test` | 120 s |
 | `native_pattern_workflow` | `--pattern-test` | 120 s |
-| `native_arrangement_workflow` | `--arrangement-test` | 120 s |
+| `native_arrangement_workflow` | `--arrangement-test` | 300 s |
 | `native_startup_lifecycle` | `--startup-test` | 30 s |
 
-(From `native/CMakeLists.txt`, 2026-10-05, whose comment puts each workflow run at 20-26 s; what each case covers is in
+(From `native/CMakeLists.txt`, checked 2026-10-25, whose comment puts the pattern run at about 36 s and the arrangement
+run, which carries every DJ scenario, at 114 s on 2026-10-11; what each case covers is in
 `native/src/tests/README.md`.) The generous limit is there to catch a render that never returns
 ([Offline renders that never return](renders-that-never-return.md)). The conformance run takes about 3 s and opens no
 audio device ([The native device standard](native-device-standard.md)).
@@ -102,6 +103,54 @@ audio device ([The native device standard](native-device-standard.md)).
   nothing ([Writing Rhino tests](writing-rhino-tests.md)). `--profile-stress` builds a 120-track, seven-minute song,
   takes the process to about 440 MB, and is run from a shell, never through `Start-Process`
   ([The 120-track stress audit](stress-audit-2026-10.md)).
+
+## From VS Code
+
+Since 2026-10-25 both projects build from VS Code's status bar through CMake Tools (`ms-vscode.cmake-tools`), with the
+C/C++ extension taking IntelliSense from it. The settings are `.vscode/settings.json`, which `.gitignore` excludes
+(commit `7e55180`: editor settings belong to one machine), so this is the only record of them:
+
+```jsonc
+{
+    "cmake.sourceDirectory": [
+        "${workspaceFolder}/native",
+        "${workspaceFolder}/instruments/rhino-forge"
+    ],
+    "cmake.buildDirectory": "${sourceDirectory}/build",
+    "cmake.generator": "Visual Studio 17 2022",
+    "cmake.platform": "x64",
+    "cmake.useCMakePresets": "never",
+    "cmake.defaultVariants": {
+        "buildType": {
+            "default": "release",
+            "choices": {
+                "release": { "short": "Release", "buildType": "Release" },
+                "debug": { "short": "Debug", "buildType": "Debug" }
+            }
+        }
+    },
+    "cmake.parallelJobs": 2,
+    "cmake.buildToolArgs": ["/p:BuildInParallel=false"],
+    "cmake.ctestArgs": ["--output-on-failure"],
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools"
+}
+```
+
+- The repository root has no `CMakeLists.txt`. The status bar's *Active Project* switches between the DAW and
+  [Forge](build-and-test-forge.md); each reuses its existing `build` tree, so no second tree is made.
+- Generator, platform and no presets match the command-line configure both caches were made with (VS 2022 Community,
+  empty `CMAKE_GENERATOR_TOOLSET`). Release is the default because the tests expect it.
+- `--parallel 2` and `/p:BuildInParallel=false` are the command-line build lines. Forge needs the flag, it is
+  harmless for the DAW, and a single-folder workspace cannot set them per project. CTest stays sequential (the extension's
+  default) because checks have failed under `ctest -j 3`.
+- Launch target: `RhinoNative` (it builds `RhinoDAW.exe`) or `RhinoForge_Standalone`.
+- **Choose the [Unspecified] kit.** A Visual Studio kit passes `-T host=x64`, which should make CMake refuse to
+  reconfigure the empty-toolset caches ("does not match the toolset used previously"), and both ways out, wiping a
+  cache or a second tree, are unwanted. This is expected, not observed: the settings had not been run inside VS Code
+  on 2026-10-25.
+- Regeneration is still suppressed: after adding a source file, run *CMake: Configure* from the command palette
+  ([A new source file needs an explicit CMake configure](cmake-does-not-reconfigure.md)). A running RhinoDAW still
+  blocks the link ([LNK1104 means a running binary holds the file](locked-executable-lnk1104.md)).
 
 ## Related
 

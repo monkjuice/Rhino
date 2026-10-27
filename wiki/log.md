@@ -1296,6 +1296,12 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/locked-executable-lnk1104.md (summary; rename to a fresh name when `.inuse` is taken: `RhinoDAW.exe.inuse-2888` on 2026-10-25)
 - updated: index.md (summaries of Return tracks and sends and the LNK1104 gotcha)
 
+## [2026-10-25] update | Build both projects from VS Code with CMake Tools; .vscode/ gitignored (7e55180)
+- source: the change brief, checked against .vscode/settings.json (gitignored) and native/CMakeLists.txt (`RhinoNative`, the test timeouts)
+- updated: pages/build-and-test-rhino.md (summary, tags; new section From VS Code: the settings block, the two projects behind Active Project reusing their build trees, generator and Release default, the shared parallel and BuildInParallel flags, sequential CTest, launch targets, the [Unspecified] kit and the expected toolset refusal, configure after a new file; also corrected the stale table: `native_arrangement_workflow` times out at 300 s, and the CMake comment's run times)
+- updated: pages/build-and-test-forge.md (tags; a bullet pointing VS Code users at the shared settings)
+- updated: index.md (summary of Build and test Rhino)
+
 ## [2026-10-25] update | Arrangement: the lanes scroll 40 px past the last track, so its bottom edge can be dragged (100bf20)
 - source: the change brief, checked against native/src/ui/arrangement/Arrangement.h (`laneTailHeight`), ArrangementSync.cpp (`updateScroll`), ArrangementGestures.cpp (`mouseWheelMove`, `cardResizeEdgeAt`) and tests/Arrangement/scenarios/ArrangementPan.inc
 - updated: pages/arrangement-view.md (Cards bullet: `laneTailHeight`, why the last lane's edge was unreachable on `returnsTop()`, the strip doubling as the new-lane drop zone, the test)

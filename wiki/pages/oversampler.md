@@ -9,7 +9,7 @@ updated: 2026-10-27
 
 # Oversampler and BiquadFilter
 
-Added on 2026-10-27 with the drive devices (uncommitted at the time of writing). Both live in `native/src/core/dsp/` as plain C++. [Saturator](saturator.md) and [Amp](amp.md) run their nonlinear parts at 4x through `Oversampler`, and all four drive devices filter through `BiquadFilter`.
+Added on 2026-10-27 with the drive devices, in commit `1bdd7dc`. Both live in `native/src/core/dsp/` as plain C++. [Saturator](saturator.md) and [Amp](amp.md) run their nonlinear parts at 4x through `Oversampler`, and all four drive devices filter through `BiquadFilter`.
 
 ## Why hand-written
 

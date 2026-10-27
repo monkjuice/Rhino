@@ -9,7 +9,7 @@ updated: 2026-10-27
 
 # Tuner
 
-Modelled on Live 12's Tuner (manual pp. 649-652). Added on 2026-10-27 (uncommitted at the time of writing).
+Modelled on Live 12's Tuner (manual pp. 649-652). Added on 2026-10-27 in commit `1bdd7dc`.
 - **Catalog:** id `Tuner`, type `rhino.tuner.v1`, category Utilities.
 - **What it is:** a measuring tool, not [Rhino Tune](rhino-tune.md), which corrects pitch.
 

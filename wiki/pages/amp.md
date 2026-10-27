@@ -9,7 +9,7 @@ updated: 2026-10-27
 
 # Amp
 
-Modelled on Live 12's Amp (manual p. 523). Added on 2026-10-27 (uncommitted at the time of writing).
+Modelled on Live 12's Amp (manual p. 523). Added on 2026-10-27 in commit `1bdd7dc`.
 - **Catalog:** id `Amp`, type `rhino.amp.v1`, category Distortion.
 - **Device:** `native/src/devices/audio/AmpDevice.*` declares the controls on the SDK.
 - **DSP:** `AmpEngine`, in `native/src/core/dsp/AmpEngine.*`.

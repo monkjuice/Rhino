@@ -9,7 +9,7 @@ updated: 2026-10-27
 
 # Saturator
 
-Modelled on Live 12's Saturator (manual pp. 631-634). Added on 2026-10-27 (uncommitted at the time of writing).
+Modelled on Live 12's Saturator (manual pp. 631-634). Added on 2026-10-27 in commit `1bdd7dc`.
 - **Catalog:** id `Saturator`, type `rhino.saturator.v1`, category Distortion.
 - **DSP:** the curves are `native/src/core/dsp/SaturatorCurves.h`, a pure header in namespace `rhino::saturator`. The rest is `SaturatorEngine.*` beside it.
 - **Device:** `native/src/devices/audio/SaturatorDevice.*`, a thin shell on the SDK.

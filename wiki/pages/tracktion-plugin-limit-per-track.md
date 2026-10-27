@@ -42,7 +42,7 @@ A return track also carries its aux return.
 
 ## Fix
 
-The fix is uncommitted at the time of writing. It has two parts:
+The fix landed in commit `1bdd7dc` and has two parts:
 
 - **The cap.** `RhinoEngineBehaviour::getEditLimits` (`native/src/model/SessionInternal.h`) sets `maxPluginsOnTrack` to 128 and leaves every other limit at Tracktion's default. Live has no such limit, and 128 is far past any chain a person builds.
 - **The refusal.** `Session::addDevice`'s audio-effect path (`native/src/model/SessionDevices.cpp`) compares the list's size before and after the insert. If the size has not changed, it fails with "<name> could not be added: this chain holds as many devices as it can." instead of reporting success. This covers the main track too, whose master list still holds at most 4 plugins.

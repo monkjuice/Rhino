@@ -9,7 +9,7 @@ updated: 2026-10-27
 
 # Erosion
 
-Modelled on Live 12.4's new Erosion, not on Erosion Legacy (manual p. 580). Added on 2026-10-27 (uncommitted at the time of writing).
+Modelled on Live 12.4's new Erosion, not on Erosion Legacy (manual p. 580). Added on 2026-10-27 in commit `1bdd7dc`.
 - **Catalog:** id `Erosion`, type `rhino.erosion.v1`, category Distortion.
 - **DSP:** `native/src/core/dsp/ErosionEngine.*`.
 - **Device:** `native/src/devices/audio/ErosionDevice.*`, on a generated face.

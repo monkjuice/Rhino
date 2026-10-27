@@ -9,7 +9,7 @@ updated: 2026-10-27
 
 # Redux
 
-Modelled on Live 12's Redux (manual pp. 615-616). Added on 2026-10-27 (uncommitted at the time of writing).
+Modelled on Live 12's Redux (manual pp. 615-616). Added on 2026-10-27 in commit `1bdd7dc`.
 - **Catalog:** id `Redux`, type `rhino.redux.v1`, category Distortion.
 - **DSP:** `native/src/core/dsp/ReduxEngine.*`.
 - **Device:** `native/src/devices/audio/ReduxDevice.*`, on a generated face with three sections: Downsample, Bit Reduction and Mix.

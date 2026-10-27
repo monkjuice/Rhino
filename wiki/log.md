@@ -1539,3 +1539,9 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/session-model.md (`SessionGroups` over the pure header `GroupTree.h`)
 - updated: pages/bus-member-renders-nothing-alone.md (Bounce applies `ScopedStraightOut` to every job's source track, a nested group's bus included, fader off only for a plain track; the nested `ClipBounce.inc` check)
 - updated: index.md (the two group summaries; the new gotcha)
+
+## [2026-10-27] update | Dragging a bus card carries its whole group (e1f8474)
+- source: the main agent's brief and its addendum, checked against native/src/model/SessionTracks.cpp (`Session::moveTrack`)
+- updated: pages/track-groups.md (the group drag: block by `withGroupsWhole`, destination and `landed`, no-op inside the block, k single moves rather than `arrangeTrackOrder`, claim and depth checks, undo names; a drop down onto a folded group lands below it, single tracks too; the card gesture's drop line, selection and status; the "moves only the bus" limitation removed; the second `GroupNesting.inc` block)
+- updated: pages/arrangement-view.md (a bus card carries its group; the folded-group drop)
+- updated: pages/locked-executable-lnk1104.md (`.inuse` copies pile up, eight on 2026-10-27, and are safe to delete once nothing runs from them)

@@ -4,7 +4,7 @@ type: gotcha
 summary: A link that fails with LNK1104 after every file compiled means a running RhinoDAW, DAW or Forge standalone holds the output; renaming the held binary, Forge's VST3 included, to a name not already taken lets the link succeed while the holder runs on.
 tags: [both, build, windows]
 sources: []
-updated: 2026-10-25
+updated: 2026-10-27
 ---
 
 # LNK1104 means a running binary holds the file
@@ -31,7 +31,7 @@ Windows will not let the linker overwrite an image that a running process has lo
 
 ## What to do
 
-- **Rename the running binary.** Windows refuses to overwrite a running image but lets it be renamed. `Move-Item RhinoDAW.exe RhinoDAW.exe.inuse` frees the name, and the link succeeds while the app keeps running from the renamed file. This worked twice on `RhinoDAW.exe` in September 2026. Tell the user the app in front of them is now the old build, and delete the `.inuse` copy once they close it. **Pick a fresh name if `.inuse` is taken.** An old `.inuse` copy is often still there, and still running or never deleted. On 2026-10-25 a `RhinoDAW.exe.inuse` from 2026-10-24 was already in the folder, so the held binary was renamed to `RhinoDAW.exe.inuse-2888` instead. Check with `Test-Path` first, or add a suffix such as the holder's PID.
+- **Rename the running binary.** Windows refuses to overwrite a running image but lets it be renamed. `Move-Item RhinoDAW.exe RhinoDAW.exe.inuse` frees the name, and the link succeeds while the app keeps running from the renamed file. This worked twice on `RhinoDAW.exe` in September 2026. Tell the user the app in front of them is now the old build, and delete the `.inuse` copy once they close it. **Pick a fresh name if `.inuse` is taken.** An old `.inuse` copy is often still there, and still running or never deleted. On 2026-10-25 a `RhinoDAW.exe.inuse` from 2026-10-24 was already in the folder, so the held binary was renamed to `RhinoDAW.exe.inuse-2888` instead. Check with `Test-Path` first, or add a suffix such as the holder's PID. **The copies pile up:** on 2026-10-27 the Release folder held eight, from `RhinoDAW.exe.inuse` to `RhinoDAW.exe.inuse-44604`. Each is safe to delete once no RhinoDAW is running from it; one still in use refuses the delete.
 - **It works on Forge's VST3 too** (first done 2026-10-22). Rename the binary inside the bundle, `...\VST3\Rhino Forge.vst3\Contents\x86_64-win\Rhino Forge.vst3`, to `Rhino Forge.vst3.inuse`, and `RhinoForge_VST3` relinks while the old process keeps running from the renamed file. Delete the `.inuse` once that process is gone.
 - **Otherwise build the Forge targets that are not locked.** `--target RhinoForgeTests RhinoForge_Standalone` covers everything except the plugin wrapper. Report that the VST3 is out of date, and relink it soon: until 2026-10-22 the VST3 on disk was dated 2026-09-24, because sessions had kept to these two targets while a RhinoDAW, often a shutdown ghost, held the plugin, so RhinoDAW had been hosting a month-old Forge.
 - **A leftover `Rhino Forge.exe` standalone is safe to kill.** RhinoDAW and a DAW are not. They are the user's working session and may hold unsaved work, so always ask before `taskkill`.

@@ -8,9 +8,11 @@ namespace
 {
 const juce::Identifier analyserId ("analyser"), selectedId ("sel");
 
-// What a fresh EQ is: eight bands already spread across the spectrum, with
-// one flat bell switched on in the middle so there is something to take hold
-// of. Nothing here colours the sound until it is moved.
+// What a fresh EQ is: eight bands already spread across the spectrum, the
+// first four switched on so there is something to take hold of. Nothing here
+// colours the sound until it is moved: the shelf and the bells sit at zero
+// gain, and band 1, the low cut, is parked at 20 Hz, where it takes nothing
+// but rumble until it is dragged up.
 struct BandDefault
 {
     EqFilterType type;
@@ -21,9 +23,9 @@ struct BandDefault
 
 constexpr BandDefault bandDefaults[RhinoEqDevice::bandCount]
 {
-    {EqFilterType::LowCut48,   80.0f,  0.71f, false},
-    {EqFilterType::LowShelf,  120.0f,  0.71f, false},
-    {EqFilterType::Bell,      250.0f,  1.00f, false},
+    {EqFilterType::LowCut48,   20.0f,  0.71f, true},
+    {EqFilterType::LowShelf,  120.0f,  0.71f, true},
+    {EqFilterType::Bell,      250.0f,  1.00f, true},
     {EqFilterType::Bell,      750.0f,  1.00f, true},
     {EqFilterType::Bell,     2200.0f,  1.00f, false},
     {EqFilterType::Bell,     6000.0f,  1.00f, false},

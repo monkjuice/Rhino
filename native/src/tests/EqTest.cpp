@@ -353,11 +353,12 @@ void checkDevice(Session& session)
     eq->initialise({{}, testRate, testBlock});
     require(static_cast<int>(eq->getAutomatableParameters().size()) == RhinoEqDevice::parameterCount);
 
-    // A fresh EQ is flat: one band on, and it at zero gain.
-    auto enabledCount = 0;
+    // A fresh EQ has bands 1 to 4 on and is still flat where anyone listens:
+    // the shelf and bells sit at zero gain and the low cut waits at 20 Hz.
     for (int band = 0; band < RhinoEqDevice::bandCount; ++band)
-        if (eq->bandEnabled(band)) ++enabledCount;
-    require(enabledCount == 1);
+        require(eq->bandEnabled(band) == (band < 4));
+    require(eq->bandType(0) == EqFilterType::LowCut48);
+    require(std::abs(eq->getAutomatableParameterByID("b1f")->getCurrentValue() - 20.0f) < 0.01f);
     for (const auto frequency : {50.0, 1000.0, 10000.0})
         requireDb(EqEngine::responseDbAt(eq->currentSettings(), frequency, testRate), 0.0, 0.001,
                   "a new EQ");
@@ -443,7 +444,7 @@ void checkEditorFace(Session& session)
     auto* eq = dynamic_cast<RhinoEqDevice*>(session.devicePlugin(0, eqSlot->pluginIndex));
     require(eq != nullptr);
     // Several bands on, of different kinds, so the handles and the per-band
-    // curve all have something to draw rather than one flat bell.
+    // curve all have something to draw rather than flat bells.
     eq->setBandEnabled(0, true);
     eq->setBandType(0, EqFilterType::LowCut48);
     eq->setBandEnabled(4, true);
@@ -475,6 +476,40 @@ void checkEditorFace(Session& session)
     for (size_t i = 0; i < knobs.size(); ++i)
         for (auto j = i + 1; j < knobs.size(); ++j)
             require(!knobs[i].intersects(knobs[j]));
+
+    // A band that is off is not on the display at all, so a click where its
+    // handle would be takes nothing and a double-click there does not switch
+    // it back on. The spot is worked out the way the face places a handle --
+    // the display is the panel's left part under the name bar, frequency
+    // logarithmic from 10 Hz to 22 kHz, gain linear over 18 dB either way --
+    // and switching the band on and taking it there proves the spot is right.
+    constexpr auto hidden = 5;
+    require(!eq->bandEnabled(hidden));
+    eq->getAutomatableParameterByID("b6f")->setParameter(3000.0f, juce::dontSendNotification);
+    eq->getAutomatableParameterByID("b6g")->setParameter(12.0f, juce::dontSendNotification);
+    const auto faceArea = panel->getLocalBounds().withTrimmedTop(24).reduced(4);
+    const auto well = faceArea.withWidth(std::max(220, faceArea.getWidth() - 312)).toFloat().reduced(5.0f);
+    const juce::Point<float> spot {well.getX() + well.getWidth() * std::log(3000.0f / 10.0f) / std::log(2200.0f),
+                                   well.getCentreY() - well.getHeight() * 0.5f * 12.0f / 18.0f};
+    const auto pointer = [&panel, spot] (int clicks)
+    {
+        return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), spot,
+                                juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier), 1.0f, 0, 0, 0, 0,
+                                panel.get(), panel.get(), juce::Time::getCurrentTime(), spot,
+                                juce::Time::getCurrentTime(), clicks, false);
+    };
+    eq->setSelectedBand(4);
+    panel->mouseDown(pointer(1));
+    panel->mouseUp(pointer(1));
+    require(eq->selectedBand() == 4);
+    panel->mouseDoubleClick(pointer(2));
+    require(!eq->bandEnabled(hidden));
+    eq->setBandEnabled(hidden, true);
+    panel->mouseDown(pointer(1));
+    panel->mouseUp(pointer(1));
+    require(eq->selectedBand() == hidden);
+    eq->setBandEnabled(hidden, false);
+    eq->setSelectedBand(4);
 
     // Painting reaches the device through Session::devicePlugin and reads the
     // spectrum tap off it; if that path is wrong this is where it shows.

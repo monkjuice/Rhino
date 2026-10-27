@@ -123,6 +123,31 @@ float handleDbFor(const EqBandSettings& band, double sampleRate)
     return static_cast<float>(eqBandMagnitudeDbAt(sounding, band.frequency, sampleRate));
 }
 
+// The band whose handle is nearest a point and within reach of it, or -1. A
+// band that is off has no handle: it is not drawn, so it cannot be taken.
+int eqHandleAt(juce::Rectangle<float> area, const EqEngine::Settings& settings, double sampleRate,
+               juce::Point<float> position)
+{
+    auto nearest = -1;
+    auto nearestDistance = handleGrabDistance;
+    for (int band = 0; band < RhinoEqDevice::bandCount; ++band)
+    {
+        const auto& own = settings.band[static_cast<size_t>(band)];
+        if (!own.enabled)
+            continue;
+        const auto scaled = EqEngine::scaledBand(own, settings.scalePercent);
+        const juce::Point<float> handle {xForFrequency(area, scaled.frequency),
+                                         yForDb(area, handleDbFor(scaled, sampleRate))};
+        const auto distance = handle.getDistanceFrom(position);
+        if (distance < nearestDistance)
+        {
+            nearestDistance = distance;
+            nearest = band;
+        }
+    }
+    return nearest;
+}
+
 struct EqLayout
 {
     juce::Rectangle<int> display, bandColumn, typeChooser, analyserButton;
@@ -435,10 +460,14 @@ void DeviceEditorPanel::paintEq(juce::Graphics& g)
     }
 
     // ---- the handles -------------------------------------------------------
+    // Only the bands that are on, as in Live's EQ Eight: the display shows
+    // what is shaping the sound, and a band that is off waits in the column.
     g.setFont(uiFontBold(8.5f));
     for (int band = 0; band < RhinoEqDevice::bandCount; ++band)
     {
         const auto& settingsBand = settings.band[static_cast<size_t>(band)];
+        if (!settingsBand.enabled)
+            continue;
         const auto scaled = EqEngine::scaledBand(settingsBand, settings.scalePercent);
         const auto x = xForFrequency(area, scaled.frequency);
         const auto y = yForDb(area, handleDbFor(scaled, rate));
@@ -449,11 +478,11 @@ void DeviceEditorPanel::paintEq(juce::Graphics& g)
             g.setColour(ink.withAlpha(0.3f));
             g.fillEllipse(x - radius - 3.0f, y - radius - 3.0f, (radius + 3.0f) * 2.0f, (radius + 3.0f) * 2.0f);
         }
-        g.setColour(settingsBand.enabled ? ink : wellInk);
+        g.setColour(ink);
         g.fillEllipse(x - radius, y - radius, radius * 2.0f, radius * 2.0f);
-        g.setColour(settingsBand.enabled ? ink.brighter(0.4f) : ink.withAlpha(0.55f));
+        g.setColour(ink.brighter(0.4f));
         g.drawEllipse(x - radius, y - radius, radius * 2.0f, radius * 2.0f, 1.2f);
-        g.setColour(settingsBand.enabled ? juce::Colour(0xff10161a) : ink.withAlpha(0.8f));
+        g.setColour(wellInk);
         drawSnappedText(g, juce::String(band + 1),
                         juce::Rectangle<float>(x - radius, y - radius, radius * 2.0f, radius * 2.0f).toNearestInt(),
                         juce::Justification::centred);
@@ -621,23 +650,8 @@ bool DeviceEditorPanel::handleEqMouseDown(const juce::MouseEvent& event)
     if (!layout.display.contains(position))
         return false;
 
-    const auto area = layout.display.toFloat().reduced(displayInset);
-    const auto rate = device->spectrumRate();
-    auto nearest = -1;
-    auto nearestDistance = handleGrabDistance;
-    for (int band = 0; band < RhinoEqDevice::bandCount; ++band)
-    {
-        const auto scaled = EqEngine::scaledBand(settings.band[static_cast<size_t>(band)],
-                                                 settings.scalePercent);
-        const juce::Point<float> handle {xForFrequency(area, scaled.frequency),
-                                         yForDb(area, handleDbFor(scaled, rate))};
-        const auto distance = handle.getDistanceFrom(position.toFloat());
-        if (distance < nearestDistance)
-        {
-            nearestDistance = distance;
-            nearest = band;
-        }
-    }
+    const auto nearest = eqHandleAt(layout.display.toFloat().reduced(displayInset), settings,
+                                    device->spectrumRate(), position.toFloat());
     if (nearest < 0)
         return false;
 
@@ -685,33 +699,25 @@ bool DeviceEditorPanel::handleEqDoubleClick(const juce::MouseEvent& event)
     if (!layout.display.contains(position))
         return false;
 
-    const auto area = layout.display.toFloat().reduced(displayInset);
-    const auto settings = device->currentSettings();
-    const auto rate = device->spectrumRate();
-    for (int band = 0; band < RhinoEqDevice::bandCount; ++band)
+    // Only a band that is on has a handle to double-click, so this only ever
+    // switches one off; the band column and the band's menu switch it back.
+    const auto band = eqHandleAt(layout.display.toFloat().reduced(displayInset), device->currentSettings(),
+                                 device->spectrumRate(), position.toFloat());
+    if (band < 0)
+        return false;
+    // The drag that the first click of this double-click started never
+    // moved, so there is nothing to undo -- just stop holding the band.
+    eqDragging = false;
+    eqDragBand = -1;
+    session.editDeviceSettings(track, pluginSlot, "Switch EQ band", [device, band]
     {
-        const auto scaled = EqEngine::scaledBand(settings.band[static_cast<size_t>(band)],
-                                                 settings.scalePercent);
-        const juce::Point<float> handle {xForFrequency(area, scaled.frequency),
-                                         yForDb(area, handleDbFor(scaled, rate))};
-        if (handle.getDistanceFrom(position.toFloat()) >= handleGrabDistance)
-            continue;
-        // The drag that the first click of this double-click started never
-        // moved, so there is nothing to undo -- just stop holding the band.
-        eqDragging = false;
-        eqDragBand = -1;
-        session.editDeviceSettings(track, pluginSlot, "Switch EQ band", [device, band]
-        {
-            device->setBandEnabled(band, !device->bandEnabled(band));
-        });
-        resized();
-        repaint();
-        if (status)
-            status("Rhino EQ: band " + juce::String(band + 1)
-                   + (device->bandEnabled(band) ? " on" : " off"));
-        return true;
-    }
-    return false;
+        device->setBandEnabled(band, false);
+    });
+    resized();
+    repaint();
+    if (status)
+        status("Rhino EQ: band " + juce::String(band + 1) + " off");
+    return true;
 }
 
 bool DeviceEditorPanel::handleEqWheel(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)

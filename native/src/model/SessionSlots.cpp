@@ -1,5 +1,6 @@
 #include "SessionInternal.h"
 #include <algorithm>
+#include <cmath>
 
 // A track's clip slots: one per scene on every track, each holding at most one
 // clip. They are the cells a DJ console's clips grid shows (DjClipGrid.cpp),
@@ -270,8 +271,17 @@ juce::Result Session::copySlotClipToArrangement(int track, int scene, double sta
     if (copy == nullptr)
         return juce::Result::fail("That clip could not be copied to the arrangement.");
     // On the timeline a clip occupies its own span rather than repeating, so
-    // the slot clip's loop is dropped in the copy.
+    // the slot clip's loop is dropped in the copy. The cell's offset counts
+    // into its loop, so the copy's window opens where the loop had reached.
     copy->setLoopRangeBeats({});
+    if (source->isLooping())
+    {
+        const auto loopLength = std::max(0.0001, source->getLoopLengthBeats().inBeats());
+        auto phase = std::fmod(clipOffsetBeats(*source), loopLength);
+        if (phase < 0.0) phase += loopLength;
+        copy->setOffset(tracktion::core::TimeDuration::fromSeconds((source->getLoopStartBeats().inBeats() + phase)
+                                                                   * 60.0 / tempo()));
+    }
     copy->state.removeProperty(starterPlaceholderID, &edit->getUndoManager());
     // It lands on a timeline that may already have something there, and the
     // clip that arrives is the one that wins that ground.
@@ -333,16 +343,25 @@ juce::Result Session::copyClipToTrackSlot(te::EditItemID id, int track, int scen
         existing->removeFromParent();
         repairPatternClip();
     }
-    const auto length = source->getPosition().time.getLength();
+    // A clip that loops on the timeline goes as one pass of its loop, however
+    // far it had been dragged out.
+    const auto looped = source->isLooping();
+    const auto length = looped ? edit->tempoSequence.toTime(tracktion::core::BeatPosition() + source->getLoopLengthBeats())
+                                     - tracktion::core::TimePosition()
+                               : source->getPosition().time.getLength();
     // A name of its own beside the clip it was copied from.
     const auto name = uniqueClipNameOnTrack(*tracks[track], source->getName());
     auto* copy = copyClipInto(*slot, *source, {tracktion::core::TimePosition(),
                                                tracktion::core::TimePosition() + length}, name);
     if (copy == nullptr)
         return juce::Result::fail("That clip could not be copied to a slot.");
-    // A cell's clip loops, so the copy loops over its own length.
+    // A cell's clip loops, so the copy loops over its own length, or over
+    // the loop the source already had.
     const auto beats = edit->tempoSequence.toBeats(tracktion::core::TimePosition() + length).inBeats();
-    copy->setLoopRangeBeats({tracktion::core::BeatPosition(), tracktion::core::BeatPosition::fromBeats(beats)});
+    if (looped)
+        copy->setLoopRangeBeats({source->getLoopStartBeats(), source->getLoopStartBeats() + source->getLoopLengthBeats()});
+    else
+        copy->setLoopRangeBeats({tracktion::core::BeatPosition(), tracktion::core::BeatPosition::fromBeats(beats)});
     copy->state.removeProperty(starterPlaceholderID, &edit->getUndoManager());
     edit->getUndoManager().beginNewTransaction();
     markClipsModified({track});

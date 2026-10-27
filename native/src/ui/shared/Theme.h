@@ -65,6 +65,7 @@ inline const juce::Colour noteStepLine         {0xff303941};  // at any other st
 inline const juce::Colour noteEditorButton     {0xff30373e};  // the editor's own toggles, off
 inline const juce::Colour noteEditorButtonOn   {0xff397f94};  // and on
 inline const juce::Colour keyHoverText         {0xff1d2226};  // a key's name, lit in noteBody under the pointer
+inline const juce::Colour keySounding          {0xff57a7ff};  // a key the track is playing: the playhead's blue, the time now
 inline const juce::Colour velocityLane         {0xff2d353c};  // the lane, on the bars the cells shade lighter
 inline const juce::Colour velocityLaneAlternate{0xff283037};  // and on the bars between them
 inline const juce::Colour velocityLaneStepRule {0xff22292f};  // a step's line through the lane

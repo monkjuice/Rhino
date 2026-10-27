@@ -29,6 +29,7 @@ void DjTrackInjectorDevice::initialise(const te::PluginInitialisationInfo& info)
     firstRender = true;
     delivered.fill(false);
     anyDelivered = false;
+    keys.releaseAll();
 }
 
 void DjTrackInjectorDevice::releaseDelivered(te::MidiMessageArray& output, double atSeconds)
@@ -44,6 +45,16 @@ void DjTrackInjectorDevice::applyToBuffer(const te::PluginRenderContext& context
 {
     auto* p = port.load(std::memory_order_acquire);
     auto* midi = context.bufferForMidiMessages;
+    // What the track plays, before a deck's notes join it: the keys the note
+    // editor lights. A render plays the song behind the loading screen, which
+    // is not what anyone is playing.
+    if (midi != nullptr && !context.isRendering)
+    {
+        if (midi->isAllNotesOff)
+            keys.releaseAll();
+        for (const auto& message : *midi)
+            keys.hear(message);
+    }
     // The song owns its tracks while its transport rolls and in every render
     // - a merge, an export - so a deck never reaches either.
     const auto playing = p != nullptr && p->bound.load(std::memory_order_acquire) && !context.isPlaying

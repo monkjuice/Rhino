@@ -38,6 +38,9 @@ double StepGrid::timelineTimeForLoopStep(double step) const
     const auto range = session.pattern().getPosition().time;
     const auto start = range.getStart().inSeconds();
     const auto end = range.getEnd().inSeconds();
+    // The grid is one pass of a looped clip's loop, not the whole clip.
+    if (session.isPatternLooping())
+        return std::clamp(secondsForClipStep(step), start, end);
     const auto fraction = std::clamp(step / static_cast<double>(session.editorStepCount()), 0.0, 1.0);
     return juce::jmap(fraction, start, end);
 }
@@ -46,6 +49,8 @@ float StepGrid::loopXForTimelineTime(double seconds) const
 {
     if (!session.hasPatternClip())
         return -1.0f;
+    if (session.isPatternLooping())
+        return xForStep(clipStepForSeconds(seconds));
     const auto range = session.pattern().getPosition().time;
     const auto start = range.getStart().inSeconds();
     const auto duration = range.getEnd().inSeconds() - start;
@@ -53,6 +58,24 @@ float StepGrid::loopXForTimelineTime(double seconds) const
         return -1.0f;
     const auto step = (seconds - start) / duration * session.editorStepCount();
     return labelWidth + static_cast<float>(step - stepScroll) * cellWidth();
+}
+
+// Where the clip starts, in its own steps, is how far into its loop it starts:
+// the model's step at that moment, 0 for a clip that does not loop.
+double StepGrid::secondsForClipStep(double step) const
+{
+    const auto start = session.pattern().getPosition().time.getStart().inSeconds();
+    const auto phase = std::max(0.0, session.patternStepAt(start));
+    const auto stepBeats = 4.0 / static_cast<double>(session.editorStepResolution());
+    return session.beatsToSeconds(session.secondsToBeats(start) + (step - phase) * stepBeats);
+}
+
+double StepGrid::clipStepForSeconds(double seconds) const
+{
+    const auto start = session.pattern().getPosition().time.getStart().inSeconds();
+    const auto phase = std::max(0.0, session.patternStepAt(start));
+    const auto stepBeats = 4.0 / static_cast<double>(session.editorStepResolution());
+    return phase + (session.secondsToBeats(seconds) - session.secondsToBeats(start)) / stepBeats;
 }
 
 double StepGrid::stepAtX(float x) const
@@ -256,11 +279,10 @@ void StepGrid::mouseDown(const juce::MouseEvent& event)
             return;
         const auto localStep = std::clamp(stepScroll + (event.position.x - labelWidth) / cellWidth(),
                                           0.0, static_cast<double>(session.editorStepCount()));
-        const auto localBeat = localStep * 4.0 / static_cast<double>(session.editorStepResolution());
+        // Where the step plays, as the playhead reads it: step 0 is the
+        // clip's start, or on a looped clip the start of the pass it opens in.
         const auto& position = session.pattern().getPosition();
-        const auto clipStartBeat = session.secondsToBeats(position.time.getStart().inSeconds());
-        const auto offsetBeat = position.offset.inSeconds() * session.tempo() / 60.0;
-        const auto requestedTime = session.beatsToSeconds(clipStartBeat - offsetBeat + localBeat);
+        const auto requestedTime = secondsForClipStep(localStep);
         const auto clippedTime = std::clamp(requestedTime, position.time.getStart().inSeconds(), position.time.getEnd().inSeconds());
         // Through the model, which also makes it the playback start: a seek
         // in the editor is a seek, and stop returns to it as it does to one

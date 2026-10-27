@@ -295,8 +295,11 @@ void Arrangement::rebuildTrackClips(TrackClipCache& cache, te::AudioTrack& audio
             // a left-trimmed clip - one made by a split, or by pasting a
             // region that began part-way through a clip - shows the notes it
             // plays where it plays them, and a moved clip keeps its notes
-            // without converting them again.
-            const auto& notes = midi->getSequence().getNotes();
+            // without converting them again. A looped clip's notes are its
+            // loop laid end to end for as long as the clip runs, the copy the
+            // engine plays, whose zero is the loop's start; its offset counts
+            // into that copy, so the same origin places them.
+            const auto& notes = midi->getSequenceLooped().getNotes();
             auto converted = std::make_shared<std::vector<MidiNoteView>>();
             converted->reserve(static_cast<size_t>(notes.size()));
             for (auto* note : notes)

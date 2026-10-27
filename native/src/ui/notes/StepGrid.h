@@ -332,6 +332,12 @@ private:
     double loopStepAt(float x, bool free) const;
     double timelineTimeForLoopStep(double step) const;
     float loopXForTimelineTime(double seconds) const;
+    // The open clip's steps against the song's seconds, on the pass of its
+    // loop the clip starts in and without wrapping, so a looped clip's ruler
+    // reads as one pass however many times the clip runs it. A clip that
+    // does not loop has one pass, from its start.
+    double secondsForClipStep(double step) const;
+    double clipStepForSeconds(double seconds) const;
     int pitchForIndex(int index) const;
     int indexForCell(int step, int pitch) const;
     int automaticLowestPitch() const;
@@ -341,6 +347,9 @@ private:
     void visibilityChanged() override;
     void timerCallback() override;
     void updatePlayhead();
+    // The keys the clip's track is playing, read every display refresh with
+    // the playhead, and the keys whose light changed repainted.
+    void updateSoundingKeys();
     // The velocity lane, StepGridVelocity*.cpp.
     float velocityLaneHeight() const;
     float velocityLaneBlockHeight() const;
@@ -486,6 +495,14 @@ private:
     // name stands on a row squeezed thinner than that.
     int hoveredPitch = -1;
     static constexpr float keyTagHeight = 13.0f;
+    // The keys lit because the track is playing them: what the clip plays
+    // under the playhead, and whatever else reaches the track, a keyboard
+    // played into it included. The keys struck while the editor was hidden or
+    // showing another clip are stale, and the first read after either is
+    // thrown away.
+    std::bitset<maxPitchRows> soundingKeys;
+    bool soundingKeysStale = true;
+    te::EditItemID soundingKeysClip;
     // Where the grid's menu was opened, for Add Note; -1 when it was opened
     // somewhere with no pitch, the velocity lane.
     int menuStep = -1, menuPitch = -1;
@@ -529,6 +546,11 @@ private:
     bool loopDragActive = false;
     double loopAnchorStep = 0.0, loopPreviewStartStep = 0.0, loopPreviewEndStep = 0.0;
     juce::TextButton loopButton, drawButton, velocityButton;
+    // The clip's own Loop switch, Live's, in the footer beside Draw and
+    // Velocity: on, the clip repeats its pattern for as long as it is dragged
+    // out in the arrangement. Not the loop button over the keys, which loops
+    // the song's playback over the clip.
+    juce::TextButton clipLoopButton;
     PreviewButton previewButton;
     juce::VBlankAttachment vblank;
     static constexpr float labelWidth = 54.0f, headerHeight = 26.0f, footerHeight = 24.0f;

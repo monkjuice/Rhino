@@ -111,6 +111,9 @@ int runArrangementTest()
        #include "scenarios/ClipMerge.inc"
         scenario("bounce to new track");
        #include "scenarios/ClipBounce.inc"
+        // Renders, in a document of its own.
+        scenario("clip loop");
+       #include "scenarios/ClipLoop.inc"
         scenario("region clipboard");
        #include "scenarios/RegionClipboard.inc"
         scenario("one selection, carried whole");
@@ -212,6 +215,8 @@ int runArrangementTest()
        #include "scenarios/NoteTools.inc"
         scenario("note keys: the keyboard stays clear of the grid and names the key under the pointer");
        #include "scenarios/NoteKeys.inc"
+        scenario("note keys: the keys the clip's track is playing light");
+       #include "scenarios/NotePlayingKeys.inc"
         scenario("note grid: bars and beats, black keys, velocity shades, snapping, key clicks and the preview");
        #include "scenarios/NoteGrid.inc"
         scenario("note drum rows: a drum clip's rows are its assigned keys");

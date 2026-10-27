@@ -183,16 +183,19 @@ void StepGrid::showTimeSpan(double startSeconds, double endSeconds)
     if (session.editorStepCount() != visibleStepCount)
         rebuildVisibleNotes();
     shownClip = session.pattern().itemID;
-    const auto clipStartBeat = session.secondsToBeats(session.pattern().getPosition().time.getStart().inSeconds());
-    const auto stepAt = [this, clipStartBeat](double seconds)
-    {
-        return (session.secondsToBeats(seconds) - clipStartBeat) / 4.0 * session.editorStepResolution();
-    };
     // Held to the clip itself, which can end short of the grid's last step.
     const auto steps = static_cast<double>(session.editorStepCount());
     const auto clipEnd = std::min(steps, session.patternLengthBeats() / 4.0 * session.editorStepResolution());
-    const auto first = std::clamp(stepAt(startSeconds), 0.0, clipEnd);
-    const auto last = std::clamp(stepAt(endSeconds), 0.0, clipEnd);
+    auto from = clipStepForSeconds(startSeconds), to = clipStepForSeconds(endSeconds);
+    // A span in a later pass of a looped clip is the same steps in the first.
+    if (session.isPatternLooping() && clipEnd > 0.0)
+    {
+        const auto passes = std::floor(from / clipEnd);
+        from -= passes * clipEnd;
+        to -= passes * clipEnd;
+    }
+    const auto first = std::clamp(from, 0.0, clipEnd);
+    const auto last = std::clamp(to, 0.0, clipEnd);
     if (last <= first)
         return;
     // Exactly the span when the zoom reaches it, and centred when it is

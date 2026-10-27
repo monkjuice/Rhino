@@ -53,17 +53,23 @@ void StepGrid::paintKeyboard(juce::Graphics& g)
         if (!dirty.intersects(juce::Rectangle<float>(0.0f, top, labelWidth, height).expanded(0.0f, height)))
             continue;
         const bool black = juce::MidiMessage::isMidiNoteBlack(pitch);
+        // A key the track is playing is lit in the playhead's blue, as the
+        // playhead marks the time now: a black key on its own width, so it
+        // never reads as the white key beside it.
+        const bool sounding = soundingKeys.test(static_cast<size_t>(pitch));
         if (drums)
         {
             // A row is named for the sound on its pad of the Drum Rack, and
-            // a row whose pad is empty reads as its note.
+            // a row whose pad is empty reads as its note; a pad being played
+            // is lit as a key is.
             const auto padName = session.patternNoteName(pitch);
             const bool namedDrum = padName.has_value();
-            g.setColour(juce::Colour(namedDrum ? 0xff3a3325 : black ? 0xff15191e : 0xff30373e));
+            g.setColour(sounding ? palette::keySounding
+                                 : juce::Colour(namedDrum ? 0xff3a3325 : black ? 0xff15191e : 0xff30373e));
             g.fillRect(key.reduced(0.0f, 1.0f));
             if (named)
             {
-                g.setColour(juce::Colour(namedDrum ? 0xffffc16a : 0xffbac2ca));
+                g.setColour(sounding ? palette::keyHoverText : juce::Colour(namedDrum ? 0xffffc16a : 0xffbac2ca));
                 drawSnappedText(g, padName.value_or(pitchName(pitch)), key.toNearestInt(),
                                 juce::Justification::centred, true);
             }
@@ -71,11 +77,11 @@ void StepGrid::paintKeyboard(juce::Graphics& g)
         }
         // A black key is laid over the white surface rather than replacing it:
         // what shows to its right is the white key it sits between.
-        g.setColour(juce::Colour(0xffcdd3c8));
+        g.setColour(!black && sounding ? palette::keySounding : juce::Colour(0xffcdd3c8));
         g.fillRect(key);
         if (black)
         {
-            g.setColour(juce::Colour(0xff15191e));
+            g.setColour(sounding ? palette::keySounding : juce::Colour(0xff15191e));
             g.fillRect(key.withWidth(blackKeyWidth));
         }
         // The seam between two keys: it reads on a white key and disappears
@@ -435,9 +441,9 @@ void StepGrid::paint(juce::Graphics& g)
         g.setColour(velocityAdjustActive ? juce::Colour(0xffe9a84a) : juce::Colour(0xffb8c4aa));
         drawSnappedText(g, "VELOCITY  " + value, footer.reduced(9.0f, 2.0f).toNearestInt(),
                         juce::Justification::centredRight);
-        // The draw and velocity toggles sit at the left of the footer, so the
-        // hint starts past them rather than underneath them.
-        const auto hint = footer.withTrimmedLeft(132.0f).reduced(9.0f, 2.0f);
+        // The draw, velocity and loop toggles sit at the left of the footer,
+        // so the hint starts past them rather than underneath them.
+        const auto hint = footer.withTrimmedLeft(178.0f).reduced(9.0f, 2.0f);
         g.setFont(uiFont(8.5f));
         g.setColour(juce::Colour(0xff78818a));
         // The lane is named only while it is on screen.

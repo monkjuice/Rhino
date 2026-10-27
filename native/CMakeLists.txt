@@ -76,6 +76,7 @@ target_sources(RhinoNative PRIVATE
     src/model/SessionNoteAudition.cpp
     src/model/SessionNoteChop.cpp
     src/model/SessionNoteTools.cpp
+    src/model/SessionClipLoop.cpp
     src/model/SessionRecording.cpp
     src/model/SessionMidiInput.cpp
     src/model/SessionAudioInput.cpp

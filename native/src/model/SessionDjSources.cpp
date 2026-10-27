@@ -408,8 +408,10 @@ juce::Result Session::loadDjClip(int slot, bool keepBeat)
         material->sampleRate = rate;
         material->name = info.name;
         material->silentFrames = std::max(1, static_cast<int>(std::lround(spanSeconds * rate)));
+        // The notes the engine plays: a cell's loop laid end to end, whose
+        // zero is the loop's start and which its offset counts into.
         const auto offset = clipOffsetBeats(*clip);
-        for (auto* note : midi->getSequence().getNotes())
+        for (auto* note : midi->getSequenceLooped().getNotes())
         {
             const auto start = note->getStartBeat().inBeats() - offset;
             const auto end = start + note->getLengthBeats().inBeats();

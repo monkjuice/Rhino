@@ -41,8 +41,10 @@ bool crossesEdge(tracktion::core::TimeRange clip, double edge)
 // engine will cut, it does; nearer an end, the cut is made the way it makes
 // one - the clip's state, under new ids, takes the right-hand part, the
 // original keeps the left, and neither keeps a fade at the cut. The engine
-// also re-wraps a looped clip's offset; arrangement clips never loop. Shared
-// with the region move (SessionRegionMove.cpp), which cuts by the same rule.
+// also re-wraps a looped clip's offset; by hand a looped MIDI clip's offset
+// runs on past one pass of its loop, which plays the same (the engine lays
+// the loop out far enough to cover it). Shared with the region move
+// (SessionRegionMove.cpp), which cuts by the same rule.
 te::Clip* splitClipAt(te::ClipTrack& track, te::Clip& clip, double seconds)
 {
     const auto at = tracktion::core::TimePosition::fromSeconds(seconds);
@@ -126,6 +128,11 @@ Session::ClipRegion Session::copyClipRegion(double startSeconds, double endSecon
                 for (auto* note : midi->getSequence().getNotes())
                     snapshot.notes.push_back({note->getStartBeat().inBeats(), note->getLengthBeats().inBeats(),
                                               note->getNoteNumber(), note->getVelocity(), note->getColour()});
+                if (midi->isLooping())
+                {
+                    snapshot.loopStartBeats = midi->getLoopStartBeats().inBeats();
+                    snapshot.loopLengthBeats = midi->getLoopLengthBeats().inBeats();
+                }
             }
             else if (dynamic_cast<te::WaveAudioClip*>(clip) != nullptr)
             {
@@ -396,6 +403,11 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
                     sequence.addNote(note.pitch, tracktion::core::BeatPosition::fromBeats(note.startBeats),
                                      tracktion::core::BeatDuration::fromBeats(note.lengthBeats),
                                      note.velocity, note.colour, &edit->getUndoManager());
+                // Before the position: a looped clip's offset counts into its loop.
+                if (snapshot.loopLengthBeats > 0.0)
+                    midiCopy->setLoopRangeBeats({tracktion::core::BeatPosition::fromBeats(snapshot.loopStartBeats),
+                                                 tracktion::core::BeatPosition::fromBeats(snapshot.loopStartBeats
+                                                                                          + snapshot.loopLengthBeats)});
                 midiCopy->setPosition({range, offset});
                 copy = midiCopy.get();
             }

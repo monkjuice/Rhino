@@ -110,15 +110,15 @@ bool Session::removeNotes(const std::vector<juce::ValueTree>& states)
     auto& sequence = pattern().getSequence();
     auto& transport = edit->getTransport();
     const auto playing = transport.isPlaying();
-    const auto clipStartBeat = edit->tempoSequence.toBeats(pattern().getPosition().time.getStart()).inBeats();
-    const auto playheadBeat = edit->tempoSequence.toBeats(transport.getPosition()).inBeats()
-                            - clipStartBeat + patternOffsetBeats();
+    // Where the clip is in its sequence now, its loop wrapped.
+    const auto playheadStep = playing ? patternStepAt(transport.getPosition().inSeconds()) : -1.0;
+    const auto playheadBeat = beatForStep(playheadStep);
     auto removedActiveNote = false;
     auto changed = false;
     for (const auto& state : states)
         if (auto* note = sequence.getNoteFor(state))
         {
-            removedActiveNote = removedActiveNote || (playing
+            removedActiveNote = removedActiveNote || (playheadStep >= 0.0
                 && playheadBeat >= note->getStartBeat().inBeats()
                 && playheadBeat < note->getEndBeat().inBeats());
             sequence.removeNote(*note, &edit->getUndoManager());
@@ -219,6 +219,10 @@ double Session::patternLengthBeats() const
 {
     if (patternClip == nullptr)
         return beatsPerBar();
+    // A looped clip repeats its loop for as long as it runs: the loop is the
+    // pattern, however far the clip has been dragged out.
+    if (patternClip->isLooping())
+        return std::max(0.0001, patternClip->getLoopLengthBeats().inBeats());
     const auto position = patternClip->getPosition();
     const auto startBeat = edit->tempoSequence.toBeats(position.time.getStart()).inBeats();
     const auto endBeat = edit->tempoSequence.toBeats(position.time.getEnd()).inBeats();
@@ -234,9 +238,13 @@ double Session::clipOffsetBeats(const te::Clip& clip) const
     return clip.getPosition().offset.inSeconds() * tempo() / 60.0;
 }
 
+// On a looped clip the offset counts into the loop rather than into the
+// sequence, and the editor shows the loop from its start.
 double Session::patternOffsetBeats() const
 {
-    return patternClip == nullptr ? 0.0 : clipOffsetBeats(*patternClip);
+    if (patternClip == nullptr)
+        return 0.0;
+    return patternClip->isLooping() ? patternClip->getLoopStartBeats().inBeats() : clipOffsetBeats(*patternClip);
 }
 
 double Session::beatForStep(double step) const
@@ -478,9 +486,17 @@ bool Session::ensurePatternLengthSteps(int requiredSteps)
 
     const auto position = pattern().getPosition();
     const auto startBeat = edit->tempoSequence.toBeats(position.time.getStart());
-    const auto end = edit->tempoSequence.toTime(startBeat + tracktion::core::BeatDuration::fromBeats(
-        requiredSteps * stepDurationBeats(editorStepResolution())));
-    pattern().setLength(end - position.time.getStart(), true);
+    const auto requiredBeats = tracktion::core::BeatDuration::fromBeats(requiredSteps * stepDurationBeats(editorStepResolution()));
+    const auto end = edit->tempoSequence.toTime(startBeat + requiredBeats);
+    // A looped clip's pattern is its loop, so the loop is what grows; the
+    // clip grows only as far as one pass of the longer loop needs.
+    if (pattern().isLooping())
+    {
+        const auto loopStart = pattern().getLoopStartBeats();
+        pattern().setLoopRangeBeats({loopStart, loopStart + requiredBeats});
+    }
+    if (!pattern().isLooping() || end > position.time.getEnd())
+        pattern().setLength(end - position.time.getStart(), true);
     // A clip grown to hold pasted notes wins the ground it grew over, as every
     // other clip edit does, rather than lying on top of its neighbour.
     makeRoomForClip(pattern());

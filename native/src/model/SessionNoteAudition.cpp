@@ -14,6 +14,9 @@
 // One note sounds at a time: a new one ends the last. The note-off goes to the
 // track the note-on went to, found again by its id, so a clip switched or a
 // track deleted in between cannot leave a note hanging on the wrong one.
+//
+// The keys the editor's keyboard lights for what the track is playing are read
+// here too, at the foot of the file.
 
 namespace rhino
 {
@@ -81,6 +84,21 @@ void Session::stopNoteAudition()
         track->injectLiveMidiMessage(juce::MidiMessage::noteOff(1, auditionPitch), te::MidiMessageArray::MPESourceID {});
     auditionPitch = -1;
     auditionTrack = {};
+}
+
+// The other way round from the preview: the keys the open clip's track is
+// playing, which its keyboard lights. Read off the hidden device at the head
+// of the track's chain, which every note the track plays passes first.
+std::bitset<128> Session::takePatternKeysDown()
+{
+    jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+    if (patternClip == nullptr)
+        return {};
+    auto* track = trackHoldingClip(*edit, pattern());
+    if (track == nullptr || djInputEnd(*track) == 0)
+        return {};
+    auto* input = dynamic_cast<DjTrackInjectorDevice*>(track->pluginList[0]);
+    return input != nullptr ? input->takeKeysDown() : std::bitset<128> {};
 }
 
 }

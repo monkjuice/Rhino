@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <utility>
 
 namespace rhino
 {
@@ -34,8 +35,8 @@ StepGrid::StepGrid(Session& s) : session(s), vblank(this, [this] { updatePlayhea
     };
     addAndMakeVisible(drawButton);
     loopButton.setButtonText(juce::String::charToString(0x27f3));
-    loopButton.setTooltip("Loop the entire edited clip (Ctrl+L). Drag on the ruler to draw a loop; right-click the "
-                          "ruler to double the loop or clear it.");
+    loopButton.setTooltip("Loop playback over the entire edited clip (Ctrl+L). Drag on the ruler to draw a loop; "
+                          "right-click the ruler to double the loop or clear it.");
     loopButton.setWantsKeyboardFocus(false);
     loopButton.onClick = [this]
     {
@@ -43,6 +44,24 @@ StepGrid::StepGrid(Session& s) : session(s), vblank(this, [this] { updatePlayhea
         grabKeyboardFocus();
     };
     addAndMakeVisible(loopButton);
+    // Live's clip Loop switch. Its state is the clip's, and the change
+    // listener keeps the button showing it.
+    clipLoopButton.setButtonText("Loop");
+    clipLoopButton.setTooltip("Loop the clip: its notes repeat for as long as the clip is dragged out in the "
+                              "arrangement, and the editor shows the pattern that repeats.");
+    clipLoopButton.setWantsKeyboardFocus(false);
+    clipLoopButton.setColour(juce::TextButton::buttonColourId, palette::noteEditorButton);
+    clipLoopButton.setColour(juce::TextButton::buttonOnColourId, palette::noteEditorButtonOn);
+    clipLoopButton.onClick = [this]
+    {
+        const auto looping = !session.isPatternLooping();
+        if (const auto result = session.setPatternLooping(looping); result.failed())
+            report(result.getErrorMessage());
+        else
+            report(looping ? "Clip loops: drag its end out in the arrangement to repeat it" : "Clip plays once");
+        grabKeyboardFocus();
+    };
+    addAndMakeVisible(clipLoopButton);
     // Live's Preview switch. Its state is the session's, a preference of the
     // machine, and the change listener keeps the button showing it.
     previewButton.setTooltip("Preview notes: hear a note through the clip's instrument as you draw, move or click "
@@ -619,6 +638,8 @@ int StepGrid::automaticLowestPitch() const
 
 void StepGrid::visibilityChanged()
 {
+    // Keys struck while it was hidden are not being played now.
+    soundingKeysStale = true;
     if (staleWhileHidden && !isHiddenInShell(*this))
     {
         staleWhileHidden = false;
@@ -642,6 +663,8 @@ void StepGrid::changeListenerCallback(juce::ChangeBroadcaster*)
         repaint();
     }
     previewButton.setToggleState(session.noteAuditionEnabled(), juce::dontSendNotification);
+    clipLoopButton.setToggleState(session.isPatternLooping(), juce::dontSendNotification);
+    clipLoopButton.setEnabled(session.hasPatternClip());
     if (const auto beat = stepsPerBeat(), bar = stepsPerBar(); beat != shownStepsPerBeat || bar != shownStepsPerBar)
     {
         shownStepsPerBeat = beat;
@@ -787,26 +810,31 @@ void StepGrid::updatePlayhead()
     movePlayhead(*this, playhead, next,
                  getLocalBounds().withTrimmedTop(static_cast<int>(headerHeight))
                                  .withTrimmedBottom(static_cast<int>(footerHeight)));
+    updateSoundingKeys();
 }
 
+void StepGrid::updateSoundingKeys()
+{
+    const auto clip = session.hasPatternClip() ? session.pattern().itemID : te::EditItemID();
+    if (std::exchange(soundingKeysStale, false) || clip != soundingKeysClip)
+        session.takePatternKeysDown();
+    soundingKeysClip = clip;
+    const auto keys = session.takePatternKeysDown();
+    const auto changed = keys ^ soundingKeys;
+    if (changed.none())
+        return;
+    soundingKeys = keys;
+    for (int pitch = 0; pitch < maxPitchRows; ++pitch)
+        if (changed.test(static_cast<size_t>(pitch)))
+            if (const auto area = keyHoverArea(pitch); !area.isEmpty())
+                repaint(area);
+}
+
+// The model says where the clip is, its loop wrapped, in the editor's steps.
 float StepGrid::playheadXForTime(double seconds) const
 {
-    if (!session.hasPatternClip())
-        return -1.0f;
-    const auto& position = session.pattern().getPosition();
-    const auto clipStart = position.time.getStart().inSeconds();
-    const auto clipEnd = position.time.getEnd().inSeconds();
-    if (seconds < clipStart || seconds >= clipEnd)
-        return -1.0f;
-
-    const auto editBeat = session.secondsToBeats(seconds);
-    const auto clipStartBeat = session.secondsToBeats(position.time.getStart().inSeconds());
-    const auto offsetBeat = position.offset.inSeconds() * session.tempo() / 60.0;
-    auto localBeat = std::fmod(editBeat - clipStartBeat + offsetBeat, session.patternLengthBeats());
-    if (localBeat < 0.0)
-        localBeat += session.patternLengthBeats();
-    const auto step = localBeat / 4.0 * session.editorStepResolution();
-    if (step < stepScroll || step > stepScroll + visibleStepSpan())
+    const auto step = session.patternStepAt(seconds);
+    if (step < 0.0 || step < stepScroll || step > stepScroll + visibleStepSpan())
         return -1.0f;
     return static_cast<float>(labelWidth + (step - stepScroll) * cellWidth());
 }
@@ -830,6 +858,9 @@ void StepGrid::resized()
                          56, static_cast<int>(footerHeight) - 6);
     velocityButton.setBounds(66, getHeight() - static_cast<int>(footerHeight) + 3,
                              60, static_cast<int>(footerHeight) - 6);
+    // The clip's own switch, beside the editor's.
+    clipLoopButton.setBounds(130, getHeight() - static_cast<int>(footerHeight) + 3,
+                             46, static_cast<int>(footerHeight) - 6);
     // A new height can fold the lane or bring it back, which the button shows.
     updateVelocityButton();
     // A new height shows more rows or fewer, which changes which pitches are

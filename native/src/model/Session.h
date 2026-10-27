@@ -7,6 +7,7 @@
 #include "VelocityCurve.h"
 #include "dsp/ClipEnvelope.h"
 #include <array>
+#include <bitset>
 #include <functional>
 #include <map>
 #include <optional>
@@ -355,9 +356,34 @@ public:
     // every step-to-beat conversion in the note editor goes through them.
     // Without that the editor reads the sequence from its own zero and shows
     // notes the clip never plays, which is what the step grid's playhead has
-    // always known and the notes beside it did not.
+    // always known and the notes beside it did not. On a looped clip the
+    // editor's window is the loop, so patternOffsetBeats is where the loop
+    // starts and patternLengthBeats how long it is, whatever the clip's own
+    // offset and length.
     double clipOffsetBeats(const te::Clip&) const;
     double patternOffsetBeats() const;
+    // The open clip's Loop switch, Live's: on, the clip plays one stretch of
+    // its notes over and over for as long as it runs, so dragging its end out
+    // in the arrangement repeats the pattern instead of adding silence. The
+    // stretch is what the clip played when the switch went on, its window, so
+    // turning it on changes nothing that is heard until the clip is made
+    // longer. Off again, the clip keeps its length and plays its notes once,
+    // from wherever the loop had reached at its start. One undo step either
+    // way; the engine does the looping (te::MidiClip's loop range).
+    // SessionClipLoop.cpp.
+    bool isPatternLooping() const;
+    juce::Result setPatternLooping(bool shouldLoop);
+    // Where the open clip is at a moment of the song, in the editor's steps,
+    // wrapped into the loop on a looped clip; negative outside the clip. The
+    // editor's playhead, and what a note edit asks of what is sounding.
+    double patternStepAt(double seconds) const;
+    // The keys the open clip's track is playing, read where its chain begins
+    // (DjTrackInjectorDevice), so every note counts: its clips under the
+    // playhead, the typing keyboard, a MIDI keyboard, the Push, the preview.
+    // A key struck and let go since the last read is in it too, so a note
+    // shorter than a frame still shows. The note editor's keyboard reads it
+    // once a frame. SessionNoteAudition.cpp.
+    std::bitset<128> takePatternKeysDown();
     double beatForStep(double step) const;
     double stepForBeat(double beat) const;
     void setEditorStepCount(int newSteps);
@@ -1248,6 +1274,10 @@ public:
         // offset already says where its content begins.
         std::array<std::vector<AutomationPoint>, clipEnvelopeKindCount> envelopes;
         std::vector<Note> notes;                      // midi only
+        // midi only: the clip's loop in its sequence's beats, a length of 0
+        // for a clip that plays once. A looped clip's offset counts into the
+        // loop, so the two travel together.
+        double loopStartBeats = 0.0, loopLengthBeats = 0.0;
         // midi only: the catalog id of what its track played, or empty for a
         // track that played nothing - in which case the paste leaves the
         // destination's instrument alone.

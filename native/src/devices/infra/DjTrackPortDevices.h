@@ -1,5 +1,6 @@
 #pragma once
 #include "dj/DjTrackPort.h"
+#include "HeldKeys.h"
 #include <tracktion_engine/tracktion_engine.h>
 #include <array>
 #include <atomic>
@@ -33,6 +34,12 @@ namespace te = tracktion::engine;
 // deck's audio live. It remembers every note it played, and lets them all go
 // the moment it stops playing the deck - unbound, the song started, a render,
 // the port resynced after a stall - so no note it started is left sounding.
+//
+// Bound or not, it also notes which keys the chain's MIDI holds down as it
+// arrives. Every note the track plays starts here - its clips, the typing
+// keyboard, a MIDI keyboard, the Push, the note editor's preview - so this is
+// where the note editor's keyboard learns which keys to light. A deck's own
+// notes join after that and light nothing, and nothing is noted in a render.
 class DjTrackInjectorDevice final : public te::Plugin
 {
 public:
@@ -61,12 +68,18 @@ public:
     void deinitialise() override {}
     double getLatencySeconds() override { return 0.0; }
     void applyToBuffer(const te::PluginRenderContext&) override;
+    // A stop or an edit that cuts the track's notes lets every key go.
+    void midiPanic() override { keys.releaseAll(); }
+    // The keys the track's MIDI holds down, and those struck since the last
+    // call. Message thread.
+    std::bitset<128> takeKeysDown() noexcept { return keys.take(); }
 
 private:
     // Note-offs for every note it played, at a time within the block, into a
     // chain's MIDI being built.
     void releaseDelivered(te::MidiMessageArray& output, double atSeconds);
 
+    HeldKeys keys;
     std::atomic<DjTrackPort*> port {nullptr};
     std::vector<float> left, right;
     std::vector<DjPortEvent> events;

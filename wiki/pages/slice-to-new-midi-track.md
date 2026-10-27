@@ -9,7 +9,7 @@ updated: 2026-10-27
 
 # Slice to New MIDI Track
 
-Live 12's command (Live 12 manual §13.1, pp. 335-337; where the manual is: [Development environment and reference material](development-environment.md)), added on 2026-10-27, uncommitted at the time of writing. The user asked for "audio -> splice to midi" on an audio clip's right-click menu, read as this command.
+Live 12's command (Live 12 manual §13.1, pp. 335-337; where the manual is: [Development environment and reference material](development-environment.md)), added on 2026-10-27 in commit `3627686`. The user asked for "audio -> splice to midi" on an audio clip's right-click menu, read as this command.
 
 ## Where it lives
 

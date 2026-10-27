@@ -1495,3 +1495,8 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/tracktion-plugin-limit-per-track.md (summary; the `Plugin::Ptr` overload returns void and only the `ValueTree` one returns a Ptr; `addDevice` compares sizes; the rule; test results)
 - updated: pages/measure-sound-dont-read-dsp.md (Amp voiced by measurement)
 - updated: index.md (the plugin-cap gotcha's summary)
+
+## [2026-10-27] update | Ctrl+L in the arrangement loops the selection, Live's Loop Selection
+- source: the coordinator's brief, checked against native/src/ui/arrangement/ArrangementSelection.cpp (`loopSelection`) and app/MainComponentCommands.cpp
+- updated: pages/transport.md (Ctrl+L sets or clears the dragged loop span; the toggle translated for an always-on loop; the shell shortcut and the note editor's own Ctrl+L; date)
+- updated: pages/region-editing.md (Loop among the operations)

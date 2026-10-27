@@ -356,6 +356,11 @@ bool Arrangement::keyPressed(const juce::KeyPress& key)
         bounceSelected();
         return true;
     }
+    if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'L')
+    {
+        loopSelection();
+        return true;
+    }
     if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'D')
     {
         duplicateSelected();

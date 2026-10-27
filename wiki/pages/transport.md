@@ -4,7 +4,7 @@ type: component
 summary: Play and stop, the loop that is always on, the single tempo and the time signature, and what Rhino rescales by hand when the tempo moves.
 tags: [rhino, transport, tempo]
 sources: []
-updated: 2026-10-26
+updated: 2026-10-27
 ---
 
 # Transport, tempo and loop
@@ -32,6 +32,16 @@ lifts the loop for its duration, so a take cannot wrap over itself ([Recording a
 The dragged span lives on `Session`, not in the document: it is not saved with the project, and both `newProject` and
 (since commit `a04b407`) `restoreProject` clear it, so a span dragged in one document no longer stays in force after
 opening another.
+
+**Ctrl+L in the arrangement** (2026-10-27) is Live's Loop Selection (Live 12 manual, 6.6, pp. 168-169):
+`Arrangement::loopSelection` (`ArrangementSelection.cpp`) sets this span to the selection's start and end, whatever
+tracks it covers, so on a clicked clip it loops the clip. Live's second press switches the loop off; Rhino's cannot be
+off, so a press when the span already equals the selection calls `clearManualLoopRange` instead, as the band's
+right-click does. An insert point or no selection is refused with a status. The shell handles Ctrl+L too
+(`app/MainComponentCommands.cpp`, like Ctrl+E, J and B), so it works with the keyboard on the audio editor or the
+browser, and in the DJ view it says the command is the arrangement's. The note editor's own Ctrl+L
+(`StepGrid::loopEditedClip`: loop the open clip, no toggle) answers first while it has focus. Tested in
+`AudioClipEditing.inc`.
 
 ## One tempo, and what follows it by hand
 

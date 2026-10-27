@@ -191,6 +191,29 @@
         const auto rightClick = juce::ModifierKeys(juce::ModifierKeys::rightButtonModifier);
         view.mouseDown(event({view.xFor(1.0), rulerY}, {view.xFor(1.0), rulerY}, false, rightClick));
         require(!session.hasManualLoopRange(), "Right-clicking the ruler loop clears the manual loop range");
+        {
+            // Ctrl+L, Live's Loop Selection: a clicked clip loops its own span,
+            // and a second press on the same span loops the whole song again.
+            const auto ctrlL = juce::KeyPress('L', juce::ModifierKeys::commandModifier, 0);
+            view.setSelection({id}, id);
+            const auto clipSpan = session.findAudioClip(id)->getPosition().time;
+            require(view.keyPressed(ctrlL) && session.hasManualLoopRange(), "Ctrl+L loops the selected clip");
+            loopRange = session.edit->getTransport().getLoopRange();
+            require(close(loopRange.getStart().inSeconds(), clipSpan.getStart().inSeconds())
+                        && close(loopRange.getEnd().inSeconds(), clipSpan.getEnd().inSeconds())
+                        && session.edit->getTransport().looping,
+                    "The loop is the selected clip's span");
+            require(view.keyPressed(ctrlL) && !session.hasManualLoopRange(),
+                    "Ctrl+L again on the looped span gives the loop back to the whole song");
+            view.setTimeSelection(0.5, 1.25, 0, 1);
+            view.keyPressed(ctrlL);
+            loopRange = session.edit->getTransport().getLoopRange();
+            require(close(loopRange.getStart().inSeconds(), 0.5) && close(loopRange.getEnd().inSeconds(), 1.25),
+                    "Ctrl+L loops a span swept across several tracks");
+            session.clearManualLoopRange();
+            view.setInsertPoint(0.5, 1);
+            require(view.keyPressed(ctrlL) && !session.hasManualLoopRange(), "An insert point is no span to loop");
+        }
         view.mouseDown(event({view.xFor(0.25), rulerY}, {view.xFor(0.25), rulerY}, false));
         view.mouseUp(event({view.xFor(0.25), rulerY}, {view.xFor(0.25), rulerY}, false));
         require(close(session.playheadSeconds(), 0.25), "Clicking the ruler still seeks the playhead");

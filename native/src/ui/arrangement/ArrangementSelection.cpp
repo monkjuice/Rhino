@@ -513,4 +513,33 @@ void Arrangement::deleteSelection()
     focus = Focus::region;
 }
 
+// Live's Loop Selection: the song loops over the selection's span, whatever
+// tracks it runs across. A second press switches Live's loop off; Rhino's
+// loop is always on, so a press on the span already looped gives the loop
+// back to the whole song instead, as a right-click on the ruler's band does.
+void Arrangement::loopSelection()
+{
+    const auto region = timeSelection;
+    if (!region.active || !region.isRange())
+    {
+        if (status) status("Select a clip or a span of the timeline to loop");
+        return;
+    }
+    const auto looped = session.loopRange();
+    if (session.hasManualLoopRange() && std::abs(looped.getStart().inSeconds() - region.start) < 1.0e-6
+        && std::abs(looped.getEnd().inSeconds() - region.end) < 1.0e-6)
+    {
+        session.clearManualLoopRange();
+        if (status) status("Loop range cleared");
+    }
+    else
+    {
+        const auto result = session.setLoopRange(region.start, region.end);
+        if (status) status(result.failed() ? result.getErrorMessage()
+                                           : "Looping " + barPositionText(region.start) + " to "
+                                                 + barPositionText(region.end));
+    }
+    repaint();
+}
+
 }

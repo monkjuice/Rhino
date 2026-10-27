@@ -31,6 +31,7 @@ The commands about whole clips - reverse (R), mute, merge (Ctrl+J) - read `Arran
 - **Duplicate (Ctrl+D)** pastes at the region's own end and moves the region onto the copy, so holding Ctrl+D keeps extending.
 - **Split (Ctrl+E)** cuts at the insert line: the selected clips it crosses if any, otherwise every clip it crosses on the region's tracks, so nothing needs selecting first.
 - **Nudge (Left and Right, Shift for a bar)** moves the region's material by one grid step and the region with it (`Arrangement::nudgeSelected`, `Session::moveClipRegion`), Live's "nudge a selection of material": a swept span is cut at its edges and the inside moves, replacing what it covers. The arrows are taken whenever the selection is a range (until 2026-10-23 only with a clip selected, moving whole clips through `moveClips`).
+- **Loop (Ctrl+L)** loops the song over the selection's span, its tracks ignored, or gives the loop back to the whole song when it already is that span (`Arrangement::loopSelection`, 2026-10-27; [Transport](transport.md#the-loop-is-always-on)).
 
 ## Moving a selection
 

@@ -83,6 +83,14 @@ bool MainComponent::keyPressed(const juce::KeyPress& key)
         else arrangement.bounceSelected();
         return true;
     }
+    // Looping the selection reaches the shell for the same reason. The note
+    // editor's own Ctrl+L loops its clip and never reaches here.
+    if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'L')
+    {
+        if (djViewOpen) logStatus("Looping the selection is the arrangement's: press Tab to return to it");
+        else arrangement.loopSelection();
+        return true;
+    }
     // Reverse reaches the shell for the same reason, and more often: the
     // clip you want to hear backwards is usually the one already open in
     // the audio editor, with the keyboard on one of its knobs. A plain
@@ -290,6 +298,7 @@ void MainComponent::showHelpMenu(juce::Component& target)
                     "Ctrl+E in the MIDI editor  Chop the selected notes on the grid; keep Ctrl down and drag up for more parts, down for fewer\n"
                     "Ctrl+J  Merge the selected audio clips into one audio file\n"
                     "Ctrl+B  Bounce the selection, the selected clips, tracks or group to new audio tracks\n"
+                    "Ctrl+L  Loop the selection; again to loop the whole song\n"
                     "R  Play the selected audio clips backwards\nDelete  Empty the selection, or delete the selected tracks\n"
                     "?  Show/hide Info View\nF12  Full screen\nCtrl+,  Preferences: audio device, MIDI keyboards");
             else if (result == 2)

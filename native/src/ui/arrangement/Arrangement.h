@@ -66,6 +66,11 @@ public:
     // the same reason again: Ctrl+J is a shell shortcut, and the selection it
     // acts on is usually the one the audio editor is looking at.
     void mergeSelected();
+    // Loops the song over the selection's span, Live's Loop Selection, and
+    // pressed again on the span already looped gives the loop back to the
+    // whole song (ArrangementSelection.cpp). Public for the same reason as
+    // the merge: Ctrl+L is also a shell shortcut.
+    void loopSelection();
     // Bounces what is selected to new audio tracks (ArrangementBounce.cpp):
     // the selected clips whole, or a dragged region cut at its edges, or the
     // selected cards, a group's bus card bouncing the group. Public for the

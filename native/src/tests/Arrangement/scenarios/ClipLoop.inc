@@ -94,6 +94,48 @@
                 std::sort(drawnStarts.begin(), drawnStarts.end());
                 require(drawnStarts.size() == 2 && close(drawnStarts[1], bar),
                         "The arrangement draws the note again where the second pass plays it");
+
+                // A clip fills its lane, and a looped one is notched at its top
+                // where each pass begins; one that plays once is not.
+                const auto box = arrangement->bounds(*drawn);
+                const auto row = arrangement->lane(lane);
+                require(close(box.getY(), row.getY())
+                            && close(box.getBottom(), row.getBottom() - Arrangement::trackDividerThickness),
+                        "A clip fills its lane from the lane's top to the rule under it");
+                require(close(drawn->loopSeconds, bar), "The clip's view knows how long one pass is");
+                const auto notchX = juce::roundToInt(arrangement->xFor(bar)) - 1;
+                const auto notchY = static_cast<int>(box.getY()) + 3;
+                require(notchX + 12 < static_cast<int>(box.getRight()) - 2, "The second pass begins on screen");
+                const auto notched = [&arrangement, notchX, notchY]
+                {
+                    juce::Image image(juce::Image::RGB, arrangement->getWidth(), arrangement->getHeight(), true,
+                                      juce::SoftwareImageType());
+                    juce::Graphics g(image);
+                    arrangement->paintEntireComponent(g, false);
+                    return image.getPixelAt(notchX, notchY) != image.getPixelAt(notchX + 12, notchY);
+                };
+                require(notched(), "The looped clip is notched at its top where the second pass begins");
+                // To look at: the looped clip on its lane, written only when asked for.
+                if (const auto shot = juce::SystemStats::getEnvironmentVariable("RHINO_CLIP_LOOP_SNAPSHOT", {});
+                    shot.isNotEmpty())
+                {
+                    // Zoomed to the clip, the view put back after.
+                    const auto span = arrangement->viewSpan;
+                    arrangement->viewSpan = 3.0 * bar;
+                    juce::File(shot).deleteFile();
+                    if (auto stream = juce::File(shot).createOutputStream())
+                        juce::PNGImageFormat().writeImageToStream(
+                            arrangement->createComponentSnapshot(row.expanded(0.0f, 30.0f).getSmallestIntegerContainer()
+                                                                    .getIntersection(arrangement->getLocalBounds()),
+                                                                 true, 2.0f),
+                            *stream);
+                    arrangement->viewSpan = span;
+                }
+                require(song.setPatternLooping(false).wasOk(), "Looping off for a moment");
+                arrangement->sync();
+                require(!notched(), "and a clip that plays once has no notch there");
+                song.undo();
+                require(song.isPatternLooping(), "Undo loops the clip again");
             }
 
             scenario("clip loop: a render hears the second pass");

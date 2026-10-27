@@ -237,7 +237,8 @@
                     "A lane revealed over the track is the one its row shows");
             require(view.automationChooser[0]->getButtonText().startsWith(shown->parameterName),
                     "and the card's chooser names it");
-            const auto clipNames = view.lane(0).getY() + 5.0f + view.clipHeaderHeight(view.lane(0).getHeight() - 10.0f);
+            const auto clipBand = Arrangement::clipBandOf(view.lane(0));
+            const auto clipNames = clipBand.getY() + view.clipHeaderHeight(clipBand.getHeight());
             require(!curve.isEmpty() && curve.getY() >= clipNames, "The curve runs under the strip the clip names are on");
             const auto hover = view.automationHoverAt(body, false);
             require(hover.valid() && view.trackLanes[0][static_cast<size_t>(hover.automation)].target.parameter

@@ -189,8 +189,16 @@ juce::Rectangle<float> Arrangement::bounds(const ClipView& clip) const
 
 juce::Rectangle<float> Arrangement::boundsOf(ClipGeometry p, int track) const
 {
-    const auto row = laneOrSlot(track);
-    return {xFor(p.start), row.getY() + 5.0f, std::max(1.0f, xFor(p.end) - xFor(p.start)), row.getHeight() - 10.0f};
+    const auto band = clipBandOf(laneOrSlot(track));
+    return {xFor(p.start), band.getY(), std::max(1.0f, xFor(p.end) - xFor(p.start)), band.getHeight()};
+}
+
+// A clip fills its row from its top to the rule under it, as Live's do, so the
+// lane's ground shows only where there is no clip. Until 2026-10-27 a clip
+// stood 5 px in from both, which the user read as empty space in the cell.
+juce::Rectangle<float> Arrangement::clipBandOf(juce::Rectangle<float> row)
+{
+    return row.withTrimmedBottom(std::min(trackDividerThickness, row.getHeight() - 1.0f));
 }
 
 double Arrangement::snapped(double seconds, bool bypass) const

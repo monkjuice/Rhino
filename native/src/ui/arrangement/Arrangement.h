@@ -137,6 +137,9 @@ private:
         // What kind of lane the clip needs, read once per sync so the preview
         // of a carried selection can say which rows would refuse it.
         bool midi = false;
+        // One pass of a looped MIDI clip's loop, in seconds, or 0 for a clip
+        // that plays once: where the painter notches the clip's top.
+        double loopSeconds = 0.0;
     };
     // What a sync keeps of each track between rebuilds, by the track's id:
     // its clip views and the files their waveforms are of, good while the
@@ -437,6 +440,8 @@ private:
     double snappedUp(double seconds, bool bypass, int firstTrack, int lastTrack) const;
     double snapped(double seconds, bool bypass, int track, te::EditItemID except) const;
     static float clipHeaderHeight(float boxHeight);
+    // The part of a row a clip on it fills: all of it but the rule under it.
+    static juce::Rectangle<float> clipBandOf(juce::Rectangle<float> row);
     juce::Rectangle<float> clipHeaderBounds(const ClipView&) const;
     ClipZone clipZoneAt(juce::Point<float>, const ClipView&) const;
     double snappedClipMoveStart(double desiredStart, double length, int targetTrack, bool bypass) const;

@@ -1,6 +1,7 @@
 #include "ArrangementInternal.h"
 #include "ui/shared/WaveformLanes.h"
 #include <algorithm>
+#include <cmath>
 
 // How the clips are drawn. Split from ArrangementPainter.cpp, which keeps the
 // rows, the grid, the rulers and the selection. Same class, two translation
@@ -71,6 +72,31 @@ void Arrangement::paintClipPiece(juce::Graphics& g, const ClipView& clip, const 
     const auto headerHeight = clipHeaderHeight(box.getHeight());
     g.setColour(label.darker(0.75f));
     g.fillRect(visible.getX(), box.getY() + headerHeight, visible.getWidth(), 1.0f);
+    // A looped clip's passes, Live's notches: a short tick down from its top
+    // where each pass of the loop begins, so a clip repeating its pattern reads
+    // apart from one only dragged long. The passes run from the window's
+    // origin, the clip's start less its offset, which counts into the loop.
+    // Left out where they would stand closer than a few pixels.
+    if (clip.loopSeconds > 0.0)
+    {
+        const auto origin = position.start - position.offset;
+        if (xFor(origin + clip.loopSeconds) - xFor(origin) >= 4.0f)
+        {
+            const auto left = std::max(visible.getX(), dirty.getX()) - 2.0f;
+            const auto right = std::min(visible.getRight(), dirty.getRight()) + 2.0f;
+            const auto from = std::max(position.start, timeAt(left));
+            // The first pass to begin after the clip's own start edge.
+            auto pass = std::floor((from - origin) / clip.loopSeconds - 1.0e-9) + 1.0;
+            for (auto at = origin + pass * clip.loopSeconds; at < position.end - 1.0e-6; at = origin + ++pass * clip.loopSeconds)
+            {
+                const auto x = xFor(at);
+                if (x > right)
+                    break;
+                if (at > position.start + 1.0e-6)
+                    g.fillRect(juce::Rectangle<float>(std::round(x) - 1.0f, box.getY(), 2.0f, 6.0f));
+            }
+        }
+    }
     g.setColour(palette::text);
     if (visible.getWidth() >= 24.0f)
     {

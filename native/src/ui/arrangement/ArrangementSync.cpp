@@ -307,6 +307,8 @@ void Arrangement::rebuildTrackClips(TrackClipCache& cache, te::AudioTrack& audio
                                       session.beatsToSeconds((note->getStartBeat() + note->getLengthBeats()).inBeats()),
                                       note->getNoteNumber()});
             view.midiNotes = std::move(converted);
+            if (midi->isLooping())
+                view.loopSeconds = session.beatsToSeconds(midi->getLoopLengthBeats().inBeats());
         }
         cache.clips.push_back(std::move(view));
     }

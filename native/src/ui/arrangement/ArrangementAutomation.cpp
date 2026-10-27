@@ -171,8 +171,8 @@ juce::Rectangle<float> Arrangement::automationArea(int row) const
         return {};
     if (rows[static_cast<size_t>(row)].automation < 0)
     {
-        const auto clipHeight = bounds.getHeight() - 10.0f;
-        const auto area = bounds.withTop(bounds.getY() + 5.0f + clipHeaderHeight(clipHeight) + 3.0f)
+        const auto band = clipBandOf(bounds);
+        const auto area = bounds.withTop(band.getY() + clipHeaderHeight(band.getHeight()) + 3.0f)
                               .withTrimmedBottom(8.0f);
         return area.getHeight() >= minimumCurveHeight ? area : juce::Rectangle<float>();
     }

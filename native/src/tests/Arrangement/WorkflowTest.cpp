@@ -111,6 +111,9 @@ int runArrangementTest()
        #include "scenarios/ClipMerge.inc"
         scenario("bounce to new track");
        #include "scenarios/ClipBounce.inc"
+        // Renders too, and bounces what it made to hear it.
+        scenario("slice to new MIDI track");
+       #include "scenarios/ClipSliceToMidi.inc"
         // Renders, in a document of its own.
         scenario("clip loop");
        #include "scenarios/ClipLoop.inc"

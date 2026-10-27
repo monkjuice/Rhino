@@ -70,6 +70,7 @@ target_sources(RhinoNative PRIVATE
     src/model/SessionRegionMove.cpp
     src/model/SessionMerge.cpp
     src/model/SessionBounce.cpp
+    src/model/SessionSliceToMidi.cpp
     src/model/SessionExport.cpp
     src/model/SessionSamples.cpp
     src/model/SessionPreview.cpp

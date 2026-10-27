@@ -4,7 +4,7 @@ type: component
 summary: Ctrl+B renders the selection as a span (a clicked clip is its own span), a track or a group to an audio file on a new track directly under its source and mutes the source in the same undo step, by Live 12's rules - a track before its fader, a group after its bus, a time selection cut at its edges - a slice per frame behind a cancellable loading screen.
 tags: [rhino, arrangement, rendering, groups, undo, threads, selection]
 sources: []
-updated: 2026-10-23
+updated: 2026-10-27
 ---
 
 # Bounce to New Track
@@ -62,6 +62,7 @@ Clips the bounce mutes stay visible: the arrangement draws a muted clip grey and
 
 ## Related
 
+- [Slice to New MIDI Track](slice-to-new-midi-track.md), the sibling command in `ArrangementBounce.cpp`: it renders one clip as a merge does (blocking, not stepped) and takes this command's convention of muting the source in the same undo step
 - [Arrangement view](arrangement-view.md)
 - [Region editing](region-editing.md), the dragged span and the edge rule
 - [Clips never overlap](clip-placement.md), the engine's 1 ms split refusal

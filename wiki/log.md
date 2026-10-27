@@ -1451,3 +1451,14 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/forge.md, pages/forge-midi-learn.md (Related)
 - updated: index.md (Components: the new page)
 - removed, never committed: the 2026-10-23 entry, index line and forge.md link for pages/forge-hardware-console.md, whose page and docs/forge-hardware-console-handoff.md were deleted on 2026-10-27
+
+## [2026-10-27] update | Slice to New MIDI Track on the audio-clip menu (uncommitted at the time of writing)
+- source: the main agent's brief, checked against native/src/model/SessionSliceToMidi.cpp, model/Session.h, ui/arrangement/Arrangement.cpp (`showClipMenu`), ArrangementBounce.cpp, devices/instruments/DrumRackDevice.cpp (`readSample`'s ceiling) and tests/Arrangement/WorkflowTest.cpp; test result not yet reported
+- created: pages/slice-to-new-midi-track.md (where it lives; the render as a merge's and the rejected source-file slicing; transient and division cuts; a WAV per slice and why; pads from C1 with no fades; the one undo step and the Rhino-only mute; refusals; the scenario; what is not done)
+- updated: pages/drum-rack-sample-editor.md (the second slicing path and why it writes a file per slice)
+- updated: pages/drum-rack.md (`sliceClipToNewMidiTrack` among the session's rack calls, from C1)
+- updated: pages/arrangement-view.md (`ArrangementBounce.cpp` holds it; which clip-menu items act on the clip rather than the selection)
+- updated: pages/bounce-to-new-track.md, pages/audio-clip-editor.md (sibling command, shared render and mute convention)
+- updated: pages/long-commands-run-in-slices.md (a second blocking render beside merge)
+- updated: pages/session-model.md (summary; 44 units, `SessionSliceToMidi`, `runRenderTask` and `nextRenderFile` callers)
+- updated: index.md (the new page; Session summary)

@@ -393,6 +393,9 @@ private:
     // once it is done, the new cards or the new clips, and what it says.
     bool bouncingTracks = false;
     bool bouncingRegion = false;
+    // Slice to New MIDI Track, from the clip menu (ArrangementBounce.cpp): the
+    // clip the menu was opened on, at its transients or every `everyBeats`.
+    void sliceToNewMidiTrack(te::EditItemID, double everyBeats);
     // Mutes the selected clips, or unmutes them when every one already is:
     // the way back for a clip a bounce muted.
     void muteSelected();

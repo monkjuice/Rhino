@@ -4,7 +4,7 @@ type: component
 summary: How a Drum Rack sample pad plays its file (one-shot, classic or slice), kept as undoable pad content rather than automatable controls, cut at transients or into equal parts, and spread onto pads of their own.
 tags: [rhino, devices, drums, dsp, ui]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-27
 ---
 
 # Drum Rack sample editor
@@ -40,6 +40,8 @@ It is stored as `PAD` properties (`mode`, `start`, `end`, `fadeIn`, `fadeOut`, `
 
 **Spreading** (TO PADS, or *Slice to pads* in the pad menu) is `Session::spreadDrumSlices(track, slot, pad, int* spread)`, one undo step named "Slice <sound> to pads". `DrumRackDevice::spreadSlices` puts slice *i* on note `pad + i`, stopping at 127. Each is the same sample as a one-shot of its slice with a 4 ms fade-out, the pad's six controls and choke group, named "<sound> <i+1>", with mute and solo cleared. Synth, empty and unreadable pads are refused. The user chose slices on pads of their own over slices played from the notes above the one pad.
 
+**The second path** is the arrangement's [Slice to New MIDI Track](slice-to-new-midi-track.md) (2026-10-27): `DrumSlicer::slices` on an audio clip's render, onto a new rack from C1. It writes a WAV per slice instead of sharing one file, because a pad reads its whole file up to `longestSampleSeconds` (10 s): pads sharing a long render would each hold all of it and lose what lies past 10 s. Its pads take no fade, so struck in order they reproduce the render exactly.
+
 ## On the face
 
 `DeviceEditorPanelDrumSample.cpp` paints this side and `DeviceEditorPanelDrumSampleControls.cpp` holds its knobs ([Device rack and device editors](device-rack.md)).
@@ -58,6 +60,7 @@ It is stored as `PAD` properties (`mode`, `start`, `end`, `fadeIn`, `fadeOut`, `
 ## Related
 
 - [Drum Rack](drum-rack.md)
+- [Slice to New MIDI Track](slice-to-new-midi-track.md)
 - [Device rack and device editors](device-rack.md)
 - [Displays draw from the DSP](displays-draw-from-the-dsp.md)
 - [The native device standard](native-device-standard.md)

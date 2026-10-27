@@ -916,6 +916,15 @@ void Arrangement::showClipMenu(te::EditItemID id)
     // on: merging needs two, and one clip can never be merged with itself.
     menu.addItem(9, "Merge       Ctrl+J", clipsToActOn().size() > 1);
     menu.addItem(13, "Bounce to New Track       Ctrl+B");
+    // Live's slicing choices: at the clip's transients, or every division of
+    // the song's grid from the clip's start.
+    static constexpr std::array sliceDivisions {GridDivision::bar, GridDivision::half, GridDivision::quarter,
+                                                GridDivision::eighth, GridDivision::sixteenth};
+    juce::PopupMenu slicing;
+    slicing.addItem(40, "At Transients");
+    for (size_t i = 0; i < sliceDivisions.size(); ++i)
+        slicing.addItem(41 + static_cast<int>(i), "Every " + juce::String(gridDivisionLabel(sliceDivisions[i])));
+    menu.addSubMenu("Slice to New MIDI Track", slicing, session.audioClipMix(id).valid);
     // Ticked from the clip the menu was opened on, which is the one under the
     // pointer whether or not the rest of the selection agrees with it.
     menu.addItem(8, "Reverse       R", session.audioClipMix(id).valid, session.audioClipMix(id).reversed);
@@ -966,6 +975,15 @@ void Arrangement::showClipMenu(te::EditItemID id)
             if (result == 7)
             {
                 safe->splitClipsAt({id}, safe->insertPointTime());
+                return;
+            }
+            // Slicing is about the clip the menu was opened on too: Live
+            // slices one clip, not a selection.
+            if (result >= 40 && result < 41 + static_cast<int>(sliceDivisions.size()))
+            {
+                safe->sliceToNewMidiTrack(id, result == 40 ? Session::sliceAtTransients
+                                                           : gridDivisionBeats(sliceDivisions[static_cast<size_t>(result - 41)],
+                                                                               safe->session.beatsPerBar()));
                 return;
             }
             // Warping is about the clip the menu was opened on, the way

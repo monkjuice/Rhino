@@ -4,7 +4,7 @@ type: component
 summary: A pad on every MIDI note, addressed by note, each a sample or one of eight synthesised drums with six automatable controls; the face shows a bank of sixteen beside a map of all 128 and opens 1024 x 720 in a window of its own that floats above the main window, and kits (.rdk), drum presets (.rdp) or dropped samples fill it.
 tags: [rhino, devices, drums, dsp, library]
 sources: []
-updated: 2026-10-25
+updated: 2026-10-27
 ---
 
 # Drum Rack
@@ -66,6 +66,7 @@ Where the factory and user files live: [Content library](content-library.md).
 - `addDrumSound(file, track)` fills the first empty pad from the bank shown, coming round from the bottom (`firstEmptyPad(from)`), so a sound lands where it can be seen. A drum preset brings a blank rack to a MIDI track; a bare sample is refused unless the track already runs one.
 - `showDrumBank(track, slot, firstNote)` is view state, never an undo step, but announced, so the note editor follows. `patternDrumLowestNote()` is the open clip's rack's first shown note.
 - `spreadDrumSlices` puts a sample's slices on pads of their own ([Drum Rack sample editor](drum-rack-sample-editor.md)).
+- `sliceClipToNewMidiTrack` (`SessionSliceToMidi.cpp`) makes a new rack from an audio clip's slices, a file each, from C1 up rather than the kits' C2 ([Slice to New MIDI Track](slice-to-new-midi-track.md)).
 - `moveDrumPad(track, slot, from, to)` moves a pad's sound to another note (below).
 - `previewDrumSound` renders one strike into a `MemoryAudioSource` for the browser ([Browser and library preview](browser.md)).
 - A drum pattern on a blank rack loads `Drums/Kits/808 Kit.rdk` (`loadDefaultDrumKit`), the kit the patterns were written for ([Pattern presets](pattern-presets.md)). A MIDI clip moved or pasted onto a track whose rack arrives blank brings its source rack's kit ([One instrument per track](one-instrument-per-track.md)).

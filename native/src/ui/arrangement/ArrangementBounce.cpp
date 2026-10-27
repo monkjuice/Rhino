@@ -3,7 +3,9 @@
 // Bounce to New Track: Ctrl+B, and the clip and card menus. The model decides
 // what is rendered, where it lands and what is muted (SessionBounce.cpp); this
 // decides what the selection meant and says what happened, because a bounce
-// lands below the lane it came from and the muting is easy to miss.
+// lands below the lane it came from and the muting is easy to miss. Slice to
+// New MIDI Track, its sibling on the clip menu, is here for the same reasons
+// (SessionSliceToMidi.cpp).
 
 namespace rhino
 {
@@ -137,6 +139,27 @@ void Arrangement::bounceFinished()
                    + (one ? ". The original is muted." : ". The originals are muted."));
         }
     }
+    repaint();
+}
+
+// One clip, the one the menu was opened on, as Live slices one. The selection
+// moves onto the MIDI clip it made, which is what is worked on next.
+void Arrangement::sliceToNewMidiTrack(te::EditItemID id, double everyBeats)
+{
+    cancelDrag();
+    Session::SliceResult result;
+    if (const auto outcome = session.sliceClipToNewMidiTrack(id, everyBeats, &result); outcome.failed())
+    {
+        if (status) status(outcome.getErrorMessage());
+        return;
+    }
+    // Read off the list, which the slicing's own announcement left stale if
+    // the timeline is hidden.
+    syncIfStale();
+    setSelection({result.clip}, result.clip);
+    if (status)
+        status("Sliced into " + juce::String(result.slices) + (result.slices == 1 ? " pad" : " pads")
+               + " on " + session.trackName(result.track) + ". The original clip is muted.");
     repaint();
 }
 

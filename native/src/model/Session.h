@@ -1234,6 +1234,26 @@ public:
     };
     BounceProgress bounceProgress() const;
     juce::Result bounceOutcome(BounceResult* = nullptr) const;
+    // Slice to New MIDI Track, as Live has it (SessionSliceToMidi.cpp). An
+    // audio clip is rendered as it plays - its own gain, pan, pitch, warp,
+    // fades and reverse, not its track's devices - and cut into slices: at
+    // its transients, or every `everyBeats` of the song from its start. Each
+    // slice is a file of its own on a pad of a Drum Rack, from C1 up, on a new
+    // MIDI track directly under the clip's, and a MIDI clip over the same span
+    // strikes them in order, so the song sounds as it did. The source clip is
+    // muted, all in one undo step; the files outlive an undo. A slice too long
+    // for a pad is cut into parts that fit, and more slices than the pads from
+    // C1 up is refused. The render runs on this thread, as a merge's does.
+    static constexpr double sliceAtTransients = 0.0;
+    static constexpr int firstSliceNote = 36;
+    struct SliceResult
+    {
+        int track = -1;          // the new MIDI track
+        te::EditItemID clip;     // the MIDI clip on it
+        int slices = 0;
+    };
+    juce::Result sliceClipToNewMidiTrack(te::EditItemID, double everyBeats = sliceAtTransients,
+                                         SliceResult* = nullptr);
     // Mutes or unmutes clips of either kind, as one undo step. A muted clip
     // stays on its lane, drawn grey, and plays nothing.
     juce::Result setClipsMuted(const std::vector<te::EditItemID>&, bool muted);

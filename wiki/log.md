@@ -1513,3 +1513,11 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 ## [2026-10-27] update | Rhino EQ: off bands are not drawn or grabbable, and a fresh EQ has bands 1 to 4 on with band 1 cutting at 20 Hz (b941147)
 - source: the main agent's brief (Live 12 manual p. 577), checked against native/src/ui/rack/DeviceEditorPanelEq.cpp (`eqHandleAt`, `handleEqDoubleClick`, `showEqTypeMenu`) and native/src/devices/audio/RhinoEqDevice.cpp (`bandDefaults`) at b941147
 - updated: pages/rhino-eq.md (the fresh defaults and why band 1 sits at 20 Hz, the rejected alternatives, older documents; the face: off bands not drawn or grabbable, switched on from the column, the shared nearest-handle hit test, double-click only switches off, the wheel unchanged; the new `checkDevice` and `checkEditorFace` checks; Related; updated date)
+
+## [2026-10-27] update | A track card's fader and pan are automated from a right-click (fd03386)
+- source: the main agent's brief, checked against native/src/model/SessionMixer.cpp (`trackMixerTarget`, `takeMixerFromLane`), native/src/ui/arrangement/ArrangementMixerAutomation.cpp, MixerSlider.h and Arrangement.cpp
+- updated: pages/automation.md (summary; new "The card's fader and pan" section: the target by pointer, an ordinary lane, "Mixer" naming, fader-position units, main row and sends not reachable, the test; override from a bar and the re-enable toggle; the bars' frame-clock follow and why `dontSendNotification`; main row limit; Related)
+- updated: pages/mixer.md (summary; the automatable fader and pan rule; tags, date, Related)
+- updated: pages/arrangement-view.md (summary; sixteen units with `ArrangementMixerAutomation.cpp` and `MixerSlider.h`; `followMixerAutomation` on the frame clock)
+- updated: pages/juce-button-fires-on-right-click.md (summary; "Sliders too": a LinearBar slider moved on a right-click, `MixerSlider`; date, Related)
+- updated: index.md (the four summaries)

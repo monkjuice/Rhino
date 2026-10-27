@@ -1,10 +1,10 @@
 ---
 title: A juce::Button fires its click on a right-click too
 type: gotcha
-summary: juce::Button presses and clicks for any mouse button, so a key that carries a right-click menu also runs its left-click action unless mouseDown and mouseUp swallow the popup-menu press first, as the DJ console's DjPad does.
+summary: juce::Button presses and clicks for any mouse button, so a key that carries a right-click menu also runs its left-click action unless mouseDown and mouseUp swallow the popup-menu press first, as the DJ console's DjPad does; a juce::Slider moves on a right-click too, which MixerSlider swallows on the track cards.
 tags: [rhino, juce, ui, input]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-27
 ---
 
 # A juce::Button fires its click on a right-click too
@@ -21,8 +21,13 @@ Every key with a second action is a `DjPad` (`native/src/ui/dj/DjControls.h`), w
 
 A new control that needs a right-click goes on `DjPad` or on a `Button` subclass with the same two overrides, never on a stock button with a listener bolted on: the listener hears the right-click, but so does the button.
 
+## Sliders too
+
+`juce::Slider` acts on any mouse button in the same way, and a `LinearBar` slider jumps to wherever it is pressed. Until commit `fd03386` (2026-10-27), right-clicking a track card's volume or pan bar moved the level. Those bars are now `MixerSlider` (`native/src/ui/arrangement/MixerSlider.h`). It swallows a popup-menu press in `mouseDown`, `mouseDrag`, `mouseUp` and `mouseDoubleClick`, and calls `onRightClick` from the press ([Track automation](automation.md#the-cards-fader-and-pan)). The main row's bars are still plain `juce::Slider`s.
+
 ## Related
 
 - [DJ view and the booth](dj-view.md)
+- [Track automation](automation.md)
 - [A JUCE component listening to itself hears its own clicks twice](juce-self-listener-hears-clicks-twice.md)
 - [Pointer and selection rules](pointer-and-selection.md)

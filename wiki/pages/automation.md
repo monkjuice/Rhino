@@ -1,7 +1,7 @@
 ---
 title: Track automation
 type: component
-summary: Per-track lanes stored as Rhino's own ValueTree children, naming their device by key rather than slot, played by the engine from parameter curves the session mirrors after every change, and edited on a row of their own or, on the track's own row, the one lane its card's chooser picks, by pointer travel with Shift for fine steps.
+summary: Per-track lanes stored as Rhino's own ValueTree children, naming their device by key rather than slot, reached from a right-click on a device knob or on a card's fader or pan, played by the engine from parameter curves the session mirrors after every change, and edited on a row of their own or, on the track's own row, the one lane its card's chooser picks, by pointer travel with Shift for fine steps.
 tags: [rhino, automation, arrangement, devices]
 sources: []
 updated: 2026-10-27
@@ -9,7 +9,7 @@ updated: 2026-10-27
 
 # Track automation
 
-Automation belongs to a track and spans the whole timeline; it moved off clips in September 2026. Its clip-local counterpart, since 2026-10-26, is an audio clip's own Gain, Pan and Pitch envelopes. These are kept and edited apart from track lanes, but mirrored by the same pass ([Clip envelopes](clip-envelopes.md)). The model is `native/src/model/SessionAutomation.cpp`; the arrangement's lane rows, hit testing and gestures are `ArrangementAutomation.cpp`, the drawing `ArrangementAutomationPaint.cpp`, the card's chooser `ArrangementAutomationChooser.cpp`.
+Automation belongs to a track and spans the whole timeline; it moved off clips in September 2026. Its clip-local counterpart, since 2026-10-26, is an audio clip's own Gain, Pan and Pitch envelopes. These are kept and edited apart from track lanes, but mirrored by the same pass ([Clip envelopes](clip-envelopes.md)). The model is `native/src/model/SessionAutomation.cpp`; the arrangement's lane rows, hit testing and gestures are `ArrangementAutomation.cpp`, the drawing `ArrangementAutomationPaint.cpp`, the card's chooser `ArrangementAutomationChooser.cpp`, the fader and pan menu `ArrangementMixerAutomation.cpp`.
 
 ## Storage
 
@@ -22,6 +22,17 @@ A lane with fewer than two points is revealed but inert: a dotted line at the kn
 ## Reaching it
 
 Right-click a knob in the Device View (`DeviceEditorPanel::showParameterMenu`): *Show automation* draws the lane over the track, *Show automation on new lane* stacks a dimmed copy of the track underneath, *Hide* removes the lane, *Delete* clears its points. On a lane, a click adds a node and starts dragging it; a double-click removes one.
+
+### The card's fader and pan
+
+Since commit `fd03386` (2026-10-27), at the user's request, a right-click on a track card's volume or pan bar opens the same menu, plus *Re-enable automation* once the bar has been moved by hand (`showMixerMenu`, `ui/arrangement/ArrangementMixerAutomation.cpp`; tests call the seam `chooseMixerAutomation`). The bars are `MixerSlider`s, which swallow the popup-menu press ([A juce::Button fires its click on a right-click too](juce-button-fires-on-right-click.md#sliders-too)).
+
+- **It is an ordinary lane.** `Session::trackMixerTarget(track, MixerControl::volume|pan)` (`SessionMixer.cpp`) names the track's own `te::VolumeAndPanPlugin` by its raw slot, and the parameter by its index among the plugin's active automatable parameters, found by pointer rather than assumed (0 Volume, 1 Pan at the pinned Tracktion commit). The fader then gets a device key like any device, so the lane is stored, mirrored, saved, renewed on a track paste and rescaled by tempo with no case of its own.
+- **Named "Mixer"** (Live's name) by `readTrackAutomations`, because `deviceSlots` hides the channel strip and would leave the name blank; the chooser lists "Mixer: Volume" and "Mixer: Pan".
+- **Its values are the engine's fader position**, 0 to 1 on Tracktion's fader law (-inf to +6 dB), not the card's -60 to +6 dB. Readouts print dB through the parameter's `valueToString`.
+- **Not reachable:** the main row (its bars are plain `juce::Slider`s, so a right-click there still moves the level, and `trackMixerTarget` is invalid because the master volume plugin is not in the master plugin list) and the sends (an `AuxSendPlugin` knob could take the same route).
+
+The end of `AutomationLanes.inc` covers the target, a right-press leaving the level alone, the naming and dB readout, the engine curve, the follow list, override and re-enable, the pan on its own row, delete and hide. The popup itself is not exercised.
 
 ## The automation chooser
 
@@ -54,14 +65,15 @@ Commit `99b4e24`, 2026-10-25, at the user's request. A card whose track has at l
 - **When it runs.** `markModified` marks the lanes stale for every change but `ModelChange::none` (a name, a colour, a view setting, which can move no lane; [Session, the model](session-model.md)), and `AutomationMirror`, a listener on the session's own announcement, mirrors them after any such change, leaving unchanged curves alone. It also runs at once when a knob touch takes a parameter from its lane (inside a drag nothing is announced until release) and when an override is toggled. The WAV export calls it before rendering. Since commit `a1c9607` it ends by calling `mirrorClipEnvelopesToEngine`, which writes the clip envelopes' curves.
 - **It owns every curve on a track's or the main list's devices.** A clip's own plugin list falls outside this rule: the clip-envelope devices' curves belong to their own mirror. A curve no lane drives is cleared rather than played unseen, whether it came from a document saved with its curves, a device restored by undo or one moved to another track. The edit is searched for strays only when its set of plugins changes, compared by `EditItemID`. Curves are never written through the undo manager.
 - **Touching an automated knob overrides it**, as in Live: the knob's **A** button turns amber and the lane stops driving until it is clicked. The override is kept by device key, so it survives a reorder. A lane that stops driving hands its parameter back to the value last set by hand rather than freezing on its final point, unless the user has taken that knob over.
-- **The rack follows.** The engine tells nobody when it moves a knob, so the Device View reads moving knobs back on its own 30 Hz timer, only while the transport rolls, only for faces with a knob on a lane, and not while hidden ([Device rack and device editors](device-rack.md)).
+- **Moving an automated card bar overrides it too.** The private `Session::takeMixerFromLane` runs from `beginTrackVolumeGesture`/`beginTrackPanGesture` and from `setTrackVolumeDb`/`setTrackPan`, so a double-click reset and the Push's encoders count. If the lane is driving, it marks the runtime overridden and mirrors at once, as `beginDeviceParameterGesture` does for a knob; otherwise the engine's curve pulls the bar back under the hand. *Re-enable automation* calls `toggleParameterAutomationOverride` only after asking whether the bar is overridden, because a toggle chosen twice would take it off again.
+- **The rack follows.** The engine tells nobody when it moves a knob, so the Device View reads moving knobs back on its own 30 Hz timer, only while the transport rolls, only for faces with a knob on a lane, and not while hidden ([Device rack and device editors](device-rack.md)). The card bars follow on the arrangement's frame clock instead: `findAutomatedMixers`, at the end of `buildRows`, lists the tracks whose fader or pan an active lane drives, and `followMixerAutomation` reads `Session::trackMixer` for them each frame while the arrangement shows, skipping a bar under the mouse. It sets the bars with `dontSendNotification`: a notifying `setValue` would call `setTrackVolumeDb` and override the lane every frame.
 - **Tempo changes rescale every point** by old over new BPM in `Session::setTempo`: points are seconds, and the engine moves clips by beats.
 
 ## Limits and traps
 
 - **The mirror holds plugins alive.** `mirroredCurves` keeps a `te::Plugin::Ptr` per curve, so `restoreProject` and `newProject` clear it before the outgoing edit is destroyed. A plugin outliving its edit corrupted the heap (`0xc0000374`) the first time a document was reopened ([Hold ids, not pointers](ids-not-pointers.md)).
 - **A parameter is still named by its index** within the device (`parameter`), so a device's parameter order stays persistent ([Stored indices are append-only](append-only-stored-indices.md)). For an external plugin that index is the knob's place in the rack's chosen list, so a knob joins only at the end, and taking one off moves the lanes above it down in the same undo step ([Mapped parameters](mapped-parameters.md)).
-- **The main row has no lanes yet.** `showTrackAutomation` refuses a main-track target because the pinned row has nowhere to stack one, although storage (on the edit's own state) and playback already treat it like any track.
+- **The main row has no lanes yet.** `showTrackAutomation` refuses a main-track target because the pinned row has nowhere to stack one, although storage (on the edit's own state) and playback already treat it like any track. Its volume and pan bars offer no automation menu either.
 - **A latent device's lane is read early.** The engine reads a delayed plugin's curve one latency ahead ([Tracktion reads a delayed plugin's automation early](tracktion-reads-delayed-plugin-automation-early.md)). Clip Pitch corrects for this; track lanes do not (not measured).
 
 ## Related
@@ -75,3 +87,4 @@ Commit `99b4e24`, 2026-10-25, at the user's request. A card whose track has at l
 - [Hold ids, not pointers](ids-not-pointers.md)
 - [Transport, tempo and loop](transport.md)
 - [Mapped parameters, an external plugin's rack](mapped-parameters.md)
+- [Mixer](mixer.md)

@@ -5,6 +5,7 @@
 #include "content/ContentLibrary.h"
 #include "dsp/ScaleQuantizer.h"
 #include "audio/AutoTuneDevice.h"
+#include "audio/RhinoEqDevice.h"
 #include "audio/UtilityDevice.h"
 #include "instruments/DrumRackDevice.h"
 #include "midi/RhinoArpDevice.h"
@@ -438,6 +439,34 @@ void runPatternDeviceRackTest()
             "The rack shows where the engine has moved a knob on a lane");
     require(session.clearTrackAutomationPoints({0, synthSlot, 0}).wasOk() && !chainView.devicePanels[1]->followsAutomation(),
             "A face stops following once its lane is cleared");
+
+    // A face with frames of its own keeps them while the rack follows a lane
+    // on it. Starting a running juce::Timer restarts its count, and every
+    // follow started the face's 24 Hz clock again, 30 times a second, so an
+    // EQ with a lane drew no spectrum while the song played - which on an
+    // audio track is the only time anything goes through it. A clock part-way
+    // through its count is stood in for by one at a rate no face picks, which
+    // a follow that restarts it puts back to 24 Hz.
+    require(session.addDevice("Equaliser", 1).wasOk(), "An audio track takes Rhino EQ");
+    chainView.selectTrack(1);
+    DeviceEditorPanel* eqPanel = nullptr;
+    for (auto* panel : chainView.devicePanels)
+        if (panel->deviceId == "Equaliser")
+            eqPanel = panel;
+    require(eqPanel != nullptr && eqPanel->isTimerRunning(), "The EQ's face runs a clock for its spectrum");
+    const auto eqSlot = eqPanel->devicePluginIndex();
+    const auto bandFourFrequency = RhinoEqDevice::frequencyParameter(3);
+    require(session.setTrackAutomationPoints({1, eqSlot, bandFourFrequency}, {{0.0, 200.0f}, {2.0, 2000.0f}}).wasOk()
+                && eqPanel->followsAutomation(),
+            "A lane on band 4's frequency is one the EQ's face follows");
+    eqPanel->startTimer(1000);
+    for (int frame = 0; frame < 3; ++frame)
+        chainView.followAutomation();
+    require(eqPanel->getTimerInterval() == 1000,
+            "Following a lane leaves the face's running clock alone, so its frames still come due");
+    require(session.clearTrackAutomationPoints({1, eqSlot, bandFourFrequency}).wasOk()
+                && session.deleteDevice(1, eqSlot).wasOk(),
+            "The EQ and its lane go again");
 
     // A device on the SDK without a face of its own gets one generated from
     // what its controls declare: sections, a chooser for a choice, a switch

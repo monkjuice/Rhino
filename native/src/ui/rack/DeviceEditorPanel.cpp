@@ -93,10 +93,19 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
         ? dynamic_cast<RhinoEqDevice*>(session.devicePlugin(track, pluginSlot)) : nullptr;
     const auto eqAnalysing = eqDevice != nullptr && device.enabled
         && eqDevice->analyserMode() != EqEngine::AnalyserMode::Off;
+    // A running clock is left alone: starting a juce::Timer again restarts its
+    // count, and the rack re-targets a face with a knob on a lane 30 times a
+    // second while the song plays, so a 24 Hz frame never came due and the
+    // EQ's spectrum stood still.
     if (face == Face::AutoTune || face == Face::Vocoder || face == Face::DrumRack || eqAnalysing)
-        startTimerHz(24);
+    {
+        if (!isTimerRunning())
+            startTimerHz(24);
+    }
     else
+    {
         stopTimer();
+    }
     if (face == Face::Eq && spectrum == nullptr)
         spectrum = std::make_unique<SpectrumReader>();
     if (face == Face::DrumRack)

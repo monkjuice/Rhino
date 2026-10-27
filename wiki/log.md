@@ -1353,6 +1353,13 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/rhino-tune.md, pages/device-chain-order.md (Related: the Vocoder's new title, and Sidechains)
 - updated: index.md (Components: Sidechains; summaries of Rhino Vocoder and Device rack)
 
+## [2026-10-26] update | Device faces: the automation follow no longer restarts a running frame clock, so Rhino EQ's spectrum moves on audio tracks again
+- source: the change brief (user report and rhino.log of 2026-10-26), checked against native/src/ui/rack/DeviceEditorPanel.cpp (`setTarget`), DeviceRack.cpp (`followAutomation`), DrumRackWindow.cpp and tests/Pattern/DeviceRackTest.cpp; on 2026-10-26 both files compiled and the link was blocked by a running RhinoDAW (LNK1104); built and run on 2026-10-27, all six CTest cases pass, and committed then
+- created: pages/juce-timer-restart-resets-countdown.md (a restart resets the count; the 30 Hz re-target starving the 24 Hz clock and why only audio tracks showed it; the faces affected; the guard and the rule; the test and the rejected real-time test)
+- updated: pages/device-rack.md (`setTarget` starts the frame timer only when it is not running; the automation follow re-runs `setTarget` every frame, the Drum Rack's window too; Related)
+- updated: pages/rhino-eq.md (the spectrum's timer, the freeze until 2026-10-26; Related; updated date)
+- updated: index.md (Gotchas: the new page)
+
 ## [2026-10-26] update | Audio clips: Live-style clip envelopes for Gain, Pan and Pitch, and three Tracktion latency traps (a1c9607)
 - source: the change brief (Live 12 manual ch. 26, pp. 504-512; engine measurements at pinned 4536d8a), checked against native/src/core/dsp/ClipEnvelope.h, native/src/model/SessionClipEnvelopes.cpp, SessionAutomation.cpp (`mirrorAutomationToEngine`), SessionTransport.cpp (`setTempo`), SessionMerge.cpp, Session.h, native/src/devices/infra/ClipEnvelopeDevice.h, ClipPitchDevice.h/.cpp, DeviceCatalog.cpp, native/src/ui/audioclip/AudioClipEnvelope.cpp, AudioClipPanel.h and tests/Arrangement/WorkflowTest.cpp; committed as a1c9607
 - created: pages/clip-envelopes.md (meaning of each envelope, content-time storage and what retimes it, the two hidden devices on the clip's plugin list, the mirror, the costs, merge, the tests)

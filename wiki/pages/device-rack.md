@@ -41,11 +41,11 @@ Two exceptions keep a drag cheap (commit `e7c9554`; [What a change costs the int
 
 A sync that changes no slot still lays the chain out again when a face's preferred width has changed: a knob mapped onto an external plugin's face widens it ([Mapped parameters](mapped-parameters.md)). The same sync shows what the last control touched in a plugin's window did, from `Session::parameterMappingReport`, once per report. Its end fires `deviceSelected(track, pluginIndex)` when the selected device's track and plugin pair changes (-1 for an empty chain); the [Ableton Push](ableton-push.md) follows the rack through it. `selectPluginIndex` is the way back: the Push's upper row selects a device on the shown track by plugin index (2026-10-13).
 
-Faces that move on their own (Tune's meter, the vocoder bank, the EQ spectrum, the Drum Rack's pad and key flashes and playhead) run a 24 Hz timer that does nothing while the rack is hidden; the rest ask for no frames.
+Faces that move on their own (Tune's meter, the vocoder bank, the EQ spectrum, the Drum Rack's pad and key flashes and playhead) run a 24 Hz timer that does nothing while the rack is hidden; the rest ask for no frames. `setTarget` decides, and since 2026-10-26 it starts that timer only when it is not already running: it is re-run up to 30 times a second (below), and restarting a running `juce::Timer` resets its count, so until then no frame came due on a face with a lane and the EQ's spectrum stood still on audio tracks ([Starting a running juce::Timer restarts its count](juce-timer-restart-resets-countdown.md)).
 
 ## Following automation
 
-The engine moves automated knobs and tells nobody, so the rack reads them back on its own 30 Hz timer: only while the transport rolls (plus once as it stops, so knobs settle where the curve left them), only for faces where `followsAutomation()` finds a knob on a lane not taken over by hand, and not while hidden (commit `fe163c8`; [Track automation](automation.md)).
+The engine moves automated knobs and tells nobody, so the rack reads them back on its own 30 Hz timer: only while the transport rolls (plus once as it stops, so knobs settle where the curve left them), only for faces where `followsAutomation()` finds a knob on a lane not taken over by hand, and not while hidden (commit `fe163c8`; [Track automation](automation.md)). It re-reads them by calling `setTarget` on each such face again, as `DrumRackView::followAutomation` does for the Drum Rack's window, so anything `setTarget` starts must tolerate being re-run every frame.
 
 ## Gestures
 
@@ -64,6 +64,7 @@ Tests: `native/src/tests/Pattern/DeviceRackTest.cpp`, where `runDrumRackFaceTest
 - [Drum Rack sample editor](drum-rack-sample-editor.md)
 - [A JUCE component listening to itself hears its own clicks twice](juce-self-listener-hears-clicks-twice.md)
 - [A JUCE drag finds its target in JUCE's window order, not the screen's](juce-drop-target-follows-its-own-window-order.md)
+- [Starting a running juce::Timer restarts its count](juce-timer-restart-resets-countdown.md)
 - [Rhino Arp](rhino-arp.md)
 - [Rhino EQ](rhino-eq.md)
 - [Rhino Tune](rhino-tune.md)

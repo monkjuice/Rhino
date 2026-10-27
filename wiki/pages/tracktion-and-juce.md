@@ -4,7 +4,7 @@ type: decision
 summary: Rhino runs on Tracktion Engine with a hand-built JUCE interface, chosen in September 2026 over a custom engine, Qt Quick, WebView or Tauri.
 tags: [rhino, architecture, tracktion, juce]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-27
 ---
 
 # Tracktion Engine with a native JUCE UI
@@ -35,7 +35,8 @@ The code has settled the frontend choice: there is no Qt or WebView code, and th
 - Tracktion owns edits, playback graphs, streaming, parameters and device state, and the UI never schedules audio. `Session` is a facade over one `te::Edit`, see [Session, the model](session-model.md).
 - Rhino's devices are `te::Plugin` types registered by `DeviceCatalog::registerBuiltInTypes` ([Device catalog](device-catalog.md)). Forge arrives through Tracktion's external-plugin wrapper ([Forge is an independent VST3](forge-is-an-independent-vst3.md)).
 - Where the engine falls short, Rhino owns that piece instead of patching Tracktion. `RhinoEngineBehaviour` is the only thing Rhino tells the engine about itself, and the count-in is Rhino's own because Tracktion's cannot count in at bar one ([Recording and the count-in](recording.md)).
-- `native/scripts/fetch-dependencies.py` pins both revisions by hash: Tracktion `4536d8a`, the revision the study read, and its JUCE `37c894f`. They are fetched into `native/.deps/`, which nobody reads. Tracktion's licence is separate from JUCE's; for a personal project it was a detail to record, not a blocker, and the upstream licence files stay in `.deps`.
+- `native/scripts/fetch-dependencies.py` pins both revisions by hash: Tracktion `4536d8a`, the revision the study read, and its JUCE `37c894f`. They are fetched into `native/.deps/`, which nobody reads. Tracktion's licence is separate from JUCE's, and the upstream licence files stay in `.deps`.
+- The study (`research/DAW-STUDY.md`) called that licence a detail for a personal project, not a blocker. That no longer holds: since 2026-10-27 the repository is proprietary, with binaries under an end-user licence, and whether distributing them needs Tracktion's and JUCE's commercial licences is an open question ([Rhino is proprietary, all rights reserved](proprietary-licence.md)).
 - The frame-pacing and pointer-response gates in `research/UX-SPEC.md` are requirements that have never been measured. At the user's direction there is no benchmark harness and no synthetic large session yet.
 
 ## Related
@@ -46,3 +47,4 @@ The code has settled the frontend choice: there is no Qt or WebView code, and th
 - [Forge is an independent VST3](forge-is-an-independent-vst3.md)
 - [Directories not to read](off-limits-directories.md)
 - [Dependency direction](dependency-direction.md)
+- [Rhino is proprietary, all rights reserved](proprietary-licence.md)

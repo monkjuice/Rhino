@@ -1521,3 +1521,9 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/arrangement-view.md (summary; sixteen units with `ArrangementMixerAutomation.cpp` and `MixerSlider.h`; `followMixerAutomation` on the frame clock)
 - updated: pages/juce-button-fires-on-right-click.md (summary; "Sliders too": a LinearBar slider moved on a right-click, `MixerSlider`; date, Related)
 - updated: index.md (the four summaries)
+
+## [2026-10-27] update | The repository is proprietary, all rights reserved (ce97dd7)
+- source: the main agent's brief, checked against LICENSE, the font and sample licence files, and the stretcher flags in native/CMakeLists.txt
+- created: pages/proprietary-licence.md (the decision and holder; what it covers; third-party files it does not; the open question of Tracktion's, JUCE's and the other compiled-in libraries' licences)
+- updated: pages/tracktion-and-juce.md (the "detail for a personal project" framing no longer holds; link to the decision; date, Related)
+- updated: index.md (the new decision)

@@ -1,6 +1,8 @@
 #include "ArpTestHarness.h"
+#include <atomic>
 #include <cstdio>
 #include <functional>
+#include <thread>
 
 namespace rhino
 {
@@ -551,6 +553,54 @@ void runArpMechanicsTests(te::Edit& edit)
             require(notes[i].message.getNoteNumber() == expected[i],
                     "an out-of-scale F must choose E on a tie, then transpose in B major");
         test.requireBalanced();
+    });
+
+    // Dragging the tempo with an arp on a track froze Rhino (2026-10-26). The
+    // engine runs plugins on worker threads while the audio thread holds the
+    // callback lock and spins until they finish. TempoSetting::setBpm writes
+    // the bpm, which leaves the tempo list's update pending, and only then
+    // applies it; an arp asking the edit's tempo sequence for beats in between
+    // applied it itself, and that takes the callback lock. Here the test writes
+    // the bpm as setBpm does, holds the lock as the audio thread would, and
+    // runs the arp on a thread of its own.
+    check("a pending tempo change never blocks the arp on a worker thread", [&]
+    {
+        Harness test(edit);
+        test.plain();
+        auto& tempo = *edit.tempoSequence.getTempo(0);
+        const auto bpm = tempo.getBpm();
+        const auto beatSeconds = [&]
+        {
+            return edit.tempoSequence.getInternalSequence()
+                .toTime(tracktion::core::BeatPosition::fromBeats(1.0)).inSeconds();
+        };
+        const auto beatBefore = beatSeconds();
+        tempo.state.setProperty(te::IDs::bpm, bpm * 0.9, nullptr);
+        require(std::abs(beatSeconds() - beatBefore) < 1.0e-9,
+                "the tempo change must still be waiting for the message thread, or this check proves nothing");
+
+        std::atomic<bool> finished {false};
+        juce::String workerError;
+        auto finishedUnderLock = false;
+        std::thread worker;
+        {
+            const juce::ScopedLock callback(edit.engine.getDeviceManager().deviceManager.getAudioCallbackLock());
+            worker = std::thread([&]
+            {
+                try { test.render(0.05, {on(0.0, 60)}); }
+                catch (const std::exception& error) { workerError = error.what(); }
+                finished = true;
+            });
+            const auto deadline = juce::Time::getMillisecondCounter() + 2000;
+            while (!finished && juce::Time::getMillisecondCounter() < deadline)
+                juce::Thread::sleep(5);
+            finishedUnderLock = finished;
+        }
+        worker.join();
+        tempo.state.setProperty(te::IDs::bpm, bpm, nullptr);
+        edit.tempoSequence.updateTempoData();
+        require(finishedUnderLock, "the arp waited on the audio callback lock to apply a pending tempo change");
+        require(workerError.isEmpty(), workerError);
     });
 
     if (!failures.isEmpty())

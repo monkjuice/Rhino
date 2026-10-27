@@ -15,6 +15,14 @@ int positiveModulo(std::int64_t value, int divisor)
 
 // Pitch first keeps the pattern in pitch order even across MIDI channels.
 int noteKey(int pitch, int channel) { return pitch * 16 + channel - 1; }
+
+// The engine's own tempo map, never TempoSequence::toBeats or toTime. Those
+// first apply a tempo change still waiting for the message thread, and applying
+// it takes the audio callback lock. On one of the engine's worker threads that
+// lock is held by the audio thread, which spins until the worker finishes, so
+// dragging the tempo with an arp on a track froze Rhino. The map is safe to
+// read for the length of an audio callback, which is where the arp runs.
+const auto& tempoMap(const te::Edit& edit) { return edit.tempoSequence.getInternalSequence(); }
 }
 
 void RhinoArpDevice::initialise(const te::PluginInitialisationInfo& info)
@@ -97,14 +105,14 @@ double RhinoArpDevice::toSeconds(double beat) const
 {
     if (freeRunning)
         return freeAnchorSeconds + (beat - freeAnchorBeat) * freeSecondsPerBeat;
-    return edit.tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beat)).inSeconds();
+    return tempoMap(edit).toTime(tracktion::core::BeatPosition::fromBeats(beat)).inSeconds();
 }
 
 double RhinoArpDevice::toBeat(double seconds) const
 {
     if (freeRunning)
         return freeAnchorBeat + (seconds - freeAnchorSeconds) / freeSecondsPerBeat;
-    return edit.tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(seconds)).inBeats();
+    return tempoMap(edit).toBeats(tracktion::core::TimePosition::fromSeconds(seconds)).inBeats();
 }
 
 double RhinoArpDevice::nextStepBeat(double tickBeat, std::int64_t step) const
@@ -343,9 +351,9 @@ void RhinoArpDevice::applyToBuffer(const te::PluginRenderContext& context)
     freeRunning = !context.isPlaying;
     if (freeRunning)
     {
-        const auto here = edit.tempoSequence.toBeats(
+        const auto here = tempoMap(edit).toBeats(
             tracktion::core::TimePosition::fromSeconds(blockStartSeconds)).inBeats();
-        const auto beatLater = edit.tempoSequence.toTime(
+        const auto beatLater = tempoMap(edit).toTime(
             tracktion::core::BeatPosition::fromBeats(here + 1.0)).inSeconds();
         freeSecondsPerBeat = std::max(1.0e-3, beatLater - blockStartSeconds);
         freeAnchorSeconds = blockStartSeconds;

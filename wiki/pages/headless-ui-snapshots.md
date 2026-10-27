@@ -74,6 +74,8 @@ with the `Theme` look set, from `ClipEnvelopes.inc` in the arrangement case ([Cl
 `RHINO_NOTE_PLAYING_KEYS_SNAPSHOT` (commit `4a6a17b`) writes the note editor with a white key and a black key lit as
 keys the track is playing, on a looping clip, from `NotePlayingKeys.inc` in the arrangement case
 ([Note editor](note-editor.md#keys-the-track-is-playing)).
+`RHINO_CLIP_LOOP_SNAPSHOT` (commit `81a898b`) writes a looped clip's lane, zoomed to three bars at 2x, with a notch
+where each pass begins, from `ClipLoop.inc` in the same case ([Clip Loop switch](clip-loop.md)).
 
 A `juce::TreeView` cannot be seen this way opened: it lays out its rows asynchronously, so a snapshot shows an opened
 folder with no children, even after `setOpen`, `resized()` or a rebuild at a new width. Test the browser's rows and drag

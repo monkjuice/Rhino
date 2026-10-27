@@ -37,7 +37,7 @@ On a looped clip, `patternOffsetBeats()` returns the loop's start and `patternLe
 
 ## Elsewhere
 
-- **Arrangement:** `rebuildTrackClips` (`ArrangementSync.cpp`) reads `getSequenceLooped()`, so a stretched clip draws its repeats from the same origin ([Arrangement view](arrangement-view.md)). There are no loop-boundary notches, which Live draws.
+- **Arrangement:** `rebuildTrackClips` (`ArrangementSync.cpp`) reads `getSequenceLooped()`, so a stretched clip draws its repeats from the same origin. Since commit `81a898b` (2026-10-27) a looped clip also gets a small notch at the top wherever a pass begins, as Live draws, so it reads apart from a clip that was only dragged long. The notches count passes from `start - offset` and are worked out from `ClipView::loopSeconds` ([Arrangement view](arrangement-view.md#rules-worth-knowing)).
 - **Copies:** `Session::ClipSnapshot` carries `loopStartBeats` and `loopLengthBeats`. `pasteClipRegion` sets the range before the position, so copy, cut, paste, duplicate and selection moves all keep the loop ([Region editing](region-editing.md#why-snapshots-not-ids)). A split of a looped clip keeps an offset past one pass, and that plays the same.
 - **DJ cells:** a looped clip copied into a cell becomes one pass of its loop, looping the same range ([Clip slots](clip-slots.md)).
 
@@ -60,7 +60,8 @@ On a looped clip, `patternOffsetBeats()` returns the loop's start and `patternLe
 - an edit heard on both passes;
 - a paste that grows the loop, and its undo;
 - a region copy and a DJ cell copy keep the loop;
-- a left trim's phase, and undo.
+- a left trim's phase, and undo;
+- since `81a898b`, the notch: painted on a software image, the column where the second pass starts differs from the top strip 12 px along, and does not once looping is off. Undo loops the clip again. The clip's box fills its lane. `RHINO_CLIP_LOOP_SNAPSHOT=<png>` writes the looped clip's lane zoomed to three bars, at 2x.
 
 ## Related
 

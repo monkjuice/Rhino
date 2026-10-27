@@ -1423,3 +1423,11 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/headless-ui-snapshots.md (`RHINO_NOTE_TOOLS_SNAPSHOT` shows the switch; `RHINO_NOTE_PLAYING_KEYS_SNAPSHOT` wording)
 - updated: pages/writing-rhino-tests.md (rule 24: a scenario's locals must not shadow the enclosing scopes', C4456)
 - updated: index.md (summaries of Clip Loop switch, Note editor and Note editor tools panel)
+
+## [2026-10-27] update | Arrangement: looped clips notched at each pass, clips fill their lane (81a898b)
+- source: the coordinator's brief (two user requests from screenshots), checked against native/src/ui/arrangement/ArrangementGeometry.cpp (`boundsOf`, `clipBandOf`), ArrangementClipPainter.cpp (`paintClipPiece`'s notches, `waveArea`), ArrangementSync.cpp (`loopSeconds`), ArrangementAutomation.cpp (`automationArea`) and Arrangement.h; committed and pushed as 81a898b, all six CTest cases pass
+- updated: pages/arrangement-view.md (summary; a clip fills its row through `clipBandOf`, the old 5 px inset, hit testing, measure from the band; the loop notches: `loopSeconds`, size and colour, passes from `start - offset`, per piece, culling, test and snapshot; the default row's clip box and waveform lanes; the stale "no notches" line)
+- updated: pages/clip-loop.md (the notches replace the "no notches" limit; the new test checks and `RHINO_CLIP_LOOP_SNAPSHOT`)
+- updated: pages/automation.md (the own-row curve area measured from `clipBandOf`, starting higher than under the old inset)
+- updated: pages/headless-ui-snapshots.md (`RHINO_CLIP_LOOP_SNAPSHOT`)
+- updated: index.md (summary of Arrangement view)

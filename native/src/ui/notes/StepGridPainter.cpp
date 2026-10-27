@@ -441,9 +441,9 @@ void StepGrid::paint(juce::Graphics& g)
         g.setColour(velocityAdjustActive ? juce::Colour(0xffe9a84a) : juce::Colour(0xffb8c4aa));
         drawSnappedText(g, "VELOCITY  " + value, footer.reduced(9.0f, 2.0f).toNearestInt(),
                         juce::Justification::centredRight);
-        // The draw, velocity and loop toggles sit at the left of the footer,
-        // so the hint starts past them rather than underneath them.
-        const auto hint = footer.withTrimmedLeft(178.0f).reduced(9.0f, 2.0f);
+        // The draw and velocity toggles sit at the left of the footer, so the
+        // hint starts past them rather than underneath them.
+        const auto hint = footer.withTrimmedLeft(132.0f).reduced(9.0f, 2.0f);
         g.setFont(uiFont(8.5f));
         g.setColour(juce::Colour(0xff78818a));
         // The lane is named only while it is on screen.

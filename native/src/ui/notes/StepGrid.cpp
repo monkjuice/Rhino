@@ -44,24 +44,6 @@ StepGrid::StepGrid(Session& s) : session(s), vblank(this, [this] { updatePlayhea
         grabKeyboardFocus();
     };
     addAndMakeVisible(loopButton);
-    // Live's clip Loop switch. Its state is the clip's, and the change
-    // listener keeps the button showing it.
-    clipLoopButton.setButtonText("Loop");
-    clipLoopButton.setTooltip("Loop the clip: its notes repeat for as long as the clip is dragged out in the "
-                              "arrangement, and the editor shows the pattern that repeats.");
-    clipLoopButton.setWantsKeyboardFocus(false);
-    clipLoopButton.setColour(juce::TextButton::buttonColourId, palette::noteEditorButton);
-    clipLoopButton.setColour(juce::TextButton::buttonOnColourId, palette::noteEditorButtonOn);
-    clipLoopButton.onClick = [this]
-    {
-        const auto looping = !session.isPatternLooping();
-        if (const auto result = session.setPatternLooping(looping); result.failed())
-            report(result.getErrorMessage());
-        else
-            report(looping ? "Clip loops: drag its end out in the arrangement to repeat it" : "Clip plays once");
-        grabKeyboardFocus();
-    };
-    addAndMakeVisible(clipLoopButton);
     // Live's Preview switch. Its state is the session's, a preference of the
     // machine, and the change listener keeps the button showing it.
     previewButton.setTooltip("Preview notes: hear a note through the clip's instrument as you draw, move or click "
@@ -663,8 +645,6 @@ void StepGrid::changeListenerCallback(juce::ChangeBroadcaster*)
         repaint();
     }
     previewButton.setToggleState(session.noteAuditionEnabled(), juce::dontSendNotification);
-    clipLoopButton.setToggleState(session.isPatternLooping(), juce::dontSendNotification);
-    clipLoopButton.setEnabled(session.hasPatternClip());
     if (const auto beat = stepsPerBeat(), bar = stepsPerBar(); beat != shownStepsPerBeat || bar != shownStepsPerBar)
     {
         shownStepsPerBeat = beat;
@@ -858,9 +838,6 @@ void StepGrid::resized()
                          56, static_cast<int>(footerHeight) - 6);
     velocityButton.setBounds(66, getHeight() - static_cast<int>(footerHeight) + 3,
                              60, static_cast<int>(footerHeight) - 6);
-    // The clip's own switch, beside the editor's.
-    clipLoopButton.setBounds(130, getHeight() - static_cast<int>(footerHeight) + 3,
-                             46, static_cast<int>(footerHeight) - 6);
     // A new height can fold the lane or bring it back, which the button shows.
     updateVelocityButton();
     // A new height shows more rows or fewer, which changes which pitches are

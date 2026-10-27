@@ -1,4 +1,4 @@
-        // The note editor's Loop switch, Live's clip Loop: a looped clip
+        // The Loop switch in the note editor's tools panel, Live's clip Loop: a looped clip
         // repeats its pattern for as long as it is dragged out, and the editor
         // shows the pattern that repeats. The engine does the repeating, so
         // what is checked is what the engine plays, what the arrangement draws
@@ -19,23 +19,23 @@
             song.beginNoteGesture("Loop fixture");
             require(song.addNote(0.0, 60, 4.0).wasOk(), "A note on the bar's first beat");
             song.endNoteGesture();
-            auto* clip = dynamic_cast<te::MidiClip*>(song.findClip(looped));
-            require(clip != nullptr, "The clip is a MIDI clip");
+            auto* loopClip = dynamic_cast<te::MidiClip*>(song.findClip(looped));
+            require(loopClip != nullptr, "The clip is a MIDI clip");
             // Where the engine plays a pitch, in beats from the clip's content
             // start: the loop laid end to end when it loops.
-            const auto played = [&clip](int pitch)
+            const auto played = [&loopClip](int pitch)
             {
                 std::vector<double> starts;
-                for (auto* note : clip->getSequenceLooped().getNotes())
+                for (auto* note : loopClip->getSequenceLooped().getNotes())
                     if (note->getNoteNumber() == pitch)
                         starts.push_back(note->getStartBeat().inBeats());
                 std::sort(starts.begin(), starts.end());
                 return starts;
             };
             // The clip's right edge dragged, as the arrangement drags it.
-            const auto stretchTo = [&song, &clip, looped](double end)
+            const auto stretchTo = [&song, &loopClip, looped](double end)
             {
-                const auto position = clip->getPosition();
+                const auto position = loopClip->getPosition();
                 return song.editClip(looped, {position.time.getStart().inSeconds(), end, position.offset.inSeconds()},
                                      ClipGesture::trimRight);
             };
@@ -48,17 +48,28 @@
             require(stretchTo(bar).wasOk() && song.editorStepCount() == 16, "Back to one bar");
 
             scenario("clip loop: the switch repeats the bar for as long as the clip runs");
-            auto grid = std::make_unique<StepGrid>(song);
-            grid->setSize(1000, 300);
-            grid->changeListenerCallback(nullptr);
-            require(grid->clipLoopButton.isEnabled() && !grid->clipLoopButton.getToggleState(),
-                    "The editor's Loop switch is off for a clip that plays once");
-            grid->clipLoopButton.onClick();
-            require(song.isPatternLooping() && grid->clipLoopButton.getToggleState(),
-                    "Pressed, it loops the clip and shows it does");
-            require(close(clip->getLoopStartBeats().inBeats(), 0.0) && close(clip->getLoopLengthBeats().inBeats(), 4.0)
-                        && close(clip->getPosition().time.getLength().inSeconds(), bar)
-                        && close(clip->getPosition().offset.inSeconds(), 0.0),
+            auto editor = std::make_unique<StepGrid>(song);
+            editor->setSize(1000, 300);
+            editor->changeListenerCallback(nullptr);
+            juce::String said;
+            editor->status = [&said](juce::String message) { said = std::move(message); };
+            // The switch is the tools panel's, beside the editor as the shell
+            // lays it out, and larger than the panel's other controls.
+            auto tools = std::make_unique<NoteToolsPanel>(song, *editor);
+            tools->setSize(NoteToolsPanel::width, StepGrid::openingHeight);
+            auto& loopSwitch = tools->loopButton;
+            require(loopSwitch.getHeight() > tools->highlightButton.getHeight()
+                        && loopSwitch.getWidth() >= tools->scaleBox.getRight() - tools->rootBox.getX(),
+                    "The tools panel's Loop switch is taller than its other controls and as wide as its rows");
+            require(loopSwitch.isEnabled() && !loopSwitch.getToggleState(),
+                    "and it is off for a clip that plays once");
+            loopSwitch.onClick();
+            require(song.isPatternLooping() && loopSwitch.getToggleState() && said.startsWith("Clip loops"),
+                    "Pressed, it loops the clip, shows it does and says so");
+            require(editor->loopButton.isVisible(), "The button over the keys, the song's loop over the clip, stays");
+            require(close(loopClip->getLoopStartBeats().inBeats(), 0.0) && close(loopClip->getLoopLengthBeats().inBeats(), 4.0)
+                        && close(loopClip->getPosition().time.getLength().inSeconds(), bar)
+                        && close(loopClip->getPosition().offset.inSeconds(), 0.0),
                     "The loop is the bar the clip played, and the clip stays where and as long as it was");
             require(played(60).size() == 1, "so until it is dragged out it plays what it played before");
             require(stretchTo(2.0 * bar).wasOk(), "Dragged out to two bars");
@@ -69,11 +80,11 @@
                         "and the engine plays the bar twice");
             }
             {
-                auto view = std::make_unique<Arrangement>(song);
-                view->setSize(1200, 600);
-                view->sync();
+                auto arrangement = std::make_unique<Arrangement>(song);
+                arrangement->setSize(1200, 600);
+                arrangement->sync();
                 const Arrangement::ClipView* drawn = nullptr;
-                for (const auto& onScreen : view->clips)
+                for (const auto& onScreen : arrangement->clips)
                     if (onScreen.id == looped) drawn = &onScreen;
                 require(drawn != nullptr && drawn->midiNotes != nullptr, "The looped clip is on screen with its notes");
                 std::vector<double> drawnStarts;
@@ -119,7 +130,7 @@
             require(close(song.patternStepAt(bar + song.beatsToSeconds(1.0)), 4.0),
                     "A beat into the second pass is the editor's fourth step");
             require(song.patternStepAt(2.0 * bar) < 0.0, "and past the clip's end there is no step");
-            require(std::abs(grid->playheadXForTime(bar + song.beatsToSeconds(1.0)) - grid->xForStep(4.0)) < 0.01f,
+            require(std::abs(editor->playheadXForTime(bar + song.beatsToSeconds(1.0)) - editor->xForStep(4.0)) < 0.01f,
                     "The editor draws its playhead on that step in the second pass");
             song.beginNoteGesture("Loop edit");
             require(song.addNote(8.0, 67, 2.0).wasOk(), "A note drawn in the loop");
@@ -129,12 +140,12 @@
                 require(starts.size() == 2 && close(starts[0], 2.0) && close(starts[1], 6.0), "plays on both passes");
             }
             song.beginNoteGesture("Room for a paste");
-            require(song.ensurePatternLengthSteps(32) && close(clip->getLoopLengthBeats().inBeats(), 8.0)
-                        && song.editorStepCount() == 32 && close(clip->getPosition().time.getLength().inSeconds(), 2.0 * bar),
+            require(song.ensurePatternLengthSteps(32) && close(loopClip->getLoopLengthBeats().inBeats(), 8.0)
+                        && song.editorStepCount() == 32 && close(loopClip->getPosition().time.getLength().inSeconds(), 2.0 * bar),
                     "Room for a paste past the loop's end makes the loop longer, and a clip long enough already keeps its length");
             song.endNoteGesture();
             song.undo();
-            require(close(clip->getLoopLengthBeats().inBeats(), 4.0) && song.editorStepCount() == 16,
+            require(close(loopClip->getLoopLengthBeats().inBeats(), 4.0) && song.editorStepCount() == 16,
                     "Undo puts the one-bar loop back");
 
             scenario("clip loop: copies loop as the clip does");
@@ -163,18 +174,20 @@
                     "A beat trimmed from the looped clip's start");
             require(close(song.patternStepAt(song.beatsToSeconds(1.0)), 4.0), "It opens a beat into its loop");
             require(song.editorStepCount() == 16, "and the editor still shows the whole loop");
-            grid->clipLoopButton.onClick();
-            require(!song.isPatternLooping() && !grid->clipLoopButton.getToggleState(), "Pressed again, the switch is off");
-            require(close(clip->getPosition().time.getStart().inSeconds(), song.beatsToSeconds(1.0))
-                        && close(clip->getPosition().time.getEnd().inSeconds(), 2.0 * bar),
+            loopSwitch.onClick();
+            require(!song.isPatternLooping() && !loopSwitch.getToggleState() && said == "Clip plays once",
+                    "Pressed again, the switch is off");
+            require(close(loopClip->getPosition().time.getStart().inSeconds(), song.beatsToSeconds(1.0))
+                        && close(loopClip->getPosition().time.getEnd().inSeconds(), 2.0 * bar),
                     "The clip keeps its place and its length");
-            require(close(clip->getPosition().offset.inSeconds(), song.beatsToSeconds(1.0)),
+            require(close(loopClip->getPosition().offset.inSeconds(), song.beatsToSeconds(1.0)),
                     "and opens where the loop had reached");
             require(played(67).size() == 1 && song.editorStepCount() == 28,
                     "It plays its notes once, and the editor shows the whole clip");
             song.undo();
-            require(song.isPatternLooping() && grid->clipLoopButton.getToggleState(), "Undo loops it again");
+            require(song.isPatternLooping() && loopSwitch.getToggleState(), "Undo loops it again");
 
-            grid.reset();
+            tools.reset();
+            editor.reset();
             song.releaseAudioDevice();
         }

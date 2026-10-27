@@ -1,6 +1,7 @@
 #include "NoteToolsPanel.h"
 #include "ui/shared/Theme.h"
 #include "ui/shared/UiVisibility.h"
+#include <cmath>
 
 namespace rhino
 {
@@ -22,6 +23,21 @@ NoteToolsPanel::NoteToolsPanel(Session& s, StepGrid& g) : session(s), grid(g)
 {
     setOpaque(true);
     setWantsKeyboardFocus(false);
+
+    // Its state is the clip's, which sync() reads, so a click asks the model
+    // and the change it announces sets the light.
+    loopButton.setButtonText("Loop");
+    loopButton.setTooltip("Loop the clip - its notes repeat for as long as the clip is dragged out in the "
+                          "arrangement, and the editor shows the pattern that repeats. The button over the keys "
+                          "loops the song's playback instead.");
+    loopButton.setWantsKeyboardFocus(false);
+    loopButton.setColour(juce::TextButton::buttonColourId, palette::noteEditorButton);
+    loopButton.setColour(juce::TextButton::buttonOnColourId, palette::noteEditorButtonOn);
+    loopButton.onClick = [this]
+    {
+        grid.toggleClipLoop();
+        returnFocus();
+    };
 
     highlightButton.setButtonText("Highlight");
     highlightButton.setTooltip("Highlight Scale - light the rows of the scale's notes in the note editor, so the "
@@ -94,7 +110,7 @@ NoteToolsPanel::NoteToolsPanel(Session& s, StepGrid& g) : session(s), grid(g)
         returnFocus();
     };
 
-    for (auto* component : std::initializer_list<juce::Component*>{&highlightButton, &rootBox, &scaleBox,
+    for (auto* component : std::initializer_list<juce::Component*>{&loopButton, &highlightButton, &rootBox, &scaleBox,
                                                                    &humanizeAmount, &humanizeButton,
                                                                    &reverseButton, &legatoButton})
         addAndMakeVisible(component);
@@ -127,9 +143,10 @@ void NoteToolsPanel::sync()
     const auto piano = clip && !session.isPatternDrums();
     for (auto* component : std::initializer_list<juce::Component*>{&highlightButton, &rootBox, &scaleBox})
         component->setEnabled(piano);
-    for (auto* component : std::initializer_list<juce::Component*>{&humanizeAmount, &humanizeButton,
+    for (auto* component : std::initializer_list<juce::Component*>{&loopButton, &humanizeAmount, &humanizeButton,
                                                                    &reverseButton, &legatoButton})
         component->setEnabled(clip);
+    loopButton.setToggleState(session.isPatternLooping(), juce::dontSendNotification);
 }
 
 void NoteToolsPanel::changeListenerCallback(juce::ChangeBroadcaster*)
@@ -160,8 +177,45 @@ void NoteToolsPanel::paint(juce::Graphics& g)
     g.fillRect(getWidth() - 1, 0, 1, getHeight());
     g.setColour(palette::textDim);
     g.setFont(uiFontBold(9.0f));
+    drawSnappedText(g, "CLIP", clipHeading);
     drawSnappedText(g, "SCALE", scaleHeading);
     drawSnappedText(g, "NOTES", notesHeading);
+}
+
+// The editor's own button face, with a loop drawn left of the word, centred
+// together: a circle open just right of the top, closed by an arrowhead that
+// points the way round it goes.
+void NoteToolsPanel::LoopSwitch::paintButton(juce::Graphics& g, bool highlighted, bool down)
+{
+    const auto on = getToggleState();
+    getLookAndFeel().drawButtonBackground(g, *this, findColour(on ? buttonOnColourId : buttonColourId),
+                                          highlighted, down);
+    const auto ink = !isEnabled() ? palette::disabled : on ? palette::text : palette::textDim;
+    const auto box = getLocalBounds().toFloat();
+    const auto side = std::round(box.getHeight() * 0.5f);
+    g.setFont(uiFontBold(13.0f));
+    const auto word = getButtonText();
+    const auto wordWidth = juce::GlyphArrangement::getStringWidth(g.getCurrentFont(), word) + 1.0f;
+    const auto left = std::round(box.getCentreX() - (side + 7.0f + wordWidth) * 0.5f);
+    const auto centre = juce::Point<float>(left + side * 0.5f, box.getCentreY());
+    const auto radius = side * 0.5f - 1.0f;
+    // Angles from twelve o'clock, clockwise.
+    constexpr auto from = 0.55f, to = juce::MathConstants<float>::twoPi - 0.35f;
+    juce::Path ring;
+    ring.addCentredArc(centre.x, centre.y, radius, radius, 0.0f, from, to, true);
+    g.setColour(ink);
+    g.strokePath(ring, juce::PathStrokeType(1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    const auto tip = centre + juce::Point<float>(radius * std::sin(to), -radius * std::cos(to));
+    const auto ahead = juce::Point<float>(std::cos(to), std::sin(to));
+    const auto across = juce::Point<float>(-ahead.y, ahead.x);
+    const auto head = side * 0.3f;
+    juce::Path arrow;
+    arrow.addTriangle(tip + ahead * head, tip - ahead * (head * 0.3f) + across * (head * 0.8f),
+                      tip - ahead * (head * 0.3f) - across * (head * 0.8f));
+    g.fillPath(arrow);
+    drawSnappedText(g, word, juce::Rectangle<float>(left + side + 7.0f, box.getY(), wordWidth + 2.0f, box.getHeight())
+                                 .toNearestInt(),
+                    juce::Justification::centredLeft);
 }
 
 void NoteToolsPanel::resized()
@@ -177,6 +231,10 @@ void NoteToolsPanel::resized()
     // The first heading in the band the editor's ruler takes, so the two read
     // as one line across the pane.
     area.removeFromTop(4);
+    clipHeading = area.removeFromTop(headingHeight);
+    // The clip's Loop switch, wider and taller than any other control here.
+    loopButton.setBounds(area.removeFromTop(loopHeight));
+    area.removeFromTop(rowGap + 6);
     scaleHeading = area.removeFromTop(headingHeight);
     auto choosers = row();
     rootBox.setBounds(choosers.removeFromLeft(52));

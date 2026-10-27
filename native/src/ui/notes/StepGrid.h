@@ -43,6 +43,11 @@ public:
     bool reverseNotes();
     bool legatoNotes();
     bool humanizeNotes(double amount);
+    // The tools panel's Loop switch, Live's clip Loop: the open clip's notes
+    // repeat for as long as it is dragged out in the arrangement, or play
+    // once again. One undo step, said in the readout. Not the loop button
+    // over the keys, which loops the song's playback over the clip.
+    bool toggleClipLoop();
     // Draw mode: the pointer becomes a pencil, so a press paints notes and a
     // drag paints a run of them. With it off the pointer selects, which is
     // what it does in the arrangement, and a note is put down by
@@ -546,11 +551,6 @@ private:
     bool loopDragActive = false;
     double loopAnchorStep = 0.0, loopPreviewStartStep = 0.0, loopPreviewEndStep = 0.0;
     juce::TextButton loopButton, drawButton, velocityButton;
-    // The clip's own Loop switch, Live's, in the footer beside Draw and
-    // Velocity: on, the clip repeats its pattern for as long as it is dragged
-    // out in the arrangement. Not the loop button over the keys, which loops
-    // the song's playback over the clip.
-    juce::TextButton clipLoopButton;
     PreviewButton previewButton;
     juce::VBlankAttachment vblank;
     static constexpr float labelWidth = 54.0f, headerHeight = 26.0f, footerHeight = 24.0f;

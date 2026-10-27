@@ -1391,3 +1391,11 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 ## [2026-10-26] update | Rhino Duck: chips lifted clear of the plates' lit top edge (e8da50a)
 - source: the coordinator's addendum, checked against effects/rhino-duck/ui/DuckTheme.h and ui/DuckArt.h (`drawPlate`); committed as e8da50a
 - updated: pages/rhino-duck-panel.md (the chip colour departs from the handoff: a fill must clear the plate's lightest point, not its average; why SOLO, Length and Trigger read as bare text; the new colours and edge)
+
+## [2026-10-26] update | Rhino Arp reads the engine's internal tempo map, so a tempo drag cannot deadlock RhinoDAW (b72e67d)
+- source: the change brief (the user's freeze of 2026-10-26: WER AppHangTransient, per-thread CPU, Tracktion 4536d8a read for the cause), checked against native/src/devices/midi/RhinoArpDeviceProcessing.cpp (`tempoMap`) and native/src/tests/ArpTest.cpp; committed and pushed as b72e67d, all six CTest cases pass
+- created: pages/tracktion-tempo-sequence-takes-callback-lock.md (symptom; setBpm's pending-update window and the three-way deadlock; the rule: getInternalSequence on the audio thread or a worker; the fix; the test that writes the bpm directly and asserts its precondition)
+- updated: pages/rhino-arp.md (Timing contract: conversions through `tempoMap`; Related; updated date)
+- updated: pages/real-time-audio-rules.md (some engine reads lock; Related; updated date)
+- updated: pages/reading-a-hung-process.md (AppHangTransient; per-thread CPU sampled twice; read the stacks before the user ends the app; Release RhinoDAW.exe has no PDB; Related; updated date)
+- updated: index.md (Gotchas: the new page)

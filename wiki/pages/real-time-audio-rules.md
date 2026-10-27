@@ -4,7 +4,7 @@ type: convention
 summary: The audio thread never allocates, locks, or touches files or UI; memory is sized at prepare and state crosses threads via atomics and queues.
 tags: [both, real-time, audio-thread]
 sources: []
-updated: 2026-10-23
+updated: 2026-10-26
 ---
 
 # Real-time audio rules
@@ -26,6 +26,8 @@ Each block has a deadline (about 2.7 ms at 48 kHz and 128 samples) that an alloc
 - **Refill the host's buffers; never swap your own in.** Forge's MIDI-learn filter swapped a fresh `MidiBuffer` in, which freed the host's storage on the audio thread. It now gathers survivors into `midiKept`, sized in `prepareToPlay`, and refills the host's buffer only when something was taken out.
 
 **Check it, do not read it.** What allocates is usually a few calls down. Forge's `realtimeSuite` (area `engine`) counts `operator new` across 64 blocks with notes and a bound knob moving, and `--profile-audio` prints allocations per block. The counter cannot see `juce::HeapBlock`, which calls `malloc` directly, so a growing `MidiBuffer` or `AudioBuffer` needs its own check: the suite also requires the host's MIDI storage pointer to survive the filter. Rhino's own binary replaces `operator new` the same way in `tests/DjTest.cpp` (a thread-local tally, null outside a check), and `checkBoothCost` requires none across 2,000 of the DJ booth's blocks.
+
+**Some engine reads lock.** `edit.tempoSequence.toBeats` and `toTime` can apply a pending tempo change on the calling thread under the audio callback lock. On a graph worker, that deadlocked RhinoDAW against the spin-waiting audio thread (Rhino Arp, fixed in `b72e67d`). On the audio thread or a worker, convert through `edit.tempoSequence.getInternalSequence()` ([Tracktion's tempo sequence can take the audio callback lock](tracktion-tempo-sequence-takes-callback-lock.md)).
 
 **Hand data across without locks.**
 - One pointer load per block plus a parity counter. The audio thread bumps a `seq_cst` guard entering and leaving each block, which tells `WavetableStore` and `SampleStore` when a replaced object can be freed ([Hold ids, not pointers](ids-not-pointers.md)).
@@ -71,3 +73,4 @@ For scale, the live graph of 135 tracks took a median 1.0-1.1 ms of a 10.7 ms bl
 - [The native device standard](native-device-standard.md)
 - [Ableton Push 1](ableton-push.md)
 - [The 120-track stress audit](stress-audit-2026-10.md)
+- [Tracktion's tempo sequence can take the audio callback lock](tracktion-tempo-sequence-takes-callback-lock.md)

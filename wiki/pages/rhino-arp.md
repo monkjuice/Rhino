@@ -4,7 +4,7 @@ type: component
 summary: A built-in MIDI arpeggiator with beat or millisecond scheduling and a dedicated five-area rack face.
 tags: [devices, midi, arpeggiator, timing, ui]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-26
 ---
 
 # Rhino Arp
@@ -18,6 +18,8 @@ The scale choices reuse `MusicalScale` names and masks from `native/src/core/dsp
 ## Timing contract
 
 Beat mode schedules in edit beats, not block-relative seconds. Millisecond mode keeps the next absolute wall-clock step time, clamps the free rate to 10-2000 ms, and converts that time back into edit beats for event output; gate duration follows the same conversion. This makes free-rate spacing independent of song tempo while preserving the processor's beat-domain event machinery.
+
+Every beat/second conversion reads `edit.tempoSequence.getInternalSequence()` through `tempoMap(edit)`, never `edit.tempoSequence.toBeats`/`toTime`. Those calls can apply a pending tempo change under the audio callback lock, and on a graph worker that deadlocked RhinoDAW during a tempo drag until `b72e67d` ([Tracktion's tempo sequence can take the audio callback lock](tracktion-tempo-sequence-takes-callback-lock.md)).
 
 Apply incoming note changes at their actual in-block MIDI timestamp, then convert scheduled events to seconds only when writing output. This prevents generated notes from appearing before the input event that triggered them. Reuse pre-sized MIDI output scratch arrays and fixed-size pending note-off storage on the realtime path; do not introduce callback allocation.
 
@@ -52,3 +54,4 @@ The reference face is `docs/images/rhino-arp.png`, written when `RHINO_ARP_SNAPS
 - [Device rack and device editors](device-rack.md)
 - [Colours and typography](colours-and-typography.md)
 - [Device chain order](device-chain-order.md)
+- [Tracktion's tempo sequence can take the audio callback lock](tracktion-tempo-sequence-takes-callback-lock.md)

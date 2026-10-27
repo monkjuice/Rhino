@@ -4,7 +4,7 @@ type: guide
 summary: Tell a hang from a crash, find every RhinoDAW including a frozen one with no visible window, read its live threads' stacks with dbghelp from Python, naming unloaded modules and unsymbolled classes by hand, and reproduce a shutdown hang through UI Automation without taking the pointer.
 tags: [rhino, debugging, windows, tooling]
 sources: []
-updated: 2026-10-22
+updated: 2026-10-26
 ---
 
 # Reading a hung RhinoDAW's stacks without a debugger
@@ -19,7 +19,7 @@ A hang writes no `Application Error` event. On 2026-10-12 the filter in [Debuggi
 Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='Windows Error Reporting'; StartTime=(Get-Date).AddHours(-12)} | Select-Object -First 5 | Format-List TimeCreated, Message
 ```
 
-The freeze showed as `Event Name: AppHangB1` with `P1: RhinoDAW.exe`, and the report listed no dump.
+The freeze showed as `Event Name: AppHangB1` with `P1: RhinoDAW.exe`, and the report listed no dump. The freeze on 2026-10-26, which the user ended, showed as `AppHangTransient`.
 
 ## 2. Find every instance
 
@@ -27,7 +27,9 @@ List them with `Get-Process RhinoDAW` and their `StartTime`. A frozen instance c
 
 `Get-Process` reports `Responding` as True for a process with no main window, so it cannot be trusted. Instead, enumerate the process's top-level windows (`EnumWindows`, `GetWindowThreadProcessId`) and call `IsHungAppWindow` on each. If every window is hung and the CPU is at 0, it is a deadlock, not a busy loop.
 
-There is no dump, so the live process is the only evidence. Read it before anything kills it, and ask the user before killing a RhinoDAW.
+If the CPU is not at 0, sample each thread's CPU twice, a few seconds apart: `(Get-Process -Id <pid>).Threads` with `Id`, `TotalProcessorTime` and `ThreadState`. On 2026-10-26 this told the spinning thread from the waiting ones in seconds. One thread was Running at 100% while the message thread and the worker pool were all in Wait. That pattern means a deadlock against Tracktion's audio thread, which spin-waits for its workers while holding the callback lock. It does not mean a busy UI ([Tracktion's tempo sequence can take the audio callback lock](tracktion-tempo-sequence-takes-callback-lock.md)).
+
+There is no dump, so the live process is the only evidence. Read it before anything kills it, and ask the user before killing a RhinoDAW. The user may end a frozen app within minutes. On 2026-10-26 it was closed about five minutes in, before its stacks were read, and the cause had to be found by reading code. Read the stacks first and explain afterwards.
 
 ## 3. Read the stacks with dbghelp from Python
 
@@ -43,6 +45,7 @@ The traps:
 - **`SizeOfStruct` must be 88.** That is the size of `SYMBOL_INFOW` with a one-character `Name`, however large the buffer behind it. With any other value, `SymFromAddrW` fails silently.
 - **Declare 64-bit `argtypes` for every handle.** ctypes otherwise passes a process or thread handle as a 32-bit int.
 - **A module being unloaded has already left the module list**, so frames inside it come back unnamed. `VirtualQueryEx` on the address followed by `GetMappedFileNameW` still names the file. That is how `Rhino Forge.vst3` was found in the middle of its `FreeLibrary`.
+- **The Release `RhinoDAW.exe` is built without a PDB**, so a frame in Rhino's own code (JUCE and Tracktion are linked into it) reads only as an offset inside `RhinoDAW.exe`.
 
 ## 4. Name a class without matching symbols
 
@@ -79,3 +82,4 @@ It was never built, because two running RhinoDAW instances held the exe. Treat i
 - [LNK1104 means a running binary holds the file](locked-executable-lnk1104.md)
 - [Development environment and reference material](development-environment.md)
 - [Tracktion's hosted device is silent until its start is dispatched](hosted-device-silent-until-dispatched.md)
+- [Tracktion's tempo sequence can take the audio callback lock](tracktion-tempo-sequence-takes-callback-lock.md)

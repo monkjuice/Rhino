@@ -4,7 +4,7 @@ type: component
 summary: Edits one audio clip's own gain, pan, pitch, fades, mute and reverse as clip properties, with one undo step per knob drag, and draws and edits the clip's Gain, Pan and Pitch envelopes over its waveform, Pitch on a square-root scale with Ctrl for whole semitones.
 tags: [rhino, ui, audio-clips, automation]
 sources: []
-updated: 2026-10-26
+updated: 2026-10-27
 ---
 
 # Audio clip editor
@@ -40,7 +40,7 @@ Double-clicking an audio clip opens it in the shell's lower pane, which shows on
 
 - **Split** cuts at the timeline's insert line (`splitPosition` asks `Arrangement::insertPointTime`), so the button and Ctrl+E cut in the same place even while the transport moves.
 - **R** (reverse) and **Ctrl+J** (merge) are shell shortcuts, because the keyboard is usually on one of this panel's knobs.
-- **Merge** (`SessionMerge.cpp`) writes a file, as only the bounce also does: it renders the selected clips per track with the track's plugins off, so each clip's own mix lands in the file but clip-local effects are dropped (and reported). Clip envelopes are not rendered into the file; the merged clip takes them over instead ([Clip envelopes](clip-envelopes.md#merge)). The file outlives an undo. Ctrl+B [Bounce to New Track](bounce-to-new-track.md) is its counterpart through the track's devices, onto a new track. The clip menu's [Slice to New MIDI Track](slice-to-new-midi-track.md) renders one clip the same way before cutting it onto Drum Rack pads.
+- **Merge** (`SessionMerge.cpp`) writes a file, as only the bounce also does: it renders the selected clips per track with the track's plugins off, so each clip's own mix lands in the file but clip-local effects are dropped (and reported). A group member's clips are rendered straight to the main output (`ScopedStraightOut`, since `e000e79`), so the bus, its fader and its devices are not in the file either; before, a merge on a grouped track failed with "Didn't find any audio to render" ([A track that feeds a bus renders nothing on its own](bus-member-renders-nothing-alone.md)). Clip envelopes are not rendered into the file; the merged clip takes them over instead ([Clip envelopes](clip-envelopes.md#merge)). The file outlives an undo. Ctrl+B [Bounce to New Track](bounce-to-new-track.md) is its counterpart through the track's devices, onto a new track. The clip menu's [Slice to New MIDI Track](slice-to-new-midi-track.md) renders one clip the same way before cutting it onto Drum Rack pads.
 - **Mute** is the same clip property the arrangement's clip menu sets through `Session::setClipsMuted`, which takes MIDI clips too; a muted clip is drawn grey on the timeline ([Arrangement view](arrangement-view.md)).
 
 ## Drawing and testing

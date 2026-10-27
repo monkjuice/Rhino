@@ -1500,3 +1500,12 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - source: the coordinator's brief, checked against native/src/ui/arrangement/ArrangementSelection.cpp (`loopSelection`) and app/MainComponentCommands.cpp
 - updated: pages/transport.md (Ctrl+L sets or clears the dragged loop span; the toggle translated for an always-on loop; the shell shortcut and the note editor's own Ctrl+L; date)
 - updated: pages/region-editing.md (Loop among the operations)
+
+## [2026-10-27] update | Merge and Slice to New MIDI Track work on a track inside a group (e000e79)
+- source: the main agent's brief, checked against native/src/model/SessionInternal.h/.cpp (`ScopedProperty`, `ScopedStraightOut`), SessionBounce.cpp, SessionMerge.cpp and SessionSliceToMidi.cpp
+- updated: pages/bus-member-renders-nothing-alone.md (summary; the error both commands hit; the Tracktion lines; the shared `ScopedStraightOut` and where `ScopedProperty` moved; make it before the task, destroy it after; the rule for any new single-track render; who uses it; the merge and slice tests)
+- updated: pages/bounce-to-new-track.md (`RenderInFlight` holds `ScopedStraightOut` from `SessionInternal.h`)
+- updated: pages/audio-clip-editor.md (a grouped member's merge renders without the bus; date)
+- updated: pages/slice-to-new-midi-track.md (a grouped member's slices render without the bus; the grouped test)
+- updated: pages/track-groups.md (the pitfall names `ScopedStraightOut`; date)
+- updated: index.md (the gotcha's summary)

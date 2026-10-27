@@ -1,32 +1,43 @@
 ---
 title: A track that feeds a bus renders nothing on its own
 type: gotcha
-summary: Tracktion builds a track whose output names another track only as an input of that track, so a group member rendered alone renders nothing; Bounce to New Track points it at the default output and switches its fader off for the render only, outside the undo history.
-tags: [rhino, rendering, groups, tracktion]
+summary: Tracktion builds a track whose output names another track only as an input of that track, so a group member rendered alone renders nothing ("Didn't find any audio to render"); every Rhino render of one track alone - Bounce, Ctrl+J merge, Slice to New MIDI Track - wraps itself in ScopedStraightOut, which points the track at the default output for the render only, outside the undo history.
+tags: [rhino, rendering, groups, tracktion, merge]
 sources: []
-updated: 2026-10-14
+updated: 2026-10-27
 ---
 
 # A track that feeds a bus renders nothing on its own
 
 ## Symptom
 
-An offline render whose `tracksToDo` names a [group](track-groups.md) member but not its bus produces nothing. The DJ deck's old bounce met it as an immediate "Didn't find any audio to render" ([superseded](dj-bounce-on-a-copy.md)).
+An offline render whose `tracksToDo` names a [group](track-groups.md) member but not its bus fails at once with "Didn't find any audio to render", written to `rhino.log` and shown in the status line. The DJ deck's old bounce met it first ([superseded](dj-bounce-on-a-copy.md)). Until commit `e000e79` (2026-10-27) Ctrl+J merge and Slice to New MIDI Track failed this way on every grouped track; the user met it merging two clips on a bounced track inside a group.
 
 ## Cause
 
-`createNodeForEdit` (Tracktion at `4536d8a`) skips any track whose output names another track: such a track is built only as an input of its destination's node. A render of the member alone has no node for it. Rendering the whole group works, because the bus is named and builds its members in.
+`createNodeForEdit` (`tracktion_EditNodeBuilder.cpp` at `4536d8a`, about lines 2171-2175) skips at top level any track whose output names another track: such a track is built only as an input of its destination's node. A render of the member alone therefore builds nothing, and `NodeRenderContext` (`checkNodesForAudio`, about lines 93-95) finds no audio and gives up. Rendering the whole group works, because the bus is named and builds its members in.
 
-## Workaround
+## Workaround: `ScopedStraightOut`
 
-`RenderInFlight` in `native/src/model/SessionBounce.cpp` (one job's render; `renderBounce` until the bounce was stepped on 2026-10-14), for a track rendered before its mixer ([Bounce to New Track](bounce-to-new-track.md)), sets two properties for the length of the render with a null undo manager, through `ScopedProperty`, which puts the old value back (or removes a property that was absent) when it goes:
+`ScopedStraightOut(te::AudioTrack&)`, declared in `native/src/model/SessionInternal.h` and defined in `SessionInternal.cpp` since `e000e79`, sets the track's `OUTPUTDEVICES/DEVICE` `name` to the default audio output's name for its lifetime, so the track is built as a top-level track. A track already going there is left alone. It writes through `ScopedProperty` (same header; it moved there from `SessionBounce.cpp`'s anonymous namespace), which uses a null undo manager and puts the old value back, or removes a property that was absent, when it goes.
 
-- the track's `OUTPUTDEVICES/DEVICE` `name`, set to the default audio output's name, so the track is built as a top-level track;
-- its `VolumeAndPanPlugin`'s `enabled`, set false, so the fader and pan stay out of the file.
+**Make it before the `RenderTask` and destroy it after.** The task builds its graph when it is constructed. In a struct, declare the scope above the task, as `RenderInFlight` does, so the task dies first.
 
-It works because `TrackOutput` recomputes its destination synchronously when that property changes (no `AsyncUpdater`), and the graph builder passes a disabled plugin through (`createNodeForPlugin`, unless `includeBypassedPlugins`); both read at `4536d8a`. The scopes are declared before the `RenderTask`, so they are restored only after the task has gone.
+It works because `TrackOutput` recomputes its destination synchronously when that property changes (no `AsyncUpdater`); read at `4536d8a`.
 
-The writes skip the undo history because a render is not an edit. They stay in place across the bounce's slices, so they are safe only because nothing can edit the document meanwhile: the render runs on the message thread behind a modal loading screen, and undo and redo do nothing while it runs ([A long command runs in slices behind a modal screen](long-commands-run-in-slices.md)). `ClipBounce.inc` checks that a member feeds its bus again after its render, and that a bounced track's fader is switched back on. The DJ bounce did the same on a copy of the document with `setOutputToDefaultDevice`.
+**Rule: any new code that renders one track alone (a single track in `tracksToDo`) must wrap the render in `ScopedStraightOut`, or it renders nothing on a grouped track.**
+
+## Who uses it
+
+- **[Bounce to New Track](bounce-to-new-track.md)**, `RenderInFlight` in `SessionBounce.cpp`, for a track rendered before its mixer. It also holds a `ScopedProperty` setting the track's `VolumeAndPanPlugin` `enabled` to false, so the fader and pan stay out of the file; the graph builder passes a disabled plugin through (`createNodeForPlugin`, unless `includeBypassedPlugins`). The writes stay in place across the bounce's slices, safe only because nothing can edit meanwhile ([A long command runs in slices behind a modal screen](long-commands-run-in-slices.md)).
+- **Ctrl+J merge**, `SessionMerge.cpp`, per track rendered ([Audio clip editor](audio-clip-editor.md#commands-that-reach-past-it)).
+- **[Slice to New MIDI Track](slice-to-new-midi-track.md)**, `SessionSliceToMidi.cpp`.
+
+The merge and slice renders therefore leave out the bus, its fader and its devices, which matches their rule that the track's own devices and fader stay out. Both block the message thread, so nothing edits while the scope is held.
+
+## Tests
+
+`ClipBounce.inc` checks that a member feeds its bus again after its render and that a bounced track's fader is switched back on. `ClipMerge.inc` merges two clips on a grouped member, checks both are at full level in the file and that the track feeds its bus afterwards. `ClipSliceToMidi.inc` slices a grouped member's clip at its transients (six slices) and checks the same routing afterwards.
 
 ## Related
 

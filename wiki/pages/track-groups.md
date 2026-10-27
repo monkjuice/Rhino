@@ -4,7 +4,7 @@ type: component
 summary: Ctrl+G gathers tracks under a bus track that their audio feeds; the structure is positional and repaired after every reorder.
 tags: [rhino, groups, mixer, arrangement]
 sources: []
-updated: 2026-10-26
+updated: 2026-10-27
 ---
 
 # Track groups (bus tracks)
@@ -32,7 +32,7 @@ A group is a bus: a track of its own, with fader, pan, mute, solo and an audio-e
 - **Skip buses when looking for a playable track**, as the note editor's fallback `firstMidiTrackOf` does; a bus at index 0 once reopened with an instrument on it, silencing the project (`GroupBusReload.inc`).
 - **A bus carries no `rhinoGroup` of its own**, so a rule that compares neighbours' membership must treat a bus above as naming its group. The join rule did not, and until `8dd3627` a track dropped directly under a bus broke the run and cut every member below it loose.
 - **A member's output names its bus by position, not id.** `TrackOutput` records the destination by the bus's place in the audio-track list, so an edit built from a copy of the state with tracks removed resolves it to the wrong track or none: the DJ bounce's stripped copy routed a member straight to the output, past its bus's fader (2026-10-10). Anything that loads a reduced copy must call `setOutputToTrack` again for every member, as `bounceDjDeck` did by the bus's id until the bounce went on 2026-10-12 ([A deck's bounce renders on a worker against a copy of the document](dj-bounce-on-a-copy.md)); nothing builds such a copy now.
-- **A member is rendered only as part of its bus.** An offline render naming a member without its bus renders nothing ([gotcha](bus-member-renders-nothing-alone.md)).
+- **A member is rendered only as part of its bus.** An offline render naming a member without its bus renders nothing, so every render of one track alone (bounce, merge, slice) wraps itself in `ScopedStraightOut` ([gotcha](bus-member-renders-nothing-alone.md)).
 - `migrateLegacyTrackGroups` rebuilds pre-bus documents' groups on load ([No backward compatibility for .rhinoedit](no-rhinoedit-back-compat.md)).
 
 ## Related

@@ -32,7 +32,7 @@ void Arrangement::syncAutomationChoosers()
                   + ". Click under the clip names to add a node, drag one to move it, Shift for fine steps. "
                     "None shows the clips alone."
             : "Automation on " + name + ": none, so the row shows its clips alone. Pick a lane to draw on it here; "
-              "right-click a device knob to show one.");
+              "right-click a device knob, the fader or the pan to show one.");
     }
 }
 
@@ -56,7 +56,7 @@ void Arrangement::showAutomationChooser(int track)
                      true, automation.shown);
     }
     if (lanes.empty())
-        menu.addItem(1000, "Right-click a device knob to show its automation", false, false);
+        menu.addItem(1000, "Right-click a knob, the fader or the pan to show its automation", false, false);
     auto options = juce::PopupMenu::Options().withTargetComponent(this).withMousePosition();
     if (juce::isPositiveAndBelow(track, static_cast<int>(automationChooser.size()))
         && automationChooser[static_cast<size_t>(track)]->isShowing())

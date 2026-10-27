@@ -154,6 +154,11 @@ std::vector<Session::TrackAutomation> Session::readTrackAutomations(const juce::
                     automation.deviceName = slot.name;
                     break;
                 }
+            // The track's own fader is on no rack, but a lane can drive it
+            // (trackMixerTarget). Live's name for it.
+            if (automation.deviceName.isEmpty()
+                && dynamic_cast<te::VolumeAndPanPlugin*>(devicePlugin(track, automation.target.slot)) != nullptr)
+                automation.deviceName = "Mixer";
             // A lane whose device or parameter has gone is not displayable.
             if (automation.parameterName.isEmpty())
                 continue;

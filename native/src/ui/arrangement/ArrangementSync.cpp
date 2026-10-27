@@ -155,9 +155,10 @@ void Arrangement::sync()
                                    + juce::String(takes == Session::RecordInput::audio
                                                       ? " Use headphones: a built-in microphone and speakers "
                                                         "will feed back." : ""));
-        volume[index]->setTooltip("Volume of " + name + " - drag to set the level, double-click for 0.0 dB.");
+        volume[index]->setTooltip("Volume of " + name + " - drag to set the level, double-click for 0.0 dB, "
+                                  "right-click to automate it.");
         pan[index]->setTooltip("Pan of " + name + " - drag to place it between the speakers, double-click to "
-                               "centre it.");
+                               "centre it, right-click to automate it.");
         if (!volume[index]->isMouseButtonDown())
             volume[index]->setValue(mixer.volumeDb, juce::dontSendNotification);
         if (!pan[index]->isMouseButtonDown())
@@ -384,7 +385,7 @@ void Arrangement::syncTrackControls()
         {
             applyMonitorChoice(track, mode);
         };
-        auto volumeSlider = std::make_unique<juce::Slider>();
+        auto volumeSlider = std::make_unique<MixerSlider>();
         volumeSlider->setSliderStyle(juce::Slider::LinearBar);
         // The bar paints the value itself, in a colour picked for whichever of
         // the fill and the trough each half of it lands on.
@@ -393,19 +394,21 @@ void Arrangement::syncTrackControls()
         // The bar is small enough that the unit costs more room than it earns.
         volumeSlider->setTextValueSuffix({});
         volumeSlider->setDoubleClickReturnValue(true, 0.0);
-        volumeSlider->onDragStart = [this, track] { session.beginTrackVolumeGesture(track); };
+        volumeSlider->onDragStart = [this, track] { beginMixerGesture(track, Session::MixerControl::volume); };
         volumeSlider->onDragEnd = [this, track] { session.endTrackVolumeGesture(track); };
+        volumeSlider->onRightClick = [this, track] { showMixerMenu(track, Session::MixerControl::volume); };
         volumeSlider->onValueChange = [this, track, slider = volumeSlider.get()]
         {
             session.setTrackVolumeDb(track, static_cast<float>(slider->getValue()));
         };
-        auto panSlider = std::make_unique<juce::Slider>();
+        auto panSlider = std::make_unique<MixerSlider>();
         panSlider->setSliderStyle(juce::Slider::LinearBar);
         panSlider->setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
         panSlider->setRange(-1.0, 1.0, 0.01);
         panSlider->setDoubleClickReturnValue(true, 0.0);
-        panSlider->onDragStart = [this, track] { session.beginTrackPanGesture(track); };
+        panSlider->onDragStart = [this, track] { beginMixerGesture(track, Session::MixerControl::pan); };
         panSlider->onDragEnd = [this, track] { session.endTrackPanGesture(track); };
+        panSlider->onRightClick = [this, track] { showMixerMenu(track, Session::MixerControl::pan); };
         panSlider->onValueChange = [this, track, slider = panSlider.get()]
         {
             session.setTrackPan(track, static_cast<float>(slider->getValue()));

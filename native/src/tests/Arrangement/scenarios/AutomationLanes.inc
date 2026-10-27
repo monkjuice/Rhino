@@ -534,3 +534,111 @@
                 "Hiding a lane removes its row");
         require(session.showTrackAutomation({session.masterTrackIndex(), 0, 0}, false).failed(),
                 "The main row refuses automation lanes it cannot show");
+
+        // A card's fader and pan are automated as a knob is: a right-click on
+        // either opens the knob's menu for a lane on the track's own fader.
+        {
+            const auto volumeLane = session.trackMixerTarget(0, Session::MixerControl::volume);
+            const auto panLane = session.trackMixerTarget(0, Session::MixerControl::pan);
+            require(volumeLane.isValid() && panLane.isValid() && volumeLane.slot == panLane.slot
+                        && volumeLane.parameter != panLane.parameter
+                        && session.devicePlugin(0, volumeLane.slot) == session.trackVolumePlugin(0),
+                    "A track's fader and pan are two parameters of its own fader, which a lane can name");
+            require(!session.trackMixerTarget(session.masterTrackIndex(), Session::MixerControl::volume).isValid(),
+                    "The main row's level has no lane yet");
+
+            juce::String said;
+            auto savedStatus = view.status;
+            view.status = [&said](juce::String text) { said = std::move(text); };
+
+            // The bar jumps to wherever it is pressed, so a right-click near
+            // its left end would have dropped the level to the bottom.
+            auto& fader = *view.volume[0];
+            const auto levelBefore = session.trackMixer(0).volumeDb;
+            const juce::Point<float> nearLeft {2.0f, static_cast<float>(fader.getHeight()) * 0.5f};
+            const juce::MouseEvent rightPress(juce::Desktop::getInstance().getMainMouseSource(), nearLeft,
+                juce::ModifierKeys(juce::ModifierKeys::rightButtonModifier), 1.0f, 0, 0, 0, 0,
+                &fader, &fader, juce::Time::getCurrentTime(), nearLeft, juce::Time::getCurrentTime(), 1, false);
+            auto openMenu = std::move(fader.onRightClick);
+            bool asked = false;
+            fader.onRightClick = [&asked] { asked = true; };
+            fader.mouseDown(rightPress);
+            fader.mouseUp(rightPress);
+            fader.onRightClick = std::move(openMenu);
+            require(asked && std::abs(session.trackMixer(0).volumeDb - levelBefore) < 0.001f,
+                    "A right-click on a card's fader asks for its menu and leaves the level where it was");
+
+            view.chooseMixerAutomation(0, Session::MixerControl::volume, Arrangement::MixerAutomationChoice::showOnTrack);
+            view.sync();
+            const auto* shown = view.shownAutomation(0);
+            require(session.trackAutomationState(volumeLane).visible && shown != nullptr
+                        && shown->target.slot == volumeLane.slot && shown->target.parameter == volumeLane.parameter,
+                    "Show automation puts the fader's lane over the track, where its row shows it");
+            require(shown->deviceName == "Mixer" && shown->parameterName == "Volume",
+                    "The lane reads Mixer: Volume, after Live");
+            require(session.automationValueText(volumeLane, shown->restingValue).contains("dB"),
+                    "A point on the fader's lane reads in decibels");
+            require(view.automatedMixers.empty(), "A lane never drawn on drives nothing, so no bar follows it");
+
+            require(session.setTrackAutomationPoints(volumeLane, {{0.0, 0.2f}, {8.0, 0.9f}}).wasOk(),
+                    "Draw a fade-in on the fader");
+            view.sync();
+            auto* faderPlugin = session.trackVolumePlugin(0);
+            require(faderPlugin->volParam->getCurve().getNumPoints() == 2,
+                    "The engine plays the fader's lane from the fader's own curve");
+            require(view.automatedMixers == std::vector<int> {0}, "The card's bars follow a lane that drives its fader");
+
+            // Grabbing the bar takes it from the lane, as a touched knob is
+            // taken, or the curve would pull it back under the hand.
+            said.clear();
+            view.beginMixerGesture(0, Session::MixerControl::volume);
+            require(session.deviceParameter(0, volumeLane.slot, volumeLane.parameter)->automationOverridden
+                        && faderPlugin->volParam->getCurve().getNumPoints() == 0,
+                    "Grabbing an automated fader stops its lane driving it");
+            require(said.contains("re-enable"), "and says how to give it back");
+            require(session.setTrackVolumeDb(0, -12.0f).wasOk(), "Set the fader by hand");
+            session.endTrackVolumeGesture(0);
+
+            // The bar reads the fader back on the frame clock, whatever moved it.
+            fader.setValue(0.0, juce::dontSendNotification);
+            view.followMixerAutomation();
+            require(std::abs(fader.getValue() + 12.0) < 0.05, "An automated fader's bar follows the fader");
+
+            view.chooseMixerAutomation(0, Session::MixerControl::volume, Arrangement::MixerAutomationChoice::reenable);
+            require(!session.deviceParameter(0, volumeLane.slot, volumeLane.parameter)->automationOverridden
+                        && faderPlugin->volParam->getCurve().getNumPoints() == 2,
+                    "Re-enable automation hands the fader back to its lane");
+            view.chooseMixerAutomation(0, Session::MixerControl::volume, Arrangement::MixerAutomationChoice::reenable);
+            require(!session.deviceParameter(0, volumeLane.slot, volumeLane.parameter)->automationOverridden,
+                    "and choosing it again does not take it away");
+            // A double-click or an encoder sets the level with no drag.
+            require(session.setTrackVolumeDb(0, 0.0f).wasOk()
+                        && session.deviceParameter(0, volumeLane.slot, volumeLane.parameter)->automationOverridden,
+                    "Setting an automated fader with no drag takes it from its lane too");
+            view.chooseMixerAutomation(0, Session::MixerControl::volume, Arrangement::MixerAutomationChoice::reenable);
+
+            // Pan, on a row of its own.
+            const auto rowsBefore = view.rows.size();
+            view.chooseMixerAutomation(0, Session::MixerControl::pan, Arrangement::MixerAutomationChoice::showOnLane);
+            view.sync();
+            require(view.rows.size() == rowsBefore + 1 && view.rows[1].track == 0 && view.rows[1].automation >= 0,
+                    "Show automation on new lane gives the pan a row of its own under the track");
+            const auto* panRow = view.automationFor(view.rows[1]);
+            require(panRow != nullptr && panRow->deviceName == "Mixer" && panRow->parameterName == "Pan",
+                    "and the row is the pan's");
+            require(session.setTrackPan(0, 0.25f).wasOk()
+                        && !session.deviceParameter(0, panLane.slot, panLane.parameter)->automationOverridden,
+                    "Moving a pan no lane drives overrides nothing");
+
+            view.chooseMixerAutomation(0, Session::MixerControl::volume, Arrangement::MixerAutomationChoice::remove);
+            require(!session.trackAutomationState(volumeLane).active && session.trackAutomationState(volumeLane).visible,
+                    "Delete automation clears the fader's curve and keeps its lane");
+            view.chooseMixerAutomation(0, Session::MixerControl::volume, Arrangement::MixerAutomationChoice::hide);
+            view.chooseMixerAutomation(0, Session::MixerControl::pan, Arrangement::MixerAutomationChoice::hide);
+            view.sync();
+            require(view.trackLanes[0].empty() && view.rows.size() == rowsWithoutLanes && view.automatedMixers.empty(),
+                    "Hide automation takes both lanes away");
+            require(session.setTrackPan(0, 0.0f).wasOk() && session.setTrackVolumeDb(0, levelBefore).wasOk(),
+                    "Put the mixer back as it was");
+            view.status = std::move(savedStatus);
+        }

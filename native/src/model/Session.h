@@ -1510,6 +1510,15 @@ public:
     void endTrackVolumeGesture(int track);
     void beginTrackPanGesture(int track);
     void endTrackPanGesture(int track);
+    // The track's fader and pan as automation names them: the Volume or Pan
+    // parameter of the engine's fader in the track's channel strip, so a lane
+    // on either is kept, drawn and played as a device knob's lane is, and its
+    // device reads "Mixer". Invalid for the main track, whose level has no
+    // lane yet, and for a track with no fader. Moving the fader or the pan by
+    // hand, as with a device knob, takes it from a lane that is driving it
+    // until toggleParameterAutomationOverride gives it back.
+    enum class MixerControl { volume, pan };
+    DeviceTarget trackMixerTarget(int track, MixerControl) const;
     void setTrackMuted(int track, bool muted);
     void setTrackSoloed(int track, bool soloed);
     // The master track is addressed as one past the last audio track, so every
@@ -2091,6 +2100,9 @@ private:
     // drag and once at the drag's end inside one.
     void announceMixerChange(int track, ModelChange);
     void endMixerGesture();
+    // A fader or pan moved by hand stops its lane driving it, as a touched
+    // knob does (beginDeviceParameterGesture).
+    void takeMixerFromLane(int track, MixerControl);
     void ensureTrackMixers();
     // SessionReturns.cpp. A group's bus or a return: a track that carries
     // other tracks' audio, so it takes no clips, records nothing and plays no

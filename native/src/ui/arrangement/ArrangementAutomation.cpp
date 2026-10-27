@@ -60,6 +60,7 @@ void Arrangement::buildRows()
             if (lanes[static_cast<size_t>(i)].ownLane)
                 rows.push_back({track, i, 0.0f, 0.0f, pinned});
     }
+    findAutomatedMixers();
     layoutRows();
 }
 

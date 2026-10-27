@@ -1,7 +1,8 @@
 #include "SessionInternal.h"
 #include <algorithm>
 
-// The mixer: per-track volume, pan, mute and solo, plus the master level.
+// The mixer: per-track volume, pan, mute and solo, plus the master level. A
+// track's volume and pan can be automated, as a device knob can.
 //
 // There is one mixer: each track's own VolumeAndPanPlugin. The arrangement
 // draws it in each track header and reads and writes that plugin, so it cannot
@@ -87,11 +88,53 @@ void Session::endMixerGesture()
         sendSynchronousChangeMessage();
 }
 
+// A lane names the fader as it names any device: by its place in the chain and
+// the parameter's place among those the device shows, which for the engine's
+// fader are its two, Volume and Pan. Worked out by the parameter itself rather
+// than assumed to be 0 and 1.
+Session::DeviceTarget Session::trackMixerTarget(int track, MixerControl control) const
+{
+    auto* audio = audioTrack(track);
+    auto* fader = audio != nullptr ? audio->getVolumePlugin() : nullptr;
+    if (fader == nullptr)
+        return {};
+    const auto* wanted = control == MixerControl::volume ? fader->volParam.get() : fader->panParam.get();
+    for (int slot = 0; slot < audio->pluginList.size(); ++slot)
+    {
+        if (audio->pluginList[slot] != fader)
+            continue;
+        int index = 0;
+        for (auto* parameter : fader->getAutomatableParameters())
+        {
+            if (parameter == nullptr || !parameter->isParameterActive())
+                continue;
+            if (parameter == wanted)
+                return {track, slot, index};
+            ++index;
+        }
+    }
+    return {};
+}
+
+// Without this the engine would go on playing the curve under the hand, and a
+// drag would snap back to the lane at the next block.
+void Session::takeMixerFromLane(int track, MixerControl control)
+{
+    if (auto* runtime = findAutomationRuntime(trackMixerTarget(track, control));
+        runtime != nullptr && runtime->active && !runtime->overridden)
+    {
+        runtime->overridden = true;
+        mirrorAutomationToEngine();
+    }
+}
+
 juce::Result Session::setTrackVolumeDb(int track, float decibels)
 {
     auto* volume = trackVolumePlugin(track);
     if (volume == nullptr)
         return juce::Result::fail("That track has no fader.");
+    // A double-click or an encoder sets it with no drag around it.
+    takeMixerFromLane(track, MixerControl::volume);
     volume->setVolumeDb(juce::jlimit(minimumVolumeDb, maximumVolumeDb, decibels));
     // The fader is a parameter of the track's own chain.
     announceMixerChange(track, ModelChange::parameters);
@@ -103,6 +146,7 @@ juce::Result Session::setTrackPan(int track, float pan)
     auto* volume = trackVolumePlugin(track);
     if (volume == nullptr)
         return juce::Result::fail("That track has no fader.");
+    takeMixerFromLane(track, MixerControl::pan);
     volume->setPan(juce::jlimit(-1.0f, 1.0f, pan));
     announceMixerChange(track, ModelChange::parameters);
     return juce::Result::ok();
@@ -114,6 +158,8 @@ void Session::beginTrackVolumeGesture(int track)
 {
     if (auto* volume = trackVolumePlugin(track))
     {
+        // Taken at the grab, before the first value arrives.
+        takeMixerFromLane(track, MixerControl::volume);
         edit->getUndoManager().beginNewTransaction("Track volume");
         volume->volParam->parameterChangeGestureBegin();
         ++mixerGestureDepth;
@@ -133,6 +179,7 @@ void Session::beginTrackPanGesture(int track)
 {
     if (auto* volume = trackVolumePlugin(track))
     {
+        takeMixerFromLane(track, MixerControl::pan);
         edit->getUndoManager().beginNewTransaction("Track pan");
         volume->panParam->parameterChangeGestureBegin();
         ++mixerGestureDepth;

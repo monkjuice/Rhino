@@ -8,12 +8,19 @@
 namespace rhino
 {
 
-// One frame clock for all three: a drag that has reached the edge pulls the
-// view after it on the same tick the meters and the playhead move on. The
-// meters go first, so the damage the playhead hands over at once
-// (movePlayhead) carries theirs with it.
+// One frame clock for them all: a drag that has reached the edge pulls the
+// view after it on the same tick the meters, the automated faders and the
+// playhead move on. The meters and faders go first, so the damage the
+// playhead hands over at once (movePlayhead) carries theirs with it.
 Arrangement::Arrangement(Session& s)
-    : session(s), vblank(this, [this] { autoScrollDrag(); updateMeters(); updatePlayhead(); })
+    : session(s), vblank(this, [this]
+      {
+          autoScrollDrag();
+          updateMeters();
+          if (isShowing())
+              followMixerAutomation();
+          updatePlayhead();
+      })
 {
     configureMasterControls();
     setOpaque(true);

@@ -1,6 +1,7 @@
 #pragma once
 #include "model/Session.h"
 #include "ArrangementGrid.h"
+#include "MixerSlider.h"
 #include "MonitorSelector.h"
 #include "SendKnob.h"
 #include "ui/shared/LevelMeter.h"
@@ -520,6 +521,19 @@ private:
     juce::Rectangle<float> repaintArea(const juce::Graphics&) const;
     bool cullRepaints = true;
     void showAutomationMenu(Session::DeviceTarget);
+    // ArrangementMixerAutomation.cpp. A right-click on a card's fader or pan
+    // opens the menu a device knob's opens, for the lane on that control.
+    enum class MixerAutomationChoice { showOnTrack = 1, showOnLane, hide, remove, reenable };
+    void showMixerMenu(int track, Session::MixerControl);
+    // What a choice in it does, apart from the popup so a test can make one.
+    void chooseMixerAutomation(int track, Session::MixerControl, MixerAutomationChoice);
+    // A drag that grabs a fader its lane is playing takes it from the lane,
+    // and says how to give it back.
+    void beginMixerGesture(int track, Session::MixerControl);
+    void findAutomatedMixers();
+    // The engine moves an automated fader without telling anyone, so the bars
+    // read it back on the frame clock, as the rack's knobs do on their timer.
+    void followMixerAutomation();
     // ArrangementGestures.cpp
     // Middle-button pan: carries both the timeline and the row stack so that
     // whatever was under the pointer when the button went down stays there.
@@ -694,7 +708,10 @@ private:
     // they are given no control rather than one that refuses.
     std::vector<std::unique_ptr<MonitorSelector>> monitor;
     // The track's fader and pan, the session's own mixer values.
-    std::vector<std::unique_ptr<juce::Slider>> volume, pan;
+    std::vector<std::unique_ptr<MixerSlider>> volume, pan;
+    // The tracks whose fader or pan a lane is driving, found as the rows are
+    // built, whose bars follow it every frame.
+    std::vector<int> automatedMixers;
     // Its sends, one knob per return in the returns' order, under the name;
     // none on a return, which sends to no other. The returns are read once
     // per sync, as the facts are.

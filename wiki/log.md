@@ -1444,3 +1444,10 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/automation.md (the own-row curve area measured from `clipBandOf`, starting higher than under the old inset)
 - updated: pages/headless-ui-snapshots.md (`RHINO_CLIP_LOOP_SNAPSHOT`)
 - updated: index.md (summary of Arrangement view)
+
+## [2026-10-27] update | Forge H1: a pointer to the hardware control surface's own repository
+- source: the user's request, checked against C:\projects\forge-h1 (wiki/overview.md, wiki/index.md, wiki/pages/hardware-plan.md, se49-keyboard-integration.md and part-gotchas.md; git log and remotes)
+- created: pages/forge-h1.md (what Forge H1 is, where its repository and wiki are, the planner and project files, how its Picos and the SE49 reach Forge and what is undecided, and the earlier proposal deleted uncommitted)
+- updated: pages/forge.md, pages/forge-midi-learn.md (Related)
+- updated: index.md (Components: the new page)
+- removed, never committed: the 2026-10-23 entry, index line and forge.md link for pages/forge-hardware-console.md, whose page and docs/forge-hardware-console-handoff.md were deleted on 2026-10-27

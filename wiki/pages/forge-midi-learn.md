@@ -33,6 +33,7 @@ In the standalone, tick the controller once under Options → Audio/MIDI Setting
 
 - [Forge modulation: matrix, envelopes, LFOs and macros](forge-modulation.md)
 - [Reading MIDI hardware on Windows](reading-midi-hardware-on-windows.md)
+- [Forge H1, the hardware control surface](forge-h1.md)
 - [Driving Forge's standalone on Windows](driving-the-forge-standalone.md)
 - [Real-time audio rules](real-time-audio-rules.md)
 - [Forge presets and state](forge-presets-and-state.md)

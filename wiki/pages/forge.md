@@ -76,6 +76,7 @@ Until commit `f2a972e` Forge could freeze its host when its DLL unloaded after i
 ## Related
 
 - [Overview](../overview.md)
+- [Forge H1, the hardware control surface](forge-h1.md)
 - [Forge's Processor includes nothing under ui/](forge-processor-includes-no-ui.md)
 - [Forge presets and state](forge-presets-and-state.md)
 - [Build and test Forge](build-and-test-forge.md)

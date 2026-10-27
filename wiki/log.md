@@ -1509,3 +1509,7 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/slice-to-new-midi-track.md (a grouped member's slices render without the bus; the grouped test)
 - updated: pages/track-groups.md (the pitfall names `ScopedStraightOut`; date)
 - updated: index.md (the gotcha's summary)
+
+## [2026-10-27] update | Rhino EQ: off bands are not drawn or grabbable, and a fresh EQ has bands 1 to 4 on with band 1 cutting at 20 Hz (b941147)
+- source: the main agent's brief (Live 12 manual p. 577), checked against native/src/ui/rack/DeviceEditorPanelEq.cpp (`eqHandleAt`, `handleEqDoubleClick`, `showEqTypeMenu`) and native/src/devices/audio/RhinoEqDevice.cpp (`bandDefaults`) at b941147
+- updated: pages/rhino-eq.md (the fresh defaults and why band 1 sits at 20 Hz, the rejected alternatives, older documents; the face: off bands not drawn or grabbable, switched on from the column, the shared nearest-handle hit test, double-click only switches off, the wheel unchanged; the new `checkDevice` and `checkEditorFace` checks; Related; updated date)

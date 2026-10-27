@@ -797,6 +797,10 @@ void Arrangement::dragCardGesture(const juce::MouseEvent& event)
     const auto firstReturn = session.firstReturnTrack();
     destination = session.isReturnTrack(movingTrack) ? std::max(destination, firstReturn)
                                                      : std::min(destination, std::max(0, firstReturn - 1));
+    // A bus carries its group, so a row inside that group is nowhere new and
+    // gets no drop line.
+    if (const auto* carried = groupForBus(movingTrack); carried != nullptr && carried->covers(destination))
+        destination = movingTrack;
     if (destination != moveDestination)
     {
         moveDestination = destination;
@@ -815,15 +819,19 @@ void Arrangement::endCardGesture()
     else if (movingTrack >= 0 && moveStarted && moveDestination != movingTrack)
     {
         const auto from = std::exchange(movingTrack, -1);
-        const auto to = moveDestination;
-        if (const auto done = session.moveTrack(from, to); done.failed())
+        // Where the card ends up, which for a bus carried down is above the
+        // row it was dropped on by the size of its group.
+        auto landed = from;
+        if (const auto done = session.moveTrack(from, moveDestination, &landed); done.failed())
         {
             if (status) status(done.getErrorMessage());
         }
         else
         {
-            selectTrack(to);
-            if (status) status("Moved " + session.trackName(to) + " to position " + juce::String(to + 1));
+            selectTrack(landed);
+            if (status)
+                status("Moved " + juce::String(session.isGroupBusTrack(landed) ? "group " : "")
+                       + session.trackName(landed) + " to position " + juce::String(landed + 1));
         }
     }
     movingTrack = -1;

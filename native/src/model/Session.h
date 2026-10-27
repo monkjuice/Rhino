@@ -629,7 +629,15 @@ public:
     // makes a track calls it, so a stack is legible the moment it exists
     // rather than after someone has coloured it by hand.
     juce::Colour pickTrackColour() const;
-    juce::Result moveTrack(int track, int destination);
+    // Carries the track to `destination`, the row it is dropped on: it lands
+    // before that row going up and after it going down. A bus is its group,
+    // so it carries everything inside it as one block, as a copy or a delete
+    // does. Dropped going down onto a folded group, which shows as one row,
+    // it lands below all of it. Where it lands decides its group: inside a
+    // group it joins, a bus nesting its group there, refused past
+    // maxGroupLevels. `landed`, when given, receives the moved track's new
+    // index.
+    juce::Result moveTrack(int track, int destination, int* landed = nullptr);
     // A group is a bus. Its own track carries the group's name, colour, fader,
     // mute, solo and devices, and every member's output is routed into it. That
     // track is an ordinary audio track, so every track-indexed call here

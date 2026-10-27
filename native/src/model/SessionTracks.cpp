@@ -338,9 +338,11 @@ void Session::moveTrackInEdit(int track, int destination)
     edit->moveTrack(tracks[track], te::TrackInsertPoint(nullptr, preceding));
 }
 
-juce::Result Session::moveTrack(int track, int destination)
+juce::Result Session::moveTrack(int track, int destination, int* landed)
 {
     const auto tracks = audioTracks();
+    if (landed != nullptr)
+        *landed = track;
     if (isMasterTrack(track) || isMasterTrack(destination))
         return juce::Result::fail("The main row keeps its place.");
     if (!juce::isPositiveAndBelow(track, tracks.size()))
@@ -348,30 +350,55 @@ juce::Result Session::moveTrack(int track, int destination)
     // The returns keep the foot of the stack: a track carried down onto them
     // stops above them, and a return moves only among the returns.
     const auto laneEnd = firstReturnTrack();
-    destination = isReturnTrack(track) ? juce::jlimit(laneEnd, tracks.size() - 1, destination)
-                                       : juce::jlimit(0, std::max(0, laneEnd - 1), destination);
-    if (destination == track)
+    const auto returning = isReturnTrack(track);
+    destination = returning ? juce::jlimit(laneEnd, tracks.size() - 1, destination)
+                            : juce::jlimit(0, std::max(0, laneEnd - 1), destination);
+    // A bus carries its group: dragging it alone used to leave its members
+    // behind, cut loose. A return is in no group and moves alone.
+    const auto stack = groupSlotsOf(tracks);
+    auto block = withGroupsWhole(stack, {track});
+    if (block.empty())
+        block = {track};
+    const auto first = block.front();
+    const auto last = block.back();
+    const auto count = static_cast<int>(block.size());
+    // Onto anything it carries is nowhere new.
+    if (destination >= first && destination <= last)
         return juce::Result::ok();
+    // Carried down onto a folded group, which shows as one row, it lands
+    // below all of it: inside, it would vanish into the fold. In stack order,
+    // so the first folded group covering the row is the outermost.
+    if (destination > last && !returning)
+        for (const auto& group : trackGroups())
+            if (group.collapsed && group.covers(destination))
+            {
+                destination = group.lastTrack();
+                break;
+            }
+    const auto down = destination > last;
+    const auto at = down ? destination - count + 1 : destination;
     // The stack as the move leaves it. The track keeps its group only where
     // that group is still open: a claim left on the group it was carried out
     // of would pull the track above it into that group (claimHolds). Let go
     // of, it joins whatever group it lands in the middle of, and a bus
     // carried into a group nests there, which may not go past the limit.
-    auto planned = groupSlotsOf(tracks);
-    {
-        const auto moved = planned[static_cast<size_t>(track)];
-        planned.erase(planned.begin() + track);
-        planned.insert(planned.begin() + destination, moved);
-    }
-    const auto keepsGroup = claimHolds(planned, destination);
+    auto plan = gatherTracks(stack, block, down ? destination : destination - 1,
+                             stack[static_cast<size_t>(track)].claim);
+    const auto keepsGroup = claimHolds(plan.slots, at);
     if (!keepsGroup)
-        planned[static_cast<size_t>(destination)].claim = 0;
-    if (const auto refused = refuseDeepNesting(planned); refused.failed())
+        plan.slots[static_cast<size_t>(at)].claim = 0;
+    if (const auto refused = refuseDeepNesting(plan.slots); refused.failed())
         return refused;
-    edit->getUndoManager().beginNewTransaction("Move track");
-    moveTrackInEdit(track, destination);
+    edit->getUndoManager().beginNewTransaction(count > 1 ? "Move group" : "Move track");
+    // A track at a time, so the block keeps its order: going down each one
+    // leaves the top of the block for the destination, going up each takes
+    // the next place from the destination on.
+    for (int moved = 0; moved < count; ++moved)
+        moveTrackInEdit(down ? first : first + moved, down ? destination : destination + moved);
     if (!keepsGroup)
-        audioTracks()[destination]->state.removeProperty(trackGroupMemberID, &edit->getUndoManager());
+        audioTracks()[at]->state.removeProperty(trackGroupMemberID, &edit->getUndoManager());
+    if (landed != nullptr)
+        *landed = at;
     // Where a track lands decides which group it is in: carried into a group it
     // joins, carried out of one it leaves. Inside the move's own transaction,
     // so undoing the move undoes that too.

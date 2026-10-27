@@ -207,3 +207,84 @@
             cards.reset();
             nest.releaseAudioDevice();
         }
+
+        // Dragging a bus's card carries its whole group, as copying or
+        // deleting one does. It used to move the bus alone and leave the
+        // members behind, cut loose from it.
+        {
+            auto document = std::make_unique<Session>();
+            auto& dragged = *document;
+            auto board = std::make_unique<Arrangement>(dragged);
+            board->setSize(1200, 700);
+            const auto rowAt = [&dragged](int track) { return te::getAudioTracks(*dragged.edit)[track]; };
+            const auto feedOf = [&rowAt](int track) { return rowAt(track)->getOutput().getDestinationTrack(); };
+
+            scenario("nested groups: dragging a bus carries its group");
+            // [MIDI, Audio, MIDI, Audio] grouped at the top: [Band, M, A, M, A].
+            require(dragged.groupTracks({0, 1}, "Band").wasOk(), "A group to drag");
+            const auto band = dragged.trackGroupBusId(0);
+            int landed = -1;
+            require(dragged.moveTrack(0, 4, &landed).wasOk() && landed == 2,
+                    "Carried down onto the last track, the bus lands above it by the size of its group");
+            auto groups = dragged.trackGroups();
+            require(groups.size() == 1 && groups[0].busTrack == 2 && groups[0].trackCount == 2,
+                    "with both its members under it");
+            require(feedOf(3) == rowAt(2) && feedOf(4) == rowAt(2) && dragged.trackGroupId(0) == 0 && feedOf(0) == nullptr,
+                    "still feeding it, and the tracks it passed still outside");
+            dragged.undo();
+            require(dragged.trackGroups()[0].busTrack == 0 && feedOf(1) == rowAt(0) && feedOf(2) == rowAt(0),
+                    "One undo carries the whole group back");
+            require(dragged.moveTrack(0, 2, &landed).wasOk() && landed == 0 && dragged.trackGroups()[0].busTrack == 0,
+                    "Dropped onto one of its own members, it stays where it is");
+
+            scenario("nested groups: a card dragged down onto a folded group lands below all of it");
+            require(dragged.moveTrack(3, 0, &landed).wasOk() && landed == 0 && dragged.trackGroupId(0) == 0,
+                    "A loose track carried up above the group stays outside it");
+            require(dragged.setTrackGroupCollapsed(band, true).wasOk(), "The group folds");
+            require(dragged.moveTrack(0, 1, &landed).wasOk() && landed == 3 && dragged.trackGroupId(3) == 0
+                        && dragged.trackGroups()[0].busTrack == 0 && dragged.trackGroups()[0].trackCount == 2,
+                    "Carried down onto the folded bus, the track lands below the whole group, outside it");
+            require(dragged.setTrackGroupCollapsed(band, false).wasOk(), "The group opens again");
+
+            scenario("nested groups: dragging a bus into a group nests its group there");
+            // [Band, M, A, Two, M, A]
+            require(dragged.groupTracks({3, 4}, "Two").wasOk(), "A second group below the first");
+            const auto two = dragged.trackGroupBusId(3);
+            require(dragged.moveTrack(3, 2, &landed).wasOk() && landed == 2,
+                    "Its bus is carried up between the first group's members");
+            groups = dragged.trackGroups();
+            require(groups.size() == 2 && groups[0].trackCount == 5 && groups[1].id == two && groups[1].busTrack == 2
+                        && groups[1].parent == band && groups[1].level == 2 && groups[1].trackCount == 2,
+                    "which nests its whole group inside the first");
+            require(feedOf(2) == rowAt(0) && feedOf(3) == rowAt(2) && feedOf(4) == rowAt(2) && feedOf(5) == rowAt(0),
+                    "its members feeding its bus, and its bus and the member below it feeding the outer one");
+            dragged.undo();
+            groups = dragged.trackGroups();
+            require(groups.size() == 2 && groups[1].busTrack == 3 && groups[1].parent == 0 && feedOf(3) == nullptr,
+                    "One undo takes it back out");
+
+            scenario("nested groups: the card drag carries the group too");
+            board->sync();
+            board->resized();
+            const auto pointerAt = [&board](juce::Point<float> point)
+            {
+                return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), point,
+                                        juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier), 1.0f, 0, 0, 0, 0,
+                                        board.get(), board.get(), juce::Time::getCurrentTime(), point,
+                                        juce::Time::getCurrentTime(), 1, false);
+            };
+            const auto cardCentre = [&board](int track) { return juce::Point<float>(90.0f, board->lane(track).getCentreY()); };
+            require(board->beginCardGesture(pointerAt(cardCentre(3))), "The second group's bus card can be taken");
+            board->dragCardGesture(pointerAt(cardCentre(4)));
+            require(board->moveDestination == 3, "Over one of its own members it has nowhere new to go, so no drop line");
+            board->dragCardGesture(pointerAt(cardCentre(1)));
+            require(board->moveDestination == 1, "Over the first group's member it would land there");
+            board->endCardGesture();
+            groups = dragged.trackGroups();
+            require(groups.size() == 2 && groups[1].id == two && groups[1].busTrack == 1 && groups[1].parent == band
+                        && groups[1].trackCount == 2,
+                    "Dropped, the whole group lands inside the first one");
+            require(board->selectedTrack == 1, "and the selection follows its bus");
+            board.reset();
+            dragged.releaseAudioDevice();
+        }

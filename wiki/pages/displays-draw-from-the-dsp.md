@@ -4,7 +4,7 @@ type: convention
 summary: A curve on screen is computed by the same functions the audio runs, never from a second set of formulas, and tests hold the two together.
 tags: [both, ui, dsp, testing]
 sources: []
-updated: 2026-10-21
+updated: 2026-10-27
 ---
 
 # Displays draw from the DSP
@@ -18,6 +18,10 @@ A display is drawn from the arithmetic the engine actually runs, never from a pi
 - **[Rhino EQ](rhino-eq.md).** `core/dsp/EqFilter.h` is a pure header that the curve and the audio share. The panel draws `EqEngine::responseDbAt` from the scaled bands (`EqEngine::scaledBand`); drawn from the stored bands, display and audio would part once Scale leaves 100%.
 - **[Forge filter](forge-filter.md).** `core/ForgeFilter.h` holds `filterSample`, the audio, and `filterMagnitude`, the picture, written from the same coefficients a few lines apart.
 - **[Drum Rack](drum-rack.md).** A synth pad's picture is a strike rendered by the engine's own voice (`DrumRackEngine::renderStrike`), held sample-identical to live playback by a test, and Slice draws the cuts `DrumSlicer` returns. The sample editor's envelope line is the exception: `shapeAt` in `DeviceEditorPanelDrumSample.cpp` restates the voice's fades, Decay and envelope as a closed form in the UI, and no test holds the two together (2026-10-07; [Drum Rack sample editor](drum-rack-sample-editor.md)).
+- **Rhino's drive devices** (2026-10-27). Each draws its display through `describe`, on its generated face:
+  - [Saturator](saturator.md) draws its curve with `SaturatorEngine::transferCurve`, from the same functions in `core/dsp/SaturatorCurves.h` that the audio runs. A test requires the end of the drawn curve to equal the audio's peak.
+  - [Redux](redux.md) plays a sine through an engine of its own, `ReduxEngine::picture`.
+  - [Erosion](erosion.md) draws its modulator by running the engine's own `modulators` in an engine of its own, `modulationPicture`.
 - **Forge FX slots** (`ui/ForgeFxDisplay.h`, since the 2026-10-21 strips one or two pictures per type; [Forge's FX strips are per-type plans in a pure header](forge-fx-strip-plans.md)). Each picture calls the engine's own arithmetic in `core/ForgeFxDsp.h` and `core/ForgeFx.h`:
   - the distortion's transfer curve is `fxShape` per pixel, and its TONE well is `distortionFilterMagnitude`;
   - the filter is `fxFilterMagnitude`;
@@ -39,6 +43,8 @@ A display is drawn from the arithmetic the engine actually runs, never from a pi
 
 Where no true picture exists, draw the truest thing that can be said instead of inventing a shape. Forge's ring modulator and diffusor have no transfer function, so they draw unity labelled `PHASE ONLY`; the sample and hold draws a hold's own sinc. Warp modes that are no picture of a table (the filter, FM, PD, AM and RM families) leave the oscillator display, which draws only sync, alt and distortion modes (`warpShapesWaveform`). Rhino's arrangement draws a warped clip linearly, out by up to the drag distance once markers move, while the clip editor draws it exactly ([Time warp](time-warp.md)).
 
+[Amp](amp.md) shows no display at all, and this is deliberate. A generated face draws its traces centred on zero and scaled to the loudest, which would misdraw a tone stack's response in dB. The true response, `AmpEngine::toneStackDb`, is computed from the audio's own coefficients, and for now only the tests call it.
+
 ## How the rule is held
 
 Tests compare picture and sound by different routes. `native/src/tests/EqTest.cpp` sweeps sines through `EqEngine`, measures what comes out, and requires it within 0.35 dB of `responseDbAt`. `ForgeTestsDisplays.cpp` checks each slot curve against the function the engine calls. `tests/ForgeTestsFx.cpp` (`forge_fx`) goes further for three pictures: it runs sines through an `FxRack` slot and requires the measured gain within 0.5 dB of the drawn curve. The three are the distortion's filter (LP and HP), all eight filter models and the flanger's comb held still at DEPTH 0. Where the curve drops below −30 dB, the slot need only be below −24 dB. `ForgeTestsEnvelope.cpp` requires the offset drawn on a knob to equal ENV 2's own display reading. `modulatedTraceSuite` (`ForgeTestsDisplays.cpp`, `forge_displays`) routes MACRO 1 to POSITION and to a BEND + warp depth, holds a note, and requires the tube to match pixel for pixel a tube whose knob is set by hand to the modulated value. A macro holds still where an LFO would not; depth 0.5 and macro 1.0 are exact as floats; and it paints only `editor->paint` clipped to `ui::wavetableTubeBounds`, so the knob rings, which change while a note sounds, stay out of the picture. With `modulatedValue` forced back to `value` both checks fail.
@@ -50,6 +56,7 @@ Put the transfer function in the DSP header as a free function and call it from 
 ## Related
 
 - [Measure sound, don't read the DSP](measure-sound-dont-read-dsp.md)
+- [Saturator](saturator.md)
 - [Drum Rack sample editor](drum-rack-sample-editor.md)
 - [Forge mixer and effects racks](forge-mixer-and-fx.md)
 - [Forge's FX strips are per-type plans in a pure header](forge-fx-strip-plans.md)

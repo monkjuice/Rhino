@@ -19,6 +19,14 @@
 
 namespace rhino
 {
+// The drive devices and the Tuner measure rendered audio, each in a unit of
+// its own: DriveDevicesTest.cpp (Saturator, Redux, Erosion and the
+// oversampler), AmpTest.cpp and TunerTest.cpp. Declared here rather than in
+// Session.h, which every file includes, so a new check rebuilds one file.
+void checkDriveDevices(Session&);
+void checkAmp(Session&);
+void checkTuner(Session&);
+
 int runSelfTest()
 {
     try
@@ -717,6 +725,9 @@ int runSelfTest()
         checkVocoderDsp(session);
         checkFmDsp(session);
         checkDrumRack(session);
+        checkDriveDevices(session);
+        checkAmp(session);
+        checkTuner(session);
         checkDjCore(session);
 
         session.releaseAudioDevice();

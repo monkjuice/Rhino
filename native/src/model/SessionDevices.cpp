@@ -110,6 +110,10 @@ juce::Result Session::addDevice(const juce::String& deviceId, int trackIndex, co
                                       : edit->getPluginCache().createNewPlugin(type, {});
     if (plugin == nullptr)
         return juce::Result::fail(name + " could not be created.");
+    // The engine can refuse an insert without saying so - a list at the
+    // engine's limit - and reporting that as success left the rack unchanged
+    // under a status line that said the device was added.
+    const auto devicesBefore = list->size();
     if (isMasterTrack(trackIndex))
     {
         if (!plugin->canBeAddedToMaster())
@@ -121,6 +125,8 @@ juce::Result Session::addDevice(const juce::String& deviceId, int trackIndex, co
         auto* track = audioTracks()[trackIndex];
         list->insertPlugin(plugin, channelStripInsertIndex(*track), nullptr);
     }
+    if (list->size() == devicesBefore)
+        return juce::Result::fail(name + " could not be added: this chain holds as many devices as it can.");
     if (preset != nullptr)
         applyDevicePreset(*plugin, *preset);
     edit->getUndoManager().beginNewTransaction();

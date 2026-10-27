@@ -76,6 +76,10 @@ keys the track is playing, on a looping clip, from `NotePlayingKeys.inc` in the 
 ([Note editor](note-editor.md#keys-the-track-is-playing)).
 `RHINO_CLIP_LOOP_SNAPSHOT` (commit `81a898b`) writes a looped clip's lane, zoomed to three bars at 2x, with a notch
 where each pass begins, from `ClipLoop.inc` in the same case ([Clip Loop switch](clip-loop.md)).
+`RHINO_DEVICE_SNAPSHOTS` names a *folder*, not a file (2026-10-27). `--self-test` (`native_device_correctness`) writes
+`<id>.png` there for Amp, Saturator, Redux and Erosion from `DriveDevicesTest.cpp`, and the Tuner's face in four states,
+from `Tuner target.png` to `Tuner cents.png`, from `TunerTest.cpp`, each with a `Theme` set
+([Built-in devices](built-in-devices.md)).
 
 A `juce::TreeView` cannot be seen this way opened: it lays out its rows asynchronously, so a snapshot shows an opened
 folder with no children, even after `setOpen`, `resized()` or a rebuild at a new width. Test the browser's rows and drag

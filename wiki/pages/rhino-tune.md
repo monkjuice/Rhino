@@ -4,7 +4,7 @@ type: component
 summary: Vocal pitch correction with YIN tracking and PSOLA shifting, real reported latency, and correction smoothed on the offset.
 tags: [rhino, devices, dsp, pitch]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-27
 ---
 
 # Rhino Tune
@@ -13,7 +13,7 @@ Vocal pitch correction modelled on Live's Auto Shift. The device, `native/src/de
 
 ## The DSP
 
-- **`PitchTracker`** is YIN, its difference function computed through a small radix-2 transform in the file rather than directly, which would cost hundreds of millions of operations a second. The cumulative-mean normalisation reports the fundamental rather than the loudest partial, and taking the *first* lag under the threshold, not the deepest, stops octave-low answers on a rich voice.
+- **`PitchTracker`** is YIN, its difference function computed through a small radix-2 transform in the file rather than directly, which would cost hundreds of millions of operations a second. The cumulative-mean normalisation reports the fundamental rather than the loudest partial, and taking the *first* lag under the threshold, not the deepest, stops octave-low answers on a rich voice. Since 2026-10-27 it also has `prepare(rate, lowestHz, highestHz)`, a band of the caller's own whose frame is the shortest power of two holding two periods of the lowest, and `analysisCount()`, so a caller can tell a fresh estimate from the last. The [Tuner](tuner.md) uses both, from 30 Hz to 2 kHz. It also switches on `setMultiplePeriodRefinement`, which is off by default. That option re-measures the period at its furthest multiple in the window and divides back down, so a high note reads to a hundredth of a cent rather than one or two cents off. Rhino Tune's correction never needed it and does not use it, and its three ranges are unchanged.
 - **`PsolaShifter`** is pitch-synchronous overlap-add, not a phase vocoder: one grain per glottal pulse, so formants stay put, and resampling a grain without moving the marks shifts formants alone. It is monophonic by construction, which is why the device says vocals.
 - **`ScaleQuantizer.h`** is a pure header, checkable exhaustively. Toggling a key leaves a mask no named scale matches, and the chooser reads Custom.
 - Correction is smoothed on the **offset** between detected note and target, never on the target. Vibrato swings the offset at 5-7 Hz, too fast for a slow retune to follow, while the drift underneath is slow enough to remove; smoothing the target irons vibrato flat.
@@ -40,6 +40,7 @@ Thirteen automatable parameters cover correction, transposition, formants, vibra
 
 - [Built-in devices](built-in-devices.md)
 - [Rhino Vocoder](rhino-vocoder.md)
+- [Tuner](tuner.md)
 - [Device rack and device editors](device-rack.md)
 - [Measure sound, don't read the DSP](measure-sound-dont-read-dsp.md)
 - [Real-time audio rules](real-time-audio-rules.md)

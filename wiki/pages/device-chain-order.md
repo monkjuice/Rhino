@@ -21,6 +21,8 @@ At plugin index 0 the DJ booth's hidden input (`DjTrackInjectorDevice`, "DJ Inpu
 - Instruments and MIDI effects start counting at `djInputEnd` (`SessionInternal.h`), which is 1 when the DJ input heads the chain and 0 otherwise. Audio effects (`channelStripInsertIndex`) and the DJ output's placement (`ensureDjPortDevices`) start at `chainHeadEnd`, which also skips an aux return right after the DJ input, so an effect added to a return lands after its way in.
 - On the main track an effect is appended to the edit's master list, and the engine's `canBeAddedToMaster` refuses the rest ([The main track](main-track.md)). A group bus and a return track take audio effects only.
 
+**The hidden plugins count against Tracktion's cap.** A track spends about seven plugins before anything is added: the two DJ ends, the channel strip's three and a send per return. Tracktion's default limit of sixteen per track therefore filled a chain at about nine devices, and it refuses a plugin past its cap without a word. Since 2026-10-27 `RhinoEngineBehaviour` raises the cap to 128 ([Tracktion refuses a track's seventeenth plugin without a word](tracktion-plugin-limit-per-track.md)).
+
 **Raw plugin indices count the hidden input** (since 2026-10-12). A track's first visible device is plugin 1, so `Session`'s `slot` arguments, `DeviceTarget::slot` and `DeviceSlot::pluginIndex` are one higher than before, and the scenarios that named a track's first device as slot 0 moved to 1 (`EditingAndAutomation.inc`, `Persistence.inc`, `AudioClipEditing.inc`, `TempoChange.inc`). Find a device through `deviceSlots` and its `pluginIndex`, or a hidden one by its type, rather than by counting.
 
 ## Pitfall: starter and added tracks order their channel strips differently
@@ -50,3 +52,4 @@ An audio effect dropped on an audio clip goes into that clip's own plugin list (
 - [DJ decks play live through the track's chain](dj-decks-play-live-through-the-track.md)
 - [Track level meters](level-meters.md)
 - [Return tracks and sends](return-tracks.md)
+- [Tracktion refuses a track's seventeenth plugin without a word](tracktion-plugin-limit-per-track.md)

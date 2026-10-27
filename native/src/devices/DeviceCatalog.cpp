@@ -7,6 +7,11 @@
 #include "audio/RhinoEqDevice.h"
 #include "audio/AutoTuneDevice.h"
 #include "audio/VocoderDevice.h"
+#include "audio/AmpDevice.h"
+#include "audio/SaturatorDevice.h"
+#include "audio/ReduxDevice.h"
+#include "audio/ErosionDevice.h"
+#include "audio/TunerDevice.h"
 #include "midi/RhinoArpDevice.h"
 #include "infra/DjTrackPortDevices.h"
 #include "infra/ClipEnvelopeDevice.h"
@@ -92,6 +97,24 @@ std::vector<DeviceDescriptor> buildCatalog()
          .kind = DeviceKind::AudioEffect, .category = "Dynamics", .description = "Level trim inside a chain",
          .colour = 0xff56636c, .infrastructure = true, .create = factory<UtilityDevice>()});
 
+    // Live's drive devices, after its own: an amp, a waveshaper, a crusher and
+    // a delay shaken at audio rate.
+    add({.id = "Amp", .typeName = AmpDevice::xmlTypeName, .displayName = "Amp",
+         .kind = DeviceKind::AudioEffect, .category = "Distortion", .description = "Seven guitar amplifiers, one set of knobs",
+         .colour = 0xffd0643c, .browsable = true, .create = factory<AmpDevice>()});
+
+    add({.id = "Saturator", .typeName = SaturatorDevice::xmlTypeName, .displayName = "Saturator",
+         .kind = DeviceKind::AudioEffect, .category = "Distortion", .description = "Waveshaping, from warmth to wavefolding",
+         .colour = 0xffe0a040, .browsable = true, .create = factory<SaturatorDevice>()});
+
+    add({.id = "Redux", .typeName = ReduxDevice::xmlTypeName, .displayName = "Redux",
+         .kind = DeviceKind::AudioEffect, .category = "Distortion", .description = "Downsampling and bit reduction",
+         .colour = 0xff5fb38a, .browsable = true, .create = factory<ReduxDevice>()});
+
+    add({.id = "Erosion", .typeName = ErosionDevice::xmlTypeName, .displayName = "Erosion",
+         .kind = DeviceKind::AudioEffect, .category = "Distortion", .description = "Digital degradation from a shaken delay",
+         .colour = 0xffb0785a, .browsable = true, .create = factory<ErosionDevice>()});
+
     add({.id = "Reverb", .typeName = te::ReverbPlugin::xmlTypeName, .displayName = "Reverb",
          .kind = DeviceKind::AudioEffect, .category = "Delay and Reverb", .description = "Tracktion reverb",
          .browsable = true});
@@ -116,6 +139,11 @@ std::vector<DeviceDescriptor> buildCatalog()
     add({.id = "RhinoVocoder", .typeName = VocoderDevice::xmlTypeName, .displayName = "Rhino Vocoder",
          .kind = DeviceKind::AudioEffect, .category = "Rhino", .description = "Plays this track's voice with another track's synth",
          .colour = 0xff7d8fc4, .browsable = true, .create = factory<VocoderDevice>()});
+
+    // A meter rather than an effect: it never changes the audio.
+    add({.id = "Tuner", .typeName = TunerDevice::xmlTypeName, .displayName = "Tuner",
+         .kind = DeviceKind::AudioEffect, .category = "Utilities", .description = "The pitch of what passes, and how far off it is",
+         .colour = 0xff6fc98f, .browsable = true, .create = factory<TunerDevice>()});
 
     // ---- The DJ booth's hidden ends of a track --------------------------------
     // A deck playing a track of the song is heard through the track itself:

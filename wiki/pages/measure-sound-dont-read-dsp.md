@@ -4,7 +4,7 @@ type: convention
 summary: Claims about pitch, level or timbre are settled by rendering audio and measuring it by a route that cannot agree with the DSP by construction.
 tags: [both, testing, audio, measurement]
 sources: []
-updated: 2026-10-26
+updated: 2026-10-27
 ---
 
 # Measure sound, don't read the DSP
@@ -16,8 +16,8 @@ What a synth or a device *sounds* like is settled by rendering audio and measuri
 ## The patterns
 
 - **Pitch.** Forge's `tuningSuite()` (`tests/ForgeTestsOscillator.cpp`) renders notes at 44.1 and 48 kHz, finds each fundamental by FFT peak interpolation, and requires it within 2 cents of nominal. `AGENTS.md` still places it in a `ForgeTests.cpp` that no longer exists. Rhino's `AutoTuneTest.cpp` does the same with a windowed transform on a synthesised vowel ([Rhino Tune](rhino-tune.md)).
-- **Response.** `EqTest.cpp` sweeps sines through [Rhino EQ](rhino-eq.md) and compares the output with the drawn curve. `VocoderTest.cpp` measures which of four carrier tones a single modulator tone lets through.
-- **Level.** Forge's `levelSuite()` (`tests/ForgeTestsSpectral.cpp`) requires a [spectral oscillator](forge-spectral.md) to keep a sample's level at its root and an octave either side.
+- **Response.** `EqTest.cpp` sweeps sines through [Rhino EQ](rhino-eq.md) and compares the output with the drawn curve. `VocoderTest.cpp` measures which of four carrier tones a single modulator tone lets through. `AmpTest.cpp` measures each tone knob through the whole [Amp](amp.md), at a level that does not distort, against the tone stack's own response, and requires them within 0.5 dB. `DriveDevicesTest.cpp` checks [Saturator](saturator.md)'s oversampling by requiring that a 7 kHz tone's fifth harmonic does not fold back to 13 kHz.
+- **Level.** Forge's `levelSuite()` (`tests/ForgeTestsSpectral.cpp`) requires a [spectral oscillator](forge-spectral.md) to keep a sample's level at its root and an octave either side. [Amp](amp.md#voicing-by-measurement)'s seven models were voiced by measurement: RMS and peaks at their defaults, at Volume 10 and flat out, and a sine's THD across Gain. That is how the first voicing was found to peak about +10 dBFS and to leave Lead saturated at Gain 0.
 - **A preset's claim.** A factory preset that calls itself a sub or a growl is checked on its `--audition` render: the share of the C1 note's energy below 60 and 120 Hz for a sub, the spectral centroid per 43 ms frame for a growl whose LFOs are meant to move it, peak and RMS for all. Forge's Drum n Bass set shipped on those figures, not on its script ([Writing Forge factory presets](writing-forge-factory-presets.md)).
 - **Tempo, mix and effect.** `DjTest.cpp` measures the DJ mixer's bands, kills, fader curves, crossfader and cue bus on tones, the compressor by how far it holds a loud tone down and lifts a quiet one, the send unit by when a click comes back, the mic's talkover by the master's dip and its release, a braked stop and start by the frames of material they cover, a hand on the platter by which way the deck runs, the pitch effect by zero-crossing frequency, a vinyl brake by the silence it ends in, times an echo's repeats and a trans gate, and analyses a synthesised 126.5 BPM A-minor beat with a drop at bar 8 ([DJ view and the booth](dj-view.md)).
 - **Timing and clicks.** `ClipPitch.inc` renders a clip of sharp hits at the device's block size, then compares onset times with the unpitched clip's and takes the largest sample-to-sample step at the clip's edges. That is how a pitched clip's "BPM change" turned out to be a constant 120 ms lag, and how SoundTouch was found to start early ([Tracktion's time-stretched proxy plays late and cuts its end](tracktion-stretched-proxy-plays-late.md)).

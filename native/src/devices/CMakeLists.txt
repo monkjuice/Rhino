@@ -21,6 +21,11 @@ add_library(RhinoDevices STATIC
     audio/RhinoEqDevice.cpp
     audio/AutoTuneDevice.cpp
     audio/VocoderDevice.cpp
+    audio/AmpDevice.cpp
+    audio/SaturatorDevice.cpp
+    audio/ReduxDevice.cpp
+    audio/ErosionDevice.cpp
+    audio/TunerDevice.cpp
     midi/RhinoArpDevice.cpp
     midi/RhinoArpDeviceProcessing.cpp
     infra/DjTrackPortDevices.cpp

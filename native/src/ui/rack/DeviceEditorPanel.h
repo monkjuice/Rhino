@@ -60,6 +60,8 @@ public:
     // pad's side rather than beside it, and grows both to fill the panel. The
     // rack's faces never are; the Drum Rack's own window always is.
     static constexpr int drumStackedHeight = 400;
+    // The Tuner's face is as wide as this whatever it shows.
+    static constexpr int tunerFaceWidth = 520;
     // Set by the rack: a Drum Rack face shows a button in its name bar that
     // opens it in a window of its own (DrumRackWindow).
     std::function<void()> openInWindow;
@@ -84,7 +86,7 @@ private:
     friend void runPatternDeviceRackTest();
     friend void runDrumRackFaceTest();
     friend void runDrumRackWindowTest();
-    enum class Face { Generic, Generated, Arp, AutoTune, Eq, Vocoder, DrumRack };
+    enum class Face { Generic, Generated, Arp, AutoTune, Eq, Vocoder, DrumRack, Tuner };
     void ensureControls();
     void styleControls();
     void layoutGeneric();
@@ -162,6 +164,13 @@ private:
     void paintVocoder(juce::Graphics&);
     bool handleVocoderClick(const juce::MouseEvent&);
     void tickVocoder();
+    // The Tuner's face is DeviceEditorPanelTuner.cpp: a measurement that has
+    // to move, as an arc, a strobe or a histogram, and the switches between
+    // them. Its one knob, Reference, is the generic control at index 0.
+    void layoutTuner();
+    void paintTuner(juce::Graphics&);
+    bool handleTunerClick(const juce::MouseEvent&);
+    void tickTuner();
     // Any other device that takes a sidechain - an external plugin with a
     // sidechain input, Tracktion's compressor, a device on the SDK - and has
     // no face of its own shows a Sidechain strip at the left of its face, as
@@ -341,6 +350,12 @@ private:
     // two lamps are a pair of bits.
     float lastDrawnBandSum = -1.0f;
     int lastDrawnLamps = -1;
+    // The Tuner's strobe band, in lights, as it has run so far; the note its
+    // histogram is centred on, kept between notes; and what its display was
+    // last drawn from, so a tuner hearing nothing asks for no frames.
+    float tunerStrobePhase = 0.0f;
+    int tunerHistogramCentre = 69;
+    juce::String tunerDrawn;
 
     // ---- Rhino EQ ---------------------------------------------------------
     // The reader is heap-allocated because it carries the transform tables

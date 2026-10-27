@@ -120,6 +120,18 @@ struct RhinoEngineBehaviour final : te::EngineBehaviour
     // tracks send it. Read as the graph is built, so the session rebuilds it
     // when a return's solo changes. SessionReturns.cpp.
     bool shouldProcessAuxSendWhenTrackIsMuted(te::AuxSendPlugin&) override;
+    // Tracktion stops a track at sixteen plugins by default, and refuses the
+    // seventeenth without a word. Every track here spends about seven before
+    // anything is added - the DJ ports, the channel strip, the meter and a
+    // send per return - so a chain filled up at nine devices, and the next
+    // return's send could not be inserted at all. Live has no such limit, and
+    // this one is far past any chain a person builds.
+    te::EditLimits getEditLimits() override
+    {
+        te::EditLimits limits;
+        limits.maxPluginsOnTrack = 128;
+        return limits;
+    }
     std::function<juce::File()> recordingDirectory;
 };
 

@@ -79,16 +79,18 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
          : deviceId == "Equaliser" ? Face::Eq
          : deviceId == "RhinoVocoder" ? Face::Vocoder
          : deviceId == "Drums" ? Face::DrumRack
+         : deviceId == "Tuner" ? Face::Tuner
          : device.native ? Face::Generated
          : Face::Generic;
     // A freshly rebuilt built-in plugin can briefly have no display name while
     // Tracktion refreshes its state. The face still has a stable catalog name.
     if (face == Face::Arp)
         deviceName = RhinoArpDevice::getPluginName();
-    // The tuner's meter, the vocoder's bank, the EQ's spectrum and the drum
-    // pads lighting as they are struck are the only things on any face that
-    // move on their own, so they are the only devices that ask for frames.
-    // The EQ stops asking when its analyser is switched off.
+    // Rhino Tune's meter, the Tuner's display, the vocoder's bank, the EQ's
+    // spectrum and the drum pads lighting as they are struck are the only
+    // things on any face that move on their own, so they are the only devices
+    // that ask for frames. The EQ stops asking when its analyser is switched
+    // off.
     const auto* eqDevice = face == Face::Eq
         ? dynamic_cast<RhinoEqDevice*>(session.devicePlugin(track, pluginSlot)) : nullptr;
     const auto eqAnalysing = eqDevice != nullptr && device.enabled
@@ -97,7 +99,7 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
     // count, and the rack re-targets a face with a knob on a lane 30 times a
     // second while the song plays, so a 24 Hz frame never came due and the
     // EQ's spectrum stood still.
-    if (face == Face::AutoTune || face == Face::Vocoder || face == Face::DrumRack || eqAnalysing)
+    if (face == Face::AutoTune || face == Face::Vocoder || face == Face::DrumRack || face == Face::Tuner || eqAnalysing)
     {
         if (!isTimerRunning())
             startTimerHz(24);
@@ -194,6 +196,8 @@ int DeviceEditorPanel::preferredWidth() const
         return 660;
     if (face == Face::DrumRack)
         return drumFaceWidth;
+    if (face == Face::Tuner)
+        return tunerFaceWidth;
     if (face == Face::Generated)
         return generatedWidth() + sidechainWidth();
     if (face == Face::Arp)
@@ -304,6 +308,8 @@ void DeviceEditorPanel::mouseDown(const juce::MouseEvent& event)
         if (face == Face::Vocoder && handleVocoderClick(event))
             return;
         if (face == Face::Generated && handleGeneratedClick(event))
+            return;
+        if (face == Face::Tuner && handleTunerClick(event))
             return;
     }
     if (event.eventComponent != this)
@@ -468,6 +474,8 @@ int DeviceEditorPanel::visibleParameterCount() const
         : face == Face::Generated ? 48
         : face == Face::DrumRack ? 0
         : face == Face::AutoTune || face == Face::Vocoder ? 13
+        // Reference; the view switches are drawn.
+        : face == Face::Tuner ? 1
         : mappable ? Session::maximumMappedParameters : 12;
     return std::min(limit, static_cast<int>(parameters.size()));
 }
@@ -579,6 +587,7 @@ void DeviceEditorPanel::styleControls()
             : face == Face::Generated || mappable ? faceAccent()
             : face == Face::AutoTune ? juce::Colour(0xffb2739c)
             : face == Face::Vocoder ? juce::Colour(0xff7d8fc4)
+            : face == Face::Tuner ? juce::Colour(0xff6fc98f)
             : face == Face::Arp ? palette::midiEffect
             : juce::Colour(0xffc6d58c);
         parameterLabels[i]->setText(face == Face::Generated ? captionFor(parameter) : parameter.name,
@@ -696,6 +705,11 @@ void DeviceEditorPanel::paint(juce::Graphics& g)
         paintDrums(g);
         return;
     }
+    if (face == Face::Tuner)
+    {
+        paintTuner(g);
+        return;
+    }
     if (face == Face::Generated)
         paintGenerated(g);
 }
@@ -728,6 +742,8 @@ void DeviceEditorPanel::resized()
         layoutVocoder();
     else if (face == Face::Arp && contentArea.getWidth() >= 650 && contentArea.getHeight() >= 120)
         layoutArp();
+    else if (face == Face::Tuner)
+        layoutTuner();
     else if (face == Face::Generated)
         layoutGenerated();
     else

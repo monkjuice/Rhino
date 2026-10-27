@@ -480,6 +480,11 @@ void DeviceEditorPanel::timerCallback()
         tickVocoder();
         return;
     }
+    if (face == Face::Tuner)
+    {
+        tickTuner();
+        return;
+    }
     if (face != Face::AutoTune)
     {
         stopTimer();

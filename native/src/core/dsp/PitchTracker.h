@@ -44,13 +44,29 @@ public:
     static float highestFrequency(Range);
 
     void prepare(double sampleRate, Range);
+    // A band of one's own rather than one of the three, for a reader that
+    // needs a wider reach than a voice has and can afford the latency: the
+    // Tuner, from a five-string bass's low B up. The frame is the shortest
+    // power of two that holds two periods of `lowestHz`.
+    void prepare(double sampleRate, float lowestHz, float highestHz);
     void reset();
+
+    // Measures the period again at the furthest multiple of it the window
+    // reaches and divides back down, which divides the interpolation's error
+    // by that multiple. A short period - a high note - is otherwise read a
+    // cent or two off. Off by default: it is for a reading that has to be
+    // exact to the cent, the Tuner's, and Rhino Tune's correction never
+    // needed it.
+    void setMultiplePeriodRefinement(bool on) { refineByMultiples = on; }
 
     // Appends mono samples and analyses whenever a hop has filled.  Safe to
     // call from the audio thread: prepare() does all the allocation.
     void process(const float* samples, int count);
 
     const Estimate& latest() const { return estimate; }
+    // How many analyses have run since prepare() or reset(), so a caller can
+    // tell a fresh estimate from the one it already has.
+    int analysisCount() const { return analyses; }
     int frameSize() const { return frame; }
     int hopSize() const { return hop; }
     // The longest period the tracker will report, which is what the shifter
@@ -58,11 +74,13 @@ public:
     int longestPeriodSamples() const { return maxLag; }
 
 private:
+    void prepareFrame(double sampleRate, int frameSize, float lowestHz, float highestHz);
     void analyse();
     void transform(std::vector<float>& re, std::vector<float>& im, bool inverse) const;
 
     double sampleRate = 48000.0;
-    Range range = Range::Mid;
+    int analyses = 0;
+    bool refineByMultiples = false;
     int frame = 2048;      // samples the analysis reads; also the FFT size
     int window = 1024;     // integration window, half the frame
     int hop = 256;

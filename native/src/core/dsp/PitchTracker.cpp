@@ -46,19 +46,30 @@ float PitchTracker::highestFrequency(Range range)
     return range == Range::High ? 1600.0f : range == Range::Mid ? 1000.0f : 500.0f;
 }
 
-void PitchTracker::prepare(double rate, Range r)
+void PitchTracker::prepare(double rate, Range range)
+{
+    prepareFrame(rate, frameSizeFor(range, rate), lowestFrequency(range), highestFrequency(range));
+}
+
+void PitchTracker::prepare(double rate, float lowestHz, float highestHz)
+{
+    const auto safeRate = rate > 0.0 ? rate : 48000.0;
+    const auto longestPeriod = static_cast<int>(std::ceil(safeRate / std::max(1.0f, lowestHz)));
+    prepareFrame(safeRate, nextPowerOfTwo(std::max(256, 2 * longestPeriod + 2)), lowestHz, highestHz);
+}
+
+void PitchTracker::prepareFrame(double rate, int frameSize, float lowestHz, float highestHz)
 {
     sampleRate = rate > 0.0 ? rate : 48000.0;
-    range = r;
-    frame = frameSizeFor(range, sampleRate);
+    frame = frameSize;
     window = frame / 2;
     hop = std::max(32, frame / 8);
 
     // The lag bounds come from the band, then are clamped to what a window of
     // this length can actually resolve: the difference function only reaches
     // `window` samples of lag.
-    minLag = std::clamp(static_cast<int>(sampleRate / highestFrequency(range)), 2, window - 2);
-    maxLag = std::clamp(static_cast<int>(sampleRate / lowestFrequency(range)), minLag + 2, window - 1);
+    minLag = std::clamp(static_cast<int>(sampleRate / highestHz), 2, window - 2);
+    maxLag = std::clamp(static_cast<int>(sampleRate / lowestHz), minLag + 2, window - 1);
 
     history.assign(static_cast<size_t>(frame), 0.0f);
     frameBuffer.assign(static_cast<size_t>(frame), 0.0f);
@@ -101,6 +112,7 @@ void PitchTracker::reset()
     writeIndex = 0;
     sinceAnalysis = 0;
     primed = false;
+    analyses = 0;
     estimate = {};
 }
 
@@ -169,6 +181,7 @@ void PitchTracker::transform(std::vector<float>& re, std::vector<float>& im, boo
 
 void PitchTracker::analyse()
 {
+    ++analyses;
     // Unwrap the ring so the oldest sample is at index 0.
     for (int i = 0; i < frame; ++i)
         frameBuffer[static_cast<size_t>(i)] = history[static_cast<size_t>((writeIndex + i) % frame)];
@@ -266,6 +279,34 @@ void PitchTracker::analyse()
         const auto denominator = 2.0f * (2.0f * here - before - after);
         if (std::abs(denominator) > 1.0e-9f)
             period += (after - before) / denominator;
+    }
+    // A periodic signal's difference dips again at every multiple of its
+    // period, as deep as at the first. Walking downhill from the furthest
+    // multiple the window reaches finds that dip, and the same interpolation
+    // there, divided back down, is that many times finer. The walk cannot
+    // reach the next multiple's dip: a period's worth of rising ground lies
+    // between them.
+    if (refineByMultiples && period > 2.0f)
+    {
+        const auto multiple = static_cast<int>(static_cast<float>(window - 2) / period);
+        if (multiple >= 2)
+        {
+            auto lag = std::clamp(static_cast<int>(std::lround(period * static_cast<float>(multiple))), 1, window - 2);
+            while (lag > 1 && difference[static_cast<size_t>(lag - 1)] < difference[static_cast<size_t>(lag)])
+                --lag;
+            while (lag < window - 2 && difference[static_cast<size_t>(lag + 1)] < difference[static_cast<size_t>(lag)])
+                ++lag;
+            const auto before = difference[static_cast<size_t>(lag - 1)];
+            const auto here = difference[static_cast<size_t>(lag)];
+            const auto after = difference[static_cast<size_t>(lag + 1)];
+            const auto denominator = 2.0f * (2.0f * here - before - after);
+            auto refined = static_cast<float>(lag);
+            if (std::abs(denominator) > 1.0e-12f)
+                refined += (after - before) / denominator;
+            // Only a dip that is where the first period said it would be.
+            if (std::abs(refined / static_cast<float>(multiple) - period) < 0.5f)
+                period = refined / static_cast<float>(multiple);
+        }
     }
     period = std::clamp(period, static_cast<float>(minLag), static_cast<float>(maxLag));
 

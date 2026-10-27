@@ -4,7 +4,7 @@ type: decision
 summary: Rhino's own devices are written on one SDK base, held to one conformance runner and given generated faces, with their presets as .rnd files; VST3 stays the format for outside instruments.
 tags: [rhino, devices, sdk, testing]
 sources: []
-updated: 2026-10-23
+updated: 2026-10-27
 ---
 
 # The native device standard
@@ -73,6 +73,8 @@ On 2026-10-06 the Drum Rack replaced the hand-written Rhino Drums as the second 
 - **Many controls.** On 2026-10-07 it went to a pad per note, six controls each: 768. Reading the whole parameter list then cost 1.75 ms, so `Session` gained range reads ([What a change costs the interface](ui-cost-of-a-change.md)), and reading a kit roughly doubled, probably because every state change notifies every control's `CachedValue`. Settings counted per item in the hundreds belong in content: that is why the sample editor's are not automatable ([Drum Rack sample editor](drum-rack-sample-editor.md)).
 - **Its own face**, because it pictures a synth pad's strike with the engine's own voice and a sample with its part, envelope and slices. Its pads still declare a section per note in a "Pads" tab group, should a generated face ever show them.
 - **Primed for conformance.** A blank rack is silent, so `--device-test` gives it pads first.
+
+On 2026-10-27 five audio effects modelled on Live 12's joined on the base: [Amp](amp.md), [Saturator](saturator.md), [Redux](redux.md), [Erosion](erosion.md) and [Tuner](tuner.md). Each is a catalog entry and a thin shell over DSP in RhinoCore, and `--device-test` holds all five to the standard with nothing pending. Between them they use the SDK's latency, display and tab-group declarations. The Tuner adds one more use: its face's view switches are declared as choice controls, so view state saves and undoes like any setting.
 
 Still to do: move the remaining devices onto the SDK.
 

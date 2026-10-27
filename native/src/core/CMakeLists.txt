@@ -22,6 +22,12 @@ add_library(RhinoCore STATIC
     dsp/DrumSynth.cpp
     dsp/DrumRackEngine.cpp
     dsp/DrumSlicer.cpp
+    dsp/Oversampler.cpp
+    dsp/SaturatorEngine.cpp
+    dsp/AmpEngine.cpp
+    dsp/ReduxEngine.cpp
+    dsp/ErosionEngine.cpp
+    dsp/TunerEngine.cpp
     dj/DjAnalysis.cpp
     dj/DjReleaseQueue.cpp
     dj/DjTrackPort.cpp

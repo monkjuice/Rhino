@@ -4,7 +4,7 @@ type: guide
 summary: The three edits that add a device, the SDK base a new one is written on, the shape the older devices follow, and the enum-era code a new instrument still meets.
 tags: [rhino, devices, cmake, testing]
 sources: []
-updated: 2026-10-26
+updated: 2026-10-27
 ---
 
 # Adding a device to Rhino
@@ -36,15 +36,19 @@ The other devices are still hand-written on `te::Plugin`, and this is what chang
 
 ## DSP and its test
 
-Put DSP worth testing in `native/src/core/dsp/` as plain C++, which the device includes as `"dsp/<Engine>.h"`, with the device a thin shell, as Rhino Tune, Rhino EQ and Rhino Vocoder do. Measure rendered output in a new `native/src/tests/*Test.cpp` called from `runSelfTest`, which needs its own line in `native/CMakeLists.txt` ([Measure sound, don't read the DSP](measure-sound-dont-read-dsp.md)).
+Put DSP worth testing in `native/src/core/dsp/` as plain C++, which the device includes as `"dsp/<Engine>.h"`, with the device a thin shell, as Rhino Tune, Rhino EQ, Rhino Vocoder and the five devices of 2026-10-27 do. RhinoCore links `juce_core` only, so nothing from `juce_dsp` is available there.
+
+**A nonlinearity that should not alias** runs through `Oversampler` ([Oversampler and BiquadFilter](oversampler.md)). Its latency is a whole number of samples. Delay the dry signal by it before any Dry/Wet mix, and report it by overriding `latencySamples()`, as [Saturator](saturator.md) and [Amp](amp.md) do.
+
+**Measure rendered output** in a new `native/src/tests/*Test.cpp` called from `runSelfTest`, which needs its own line in `native/CMakeLists.txt` ([Measure sound, don't read the DSP](measure-sound-dont-read-dsp.md)). Declare its entry point in `tests/SelfTest.cpp`, as `checkDriveDevices`, `checkAmp` and `checkTuner` are, rather than in `Session.h`. Every file includes `Session.h`, so a declaration there rebuilds everything, while one in `SelfTest.cpp` rebuilds one file.
 
 ## A face
 
-Optional. A device on the SDK without one gets a face generated from its declarations (`DeviceEditorPanelGenerated.cpp`): controls grouped under the sections they declare, a knob for a continuous control that steps, skews and double-click-resets as declared, a chooser for a choice and a switch for a toggle. A section-named caption drops the section's name ("Op 1 Ratio" reads "Ratio" under OP 1), so name a control in full for its automation lane. Rhino FM and Rhino Space use it.
+Optional. A device on the SDK without one gets a face generated from its declarations (`DeviceEditorPanelGenerated.cpp`): controls grouped under the sections they declare, a knob for a continuous control that steps, skews and double-click-resets as declared, a chooser for a choice and a switch for a toggle. A section-named caption drops the section's name ("Op 1 Ratio" reads "Ratio" under OP 1), so name a control in full for its automation lane. Rhino FM, Rhino Space, Amp, Saturator, Redux and Erosion use it.
 
 Two declarations go further without a hand-built face:
 - Sections that repeat, such as Rhino FM's four operators, can share a tab group, `.section("Op 1", "Operators")`, and show one at a time.
-- A device can override `describe(DeviceDisplay&)` to put a display after the face's first group: traces of what it plays, and a diagram of blocks and links. Draw a trace with an engine of the device's own, since `describe` runs on the message thread while the audio thread plays. Keep its last answer while the controls are unchanged, because a dragged knob asks every frame. Anything not on the SDK gets twelve generic knobs. A hand-built face is a new translation unit of `DeviceEditorPanel` in `native/src/ui/rack/` (a line in `native/CMakeLists.txt`) and a `Face` value chosen by catalog id in `setTarget`. Draw and hit-test rectangles, keep view state on the device, and reach it through `Session::devicePlugin`. Write the device's own settings through `Session::editDeviceSettings`, so each is an undo step of its own and the session hears of it ([Device rack and device editors](device-rack.md)).
+- A device can override `describe(DeviceDisplay&)` to put a display after the face's first group: traces of what it plays, and a diagram of blocks and links. Draw a trace with an engine of the device's own, since `describe` runs on the message thread while the audio thread plays. Keep its last answer while the controls are unchanged, because a dragged knob asks every frame. Traces are drawn centred on zero and scaled to the loudest, which suits a waveform or a transfer curve but not a response in dB, so [Amp](amp.md) shows none. Anything not on the SDK gets twelve generic knobs. A hand-built face is a new translation unit of `DeviceEditorPanel` in `native/src/ui/rack/` (a line in `native/CMakeLists.txt`) and a `Face` value chosen by catalog id in `setTarget`. Draw and hit-test rectangles, keep view state on the device, and reach it through `Session::devicePlugin`. Write the device's own settings through `Session::editDeviceSettings`, so each is an undo step of its own and the session hears of it ([Device rack and device editors](device-rack.md)). On the SDK, view state a face switches can instead be declared as the device's own choice controls and written through `writeParameter`, as the [Tuner](tuner.md)'s view, mode and readout are. They are then saved with the device, and each click is an undo step with no extra code.
 
 ## Instruments still meet older code
 
@@ -62,3 +66,5 @@ Two older traps are gone as of 2026-10-05: a moved or pasted MIDI clip carries i
 - [Device rack and device editors](device-rack.md)
 - [Writing Rhino tests](writing-rhino-tests.md)
 - [The native device standard](native-device-standard.md)
+- [Oversampler and BiquadFilter](oversampler.md)
+- [Tracktion refuses a track's seventeenth plugin without a word](tracktion-plugin-limit-per-track.md)

@@ -1399,3 +1399,18 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/real-time-audio-rules.md (some engine reads lock; Related; updated date)
 - updated: pages/reading-a-hung-process.md (AppHangTransient; per-thread CPU sampled twice; read the stacks before the user ends the app; Release RhinoDAW.exe has no PDB; Related; updated date)
 - updated: index.md (Gotchas: the new page)
+
+## [2026-10-27] update | Note editor: keys lit by what the clip's track plays, and a clip Loop switch (4a6a17b)
+- source: the change brief, checked against native/src/devices/infra/HeldKeys.h, DjTrackPortDevices.h/.cpp, native/src/model/SessionClipLoop.cpp, SessionNoteAudition.cpp (`takePatternKeysDown`), SessionSlots.cpp and tests/Arrangement/WorkflowTest.cpp; committed and pushed as 4a6a17b, all six CTest cases pass; neither feature watched in the running app yet
+- created: pages/clip-loop.md (the switch and the two loops; the engine's loop semantics at 4536d8a, the offset counting into the loop, `cloneFrom` not copying the range, `disableLooping` avoided; the on and off rules; the editor showing the loop; arrangement, copies and cells; limits; `ClipLoop.inc`)
+- updated: pages/note-editor.md (summary, tags; `SessionClipLoop.cpp`; sections Keys the track is playing (the tap on the DJ input and the rejected alternatives, `HeldKeys`, what is heard and cleared, the stale-read rule, the timing caveat, `NotePlayingKeys.inc`), The Loop switch (footer place, hint at 178 px), The playhead and the ruler (the offset error fixed through `patternStepAt`); Not done yet; Related)
+- updated: pages/arrangement-view.md (looped clips drawn from `getSequenceLooped`)
+- updated: pages/region-editing.md (snapshots carry the loop range)
+- updated: pages/clip-slots.md (a looped clip's cell is one pass of its loop; the copy back opens at the loop's phase; the deck reads `getSequenceLooped`; Related)
+- updated: pages/clip-placement.md (a looped clip's offset counts into its loop)
+- updated: pages/session-model.md (summary and body: 43 units; `SessionClipLoop`; `takePatternKeysDown` beside the preview)
+- updated: pages/colours-and-typography.md (`keySounding`)
+- updated: pages/dj-decks-play-live-through-the-track.md, pages/device-chain-order.md (the DJ input also records held keys for the note editor)
+- updated: pages/renders-that-never-return.md (`ClipLoop.inc` among the scenarios before `GesturesAndPersistence.inc`)
+- updated: pages/headless-ui-snapshots.md (`RHINO_NOTE_PLAYING_KEYS_SNAPSHOT`)
+- updated: index.md (Components: Clip Loop switch; summaries of Note editor and Session)

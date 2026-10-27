@@ -4,7 +4,7 @@ type: component
 summary: Each track's clip slots, one per scene, are the cells a DJ console's clips grid shows; what the model guarantees about them, and the clip launcher that first showed them, removed on 2026-10-11.
 tags: [rhino, clips, dj, slots]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-27
 ---
 
 # Clip slots, the DJ consoles' cells
@@ -19,7 +19,8 @@ Every track carries a clip slot per scene, and a slot holds at most one clip. No
 - **A cell edit is its track's alone.** Each slot path passes its track to `markModified` (`copySlotClipToArrangement` the lane it copied onto), with what it changed - the track's notes or audio clips, and its devices too when a pattern changes the chain (an instrument switched, a synth patch set, a blank rack given the default kit; `preparePresetTrack` reports it). `djDocumentChanged` then marks only the decks playing a cell of that track to make it again, and only for notes or audio clips; a changed chain is heard live and asks nothing. The mark is per track, not per cell, so an edit to another cell marks the track's deck too, and its `clipSignature` makes the remake hand nothing over when the cell it plays did not change (`ClipCells.inc`). Until 2026-10-11 these paths named no track, and one cell edit sent every bounced deck of the set to bounce again.
 - **A cell's clip wears its track's colour.** `SlotClip::colour` is `Session::clipColour`: transparent unless the clip has a colour of its own, as a copy of a coloured timeline clip does. The grid paints a transparent one in the track's colour, darkened as the arrangement darkens a clip on its lane ([Track and clip colours](track-and-clip-colours.md)). Nothing on this path stamps or reads the engine's own clip colour.
 - **The editors reach a cell's clip.** `findClip` searches the slots after the timeline, `trackHoldingClip` finds a slot clip's track, and every path that removes a slot clip calls `repairPatternClip` ([Hold ids, not pointers](ids-not-pointers.md)). Filling a filled cell is one of those paths: the engine's insert into a `ClipSlot` removes the clip already there whatever `DeleteExistingClips` says (`insertClipWithState` in `tracktion_ClipOwner.cpp`, read at the pinned commit `4536d8a`). `insertPatternPresetInSlot` missed the repair until 2026-10-11, so a pattern dropped on the cell the note editor had open left the editor holding a freed clip.
-- **Only copies cross.** `copySlotClipToArrangement` puts a cell's clip on a lane, `copyClipToTrackSlot` a timeline clip or another cell's clip in a cell, and the arrangement's clip menu item *Copy to the track's DJ clips* (`copyClipToSlot`) the clip into the first free cell of its own track. All three rebuild the clip through `copyClipInto`, and a copy takes a name no other clip on the track wears (`uniqueClipNameOnTrack`).
+- **Only copies cross.** `copySlotClipToArrangement` puts a cell's clip on a lane, `copyClipToTrackSlot` a timeline clip or another cell's clip in a cell, and the arrangement's clip menu item *Copy to the track's DJ clips* (`copyClipToSlot`) the clip into the first free cell of its own track. All three rebuild the clip through `copyClipInto`, and a copy takes a name no other clip on the track wears (`uniqueClipNameOnTrack`). Every cell loops. Since commit `4a6a17b` (2026-10-27), `copyClipToTrackSlot` turns a looped clip ([Clip Loop switch](clip-loop.md)) into a cell one pass of its loop long, looping the same range. Before that the cell looped `[0, clip length)` of the raw sequence, which for a stretched looped clip went silent after the first pass. `copySlotClipToArrangement` still drops the cell's loop, but it now opens the copy's window at the loop's start plus the phase. That is unchanged for every existing cell, because their loops start at 0.
+- **A deck reads what the engine plays.** `loadDjClip` (`SessionDjSources.cpp`) reads `getSequenceLooped()` since `4a6a17b`. That is the same as `getSequence()` for an ordinary cell, but for a cell copied from a split clip (offset > 0) it now reads what the engine plays.
 - **Renders keep the slots out.** The merge holds `te::Renderer::ScopedClipSlotDisabler`, so a cell never plays into a render of the arrangement; the deck's bounce held one too until it went on 2026-10-12.
 
 ## The session view, removed
@@ -45,3 +46,4 @@ Nothing in Rhino raises or clears a track's `playSlotClips` flag now. It is a `C
 - [One instrument per track](one-instrument-per-track.md)
 - [Hold ids, not pointers](ids-not-pointers.md)
 - [Track and clip colours](track-and-clip-colours.md)
+- [Clip Loop switch](clip-loop.md)

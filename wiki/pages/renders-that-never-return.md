@@ -4,7 +4,7 @@ type: gotcha
 summary: Five known causes make an offline render hang for good, a clip whose file is missing among them, and the Moved render timeout failure is usually just a busy machine.
 tags: [rhino, testing, rendering]
 sources: []
-updated: 2026-10-26
+updated: 2026-10-27
 ---
 
 # Offline renders that never return
@@ -17,7 +17,7 @@ A workflow case stops with no failed assertion, and CTest kills it at its time l
 
 ## Known causes
 
-1. **The audio device is closed.** `GesturesAndPersistence.inc` calls `Session::releaseAudioDevice`, and no render after that point ever finishes. Anything that renders must be included before it in the runner. `GroupBusRouting.inc`, `GroupBusReload.inc`, `ClipWarp.inc`, `ClipPitch.inc`, `ClipEnvelopes.inc` and `ClipBounce.inc` sit where they do for this reason ([Writing Rhino tests](writing-rhino-tests.md)).
+1. **The audio device is closed.** `GesturesAndPersistence.inc` calls `Session::releaseAudioDevice`, and no render after that point ever finishes. Anything that renders must be included before it in the runner. `GroupBusRouting.inc`, `GroupBusReload.inc`, `ClipWarp.inc`, `ClipPitch.inc`, `ClipEnvelopes.inc`, `ClipBounce.inc` and `ClipLoop.inc` sit where they do for this reason ([Writing Rhino tests](writing-rhino-tests.md)).
 2. **A deleted group bus.** When a bus is deleted, its members still name the missing track. `getDestinationTrack()` returns null, but the engine still tries to resolve that destination on every render. So `reconcileTrackGroups` in `SessionGroups.cpp` asks `usesDefaultAudioOut()` before sending a track back to the main output ([Track groups (bus tracks)](track-groups.md)).
 3. **A stretch proxy.** With proxies on, the engine renders a stretched copy of each stretched clip, warped or pitched (`usesTimeStretchedProxy`). The first offline render of a warped clip waited forever on a proxy that needed the message thread, which the render was blocking. `Session::applyStretchPlayback` in `SessionWarp.cpp` turns the proxy off for every stretched clip, warped or pitched; until commit `5c9c1e1` it covered only warped clips (`setUsesProxy(!on)`). A clip pitched in a document saved before that keeps its proxy until its pitch is written again. `ClipPitch.inc` asserts `canUseProxy()` is false before it renders, so a regression fails instead of hanging ([Time warp](time-warp.md), [Tracktion's time-stretched proxy plays late and cuts its end](tracktion-stretched-proxy-plays-late.md)). A **reversed clip** has the same trap. It plays from a proxy that the engine renders on the message loop, so a test that renders a reversed clip on the message thread waits for good. For that reason `ClipEnvelopes.inc` checks the reversed case on the model and does not render it (2026-10-26, [Clip envelopes](clip-envelopes.md)).
 

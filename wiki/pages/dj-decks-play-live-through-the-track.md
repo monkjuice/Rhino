@@ -4,7 +4,7 @@ type: decision
 summary: A deck on a track plays the track's own cells through the track's live devices, by two hidden devices every track carries from its creation, so every edit is heard at once; why the devices are permanent, what it costs, what a review of it fixed, how Tracktion's real graph proves it, and the bounce, the bind-time devices and the message-thread note injection it rejected.
 tags: [rhino, dj, decks, devices, real-time, undo]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-27
 ---
 
 # DJ decks play live through the track's chain
@@ -24,7 +24,7 @@ They asked for the DJ architecture to be revisited from scratch and, mid-task, "
 
 ## The choice
 
-A deck on a track is heard through that track's chain, live, and plays only the track's cells ([Clip slots](clip-slots.md)), never the arrangement's clips. Every track carries two hidden devices (`native/src/devices/infra/DjTrackPortDevices.*`): **DJ Input** (`DjTrackInjectorDevice`, `rhino.dj.inject.v1`) at plugin index 0, and **DJ Output** (`DjTrackTapDevice`, `rhino.dj.tap.v1`) where the track's own devices end and its channel strip begins. Bound to a deck's `DjTrackPort` (`core/dj/DjTrackPort.*`), the input adds the deck's audio and notes to the chain and the output hands the chain's result to the deck's channel strip. Nothing renders: a knob, a device added, an external plugin's own window is heard at once. How it runs: [DJ view and the booth](dj-view.md), [DJ deck engine](dj-deck-engine.md).
+A deck on a track is heard through that track's chain, live, and plays only the track's cells ([Clip slots](clip-slots.md)), never the arrangement's clips. Every track carries two hidden devices (`native/src/devices/infra/DjTrackPortDevices.*`): **DJ Input** (`DjTrackInjectorDevice`, `rhino.dj.inject.v1`) at plugin index 0, and **DJ Output** (`DjTrackTapDevice`, `rhino.dj.tap.v1`) where the track's own devices end and its channel strip begins. Bound to a deck's `DjTrackPort` (`core/dj/DjTrackPort.*`), the input adds the deck's audio and notes to the chain and the output hands the chain's result to the deck's channel strip. Nothing renders: a knob, a device added, an external plugin's own window is heard at once. Since commit `4a6a17b` (2026-10-27) the input also records which keys the chain's own MIDI is holding, before a deck's notes join it, and the note editor's keyboard lights those keys ([Note editor](note-editor.md#keys-the-track-is-playing)). That reuses this device rather than adding a third hidden one, which would have shifted the raw indices again. How it runs: [DJ view and the booth](dj-view.md), [DJ deck engine](dj-deck-engine.md).
 
 ## Why the devices are permanent
 

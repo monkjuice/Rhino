@@ -4,7 +4,7 @@ type: concept
 summary: The lanes have one selection, a region - a span of time across a run of tracks, made by clicking a clip's header or sweeping the lanes - and copy, cut, paste, duplicate, delete, the arrow nudge and a drag by any clip header inside it all act on that rectangle; on a focused card the keys move whole tracks.
 tags: [rhino, arrangement, editing, clipboard]
 sources: []
-updated: 2026-10-26
+updated: 2026-10-27
 ---
 
 # Region editing
@@ -45,7 +45,7 @@ Dragging any clip header the region runs across carries the whole region: the cl
 
 ## Why snapshots, not ids
 
-The clipboard holds values (`Session::ClipSnapshot`): position, offset and `rhinoClipColour`, plus, for a MIDI clip, the whole note list and its track's instrument as a catalog id. For an audio clip it holds the source file and speed, and since commit `b5d17e0` also the clip's gain, pan, pitch, fades, mute, reverse and warp (mode, clip tempo in beats, markers). Before that a copy played the raw file at speed one instead of what the original played. The paste writes reverse only for a clip that was reversed, and before anything else: writing it at all mirrors the new clip's window into its file, which made trimmed copies quieter until commit `50d87d5` ([Writing a clip's reverse switch moves its window](writing-reverse-moves-a-clips-window.md)). A cut deletes its sources, and an undo between copy and paste can too, so a clipboard of ids would paste nothing ([Hold ids, not pointers](ids-not-pointers.md)).
+The clipboard holds values (`Session::ClipSnapshot`): position, offset and `rhinoClipColour`, plus, for a MIDI clip, the whole note list and its track's instrument as a catalog id. For an audio clip it holds the source file and speed, and since commit `b5d17e0` also the clip's gain, pan, pitch, fades, mute, reverse and warp (mode, clip tempo in beats, markers). Before that a copy played the raw file at speed one instead of what the original played. Since commit `4a6a17b` (2026-10-27) a MIDI snapshot also carries the clip's loop (`loopStartBeats`, `loopLengthBeats`), and `pasteClipRegion` sets the loop range before the position. It has to be set by hand because `MidiClip::cloneFrom` does not copy the loop range ([Clip Loop switch](clip-loop.md)). The paste writes reverse only for a clip that was reversed, and before anything else: writing it at all mirrors the new clip's window into its file, which made trimmed copies quieter until commit `50d87d5` ([Writing a clip's reverse switch moves its window](writing-reverse-moves-a-clips-window.md)). A cut deletes its sources, and an undo between copy and paste can too, so a clipboard of ids would paste nothing ([Hold ids, not pointers](ids-not-pointers.md)).
 
 The clipboard also survives opening another document. Its files are full paths, so audio still resolves, but its clips are seconds from the region's corner, so pasted at another tempo they leave their beats. Open as of `c790287`, which fixed the same problem for the [Track clipboard](track-clipboard.md#into-another-document).
 

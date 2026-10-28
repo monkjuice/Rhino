@@ -4,7 +4,7 @@ type: concept
 summary: Every track is audio or MIDI from creation; one property records it, one call reads it, and the model refuses mismatched content.
 tags: [rhino, tracks, model]
 sources: []
-updated: 2026-10-25
+updated: 2026-10-28
 ---
 
 # Track kinds: audio and MIDI
@@ -21,14 +21,14 @@ A MIDI track carries `rhinoTrackType="midi"` on its state; an audio track carrie
 - The `+` button (`Arrangement::showAddTrackMenu`) asks which kind; Ctrl+T (`app/MainComponentCommands.cpp`) repeats the last menu choice. That choice is `lastAddedTrackType` in the machine's settings file, `%APPDATA%\Rhino\Rhino.settings`: MIDI by default, always MIDI under the test flags, and recorded only by the menu. Both go through `Arrangement::insertTrack`, which passes `selectedTrack` as `below` (since 2026-10-14): the track lands directly under the selected card and becomes the selection, so repeated adds stack in the order made, as in Live. The arrangement always has a selected row (0 at start), so only the main row selected sends a track to the foot. Placement in a group is in [Track groups (bus tracks)](track-groups.md).
 - A track added at the foot that joins no group marks `ModelChange::none`; one landing mid-stack or joining a group marks `ModelChange::unknown`, as `moveTrack` does, since every lane under it moves.
 - Lanes made by a clip dragged below the last lane, a paste running off the bottom, or a browser item or file dropped past the last lane take the kind of what arrives, and are appended at the foot above the returns, as is `addAudioTrack()`. A clip arriving on a return's row counts as past the last lane.
-- `Session::buildStarterEdit`, used at startup and by *File > New project*, makes `MIDI`, `Audio`, `MIDI`, `Audio`, repeating `appendTrack`'s steps inline, then two return tracks, A Delay and B Reverb, above the pinned main row. The first MIDI track also holds `Pattern 1`, a hidden placeholder clip for the note editor.
+- `Session::buildStarterEdit`, used at startup and by *File > New project*, makes `MIDI`, `MIDI`, `Audio`, `Audio` (its `starterTypes`; MIDI, Audio, MIDI, Audio until 2026-10-28, changed at the user's request), repeating `appendTrack`'s steps inline, then two return tracks, A Delay and B Reverb, folded to their one line, above the pinned main row ([Return tracks and sends](return-tracks.md)). The first MIDI track also holds `Pattern 1`, a hidden placeholder clip for the note editor. Documents saved earlier keep their order.
 - A group bus is made directly by `groupTracks`, with no kind (so it reads as audio) and no Utility ([Track groups (bus tracks)](track-groups.md)). A return track is made by `makeReturnTrack`, also with no kind, and takes audio effects only.
 
 ## What reads the kind
 
 - Notes: `createClip` and `preparePresetTrack` want a MIDI track; `editClip`, `moveClips` and `pasteClipRegion` refuse a clip whose kind does not match the lane, and so do the clip-slot paths behind a DJ console's cells (`clipLaneRefusal`).
 - Devices: `addInstrumentDevice`, `addMidiEffectDevice`, `addDrumKit` and `addDrumSound` refuse an audio track. Audio effects, and a channel-strip facility (an `infrastructure` catalog entry such as Utility), go on either kind.
-- Audio: `importAudioAt` refuses a MIDI track. `importAudio` with no target fills the first empty audio lane and adds a track only when none is free. A sample dropped on a MIDI track running a [Drum Rack](drum-rack.md) is not refused: the arrangement checks `trackHasDrumRack` first and hands the file to `addDrumSound`, which puts it on the next empty pad rather than making a clip.
+- Audio: `importAudioAt` refuses a MIDI track. `importAudio` with no target fills the first empty audio lane (index 2 in a new document) and adds a track only when none is free. A sample dropped on a MIDI track running a [Drum Rack](drum-rack.md) is not refused: the arrangement checks `trackHasDrumRack` first and hands the file to `addDrumSound`, which puts it on the next empty pad rather than making a clip.
 - `trackRecordInput` records MIDI or audio by kind, and nothing for a bus, a return or the main row.
 
 ## Related

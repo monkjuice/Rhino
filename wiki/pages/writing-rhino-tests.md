@@ -127,6 +127,9 @@ every scenario of `DjLiveChain.inc`).
     row's lane pixels, and over 90% of a bare strip of its card, are lighter than in the other picture: translucent
     clip fills let the lit ground through, and opaque marks are equal in both (commit `83135f7`). The same idea as
     comparing a culled repaint under the same clip ([JUCE's rasteriser is not clip-invariant](juce-rasteriser-not-clip-invariant.md)).
+    Paint pictures that must agree exactly on `juce::SoftwareImageType()`, not a plain `juce::Image`: on Windows that
+    is a Direct2D bitmap, which drew one card's fold arrow a shade differently after three identical arrows than alone
+    and failed `PartialRepaint.inc` on 2026-10-28 (same page).
 14. **A move preview posed by hand needs a selection covering the clip, not just `selected`.** Since 2026-10-23 a
     move preview follows the time selection, which a header press always leaves, so a check that sets `original`,
     `preview`, `gesture = ClipGesture::move` and `dragging` itself must first call `view.setSelection({id}, id)`;
@@ -203,10 +206,18 @@ every scenario of `DjLiveChain.inc`).
     `--profile-ui` and `--profile-stress` add tracks until `firstReturnTrack()` reaches their count, so they keep the
     same number of playing tracks, with the two starter returns and a send per return on every track besides.
     `StressProfile`'s `readLayout` skips returns. After the change both tools were compiled but not run.
+    Since 2026-10-28 a new document is MIDI, MIDI, Audio, Audio with its returns folded, but the Arrangement runner's
+    shared `Session session` is put back into MIDI, Audio, MIDI, Audio with both returns open right after it is made
+    (`WorkflowTest.cpp`: one asserted `moveTrack` and two `setTrackFolded`, then the history cleared), because about 70
+    scenarios sharing it lean on which lane sits under which and on 54 px returns. A document a scenario builds itself
+    starts in the new shape: name the lane meant (`constexpr int audioLane = 2;`) rather than assume track 1 is audio,
+    and expect the folded returns. `NewProject.inc` (Pattern), `DeviceRackTest.cpp` and `ReturnTracks.inc`'s cards
+    scenario assert the new defaults.
 23. **Leave room for the pinned returns.** Since commit `5632644` the arrangement pins the returns between the lanes
     and the main row, and the lanes fit only the room left (`fullLaneContentHeight` subtracts `pinnedRowsHeight`). To
     keep a scenario's old lane geometry, make its panel taller by exactly the block: the starter's two returns are
-    108 px, so the 246, 400, 520 and 620 px test panels became 354, 508, 628 and 728. A lane partly under the block is
+    108 px open (as the shared document keeps them; folded, as a new document has them since 2026-10-28, 64 px), so
+    the 246, 400, 520 and 620 px test panels became 354, 508, 628 and 728. A lane partly under the block is
     covered, and a click there finds the return. `AutomationLanes.inc` therefore sizes its panel to
     `900 + footHeight + pinnedRowsHeight` so that the whole stack can be clicked. Do not remove a track by an index
     read earlier in the shared document, which may now be a return: `TrackManagement.inc`'s "a new card arrives
@@ -244,7 +255,7 @@ as with Forge's `--profile`, because the machine drifts by more than some differ
 A timed check inside a CTest case spends that case's limit. `--self-test` has 30 s (`native/CMakeLists.txt`), and the
 DJ booth's cost check (`checkBoothCost` in `tests/DjTest.cpp`, which logs its numbers and requires no allocation) renders
 10 s of silence rather than 30 for that reason: while the mixer's filters take denormals in silence, 30 s cost the case
-eight seconds and left it at 25 s of its 30 (2026-10-11; [DJ deck engine](dj-deck-engine.md)). On 2026-10-23 the case took 21 s alone and 29 s run straight after a profile, one second under its limit: run the suite on an idle machine. On 2026-10-28 it timed out at every run on a loaded machine, so the device-face check went to `--device-test`'s 120 s instead; put new checks that cost seconds there too ([Build and test Rhino](build-and-test-rhino.md#test)).
+eight seconds and left it at 25 s of its 30 (2026-10-11; [DJ deck engine](dj-deck-engine.md)). On 2026-10-23 the case took 21 s alone and 29 s run straight after a profile, one second under its limit: run the suite on an idle machine. On 2026-10-28 it timed out at every run on a loaded machine, and later that day on an idle one, so the device-face check went to `--device-test`'s 120 s instead; put new checks that cost seconds there too ([Build and test Rhino](build-and-test-rhino.md#test)).
 
 ## Access and determinism
 

@@ -4,7 +4,7 @@ type: gotcha
 summary: On Windows a plain juce::Image is a Direct2D bitmap whose context costs about 3 ms a paint whatever is drawn, so time painters on juce::SoftwareImageType() and repaint what the app really invalidates.
 tags: [both, juce, ui, performance, windows]
 sources: []
-updated: 2026-10-12
+updated: 2026-10-28
 ---
 
 # Profile paint on a software image
@@ -22,6 +22,7 @@ A paint profile says a small repaint is expensive, and an optimisation barely mo
 - Paint into `juce::Image(juce::Image::ARGB, w, h, true, juce::SoftwareImageType())`, as `canvasFor` in `native/src/tests/UiProfile.cpp` does.
 - Repaint the rectangle the app invalidates. `UiProfile.cpp` uses `playheadDamage` over the area `updatePlayhead` passes, which leaves out the ruler, header and footer, rather than a hand-picked full-height column.
 - When a paint costs more than its painter can explain, time sections inside `paint()` with temporary probes before optimising anything.
+- Compare pixels on a software image too: a Direct2D bitmap draws a path a shade differently after drawing others like it, which failed Rhino's `PartialRepaint.inc` and Forge's `chromeCacheSuite` ([JUCE's rasteriser is not clip-invariant](juce-rasteriser-not-clip-invariant.md), [A buffered child broke Forge's byte-identical paint](buffered-child-breaks-pixel-stability.md)).
 
 ## Forge
 

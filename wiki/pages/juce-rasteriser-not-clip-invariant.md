@@ -1,10 +1,10 @@
 ---
 title: JUCE's rasteriser is not clip-invariant
 type: gotcha
-summary: A path's anti-aliased edge can come out differently under a different clip, so check a culled repaint against an unculled paint under the same clip, never against the whole paint.
-tags: [rhino, juce, ui, testing]
+summary: A path's anti-aliased edge can come out differently under a different clip, so check a culled repaint against an unculled paint under the same clip, never against the whole paint, and paint both on a software image, since a Direct2D bitmap draws a path a shade differently after drawing others like it.
+tags: [rhino, juce, ui, testing, direct2d]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-28
 ---
 
 # JUCE's rasteriser is not clip-invariant
@@ -25,9 +25,17 @@ Do not loosen the comparison with a tolerance instead. One wide enough to pass a
 
 Prove such a test bites by breaking a cull on purpose. Breaking the note editor's keyboard cull fails this scenario, and no other check notices it.
 
+## Direct2D differs even under the same clip, 2026-10-28
+
+When the new document's stack changed to MIDI, MIDI, Audio, Audio ([Track kinds: audio and MIDI](track-kinds.md)), `PartialRepaint.inc` failed on one pixel of a card's fold arrow (195,408: culled `E26262`, full `E05959`). The arrow's geometry was identical to the integer in both paints, and each mode repeated its own result. The full paint had drawn three identical arrows on the rows above before that one; the culled paint drew it alone; and the canvases were plain `juce::Image`s, Direct2D bitmaps on Windows. Folding or unfolding the returns made no difference: the track colours did, which is why the old stack happened to pass. Since then both canvases are `juce::SoftwareImageType()`, and the two paints agree.
+
+This is the Direct2D behaviour Forge met ([A buffered child broke Forge's byte-identical paint](buffered-child-breaks-pixel-stability.md)): the same path drawn into a Direct2D bitmap comes out a shade differently depending on what was drawn before it. Whether the clip difference above is the same effect was not checked. Paint any picture that must match another to the pixel on a software image ([Profile paint on a software image](profile-paint-on-a-software-image.md)).
+
 ## Related
 
 - [Playhead rendering](playhead.md)
 - [What a change costs the interface](ui-cost-of-a-change.md)
 - [Writing Rhino tests](writing-rhino-tests.md)
 - [Seeing the UI without taking the screen](headless-ui-snapshots.md)
+- [A buffered child broke Forge's byte-identical paint](buffered-child-breaks-pixel-stability.md)
+- [Profile paint on a software image](profile-paint-on-a-software-image.md)

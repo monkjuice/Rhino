@@ -1588,3 +1588,15 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/writing-rhino-tests.md (a new device's face is checked by --device-test; why the face check is not in --self-test)
 - updated: pages/automation.md (a control with no lane shows no A)
 - updated: index.md (Device rack's summary)
+
+## [2026-10-28] update | A new document is MIDI, MIDI, Audio, Audio with its returns folded (uncommitted)
+- source: the main agent's brief, checked against native/src/model/Session.cpp (`starterTypes`), SessionReturns.cpp (`addStarterReturns`), SessionInternal.h/.cpp (`trackFoldedID`), ui/arrangement/ArrangementGeometry.cpp (`laneHeightFor`), tests/Arrangement/WorkflowTest.cpp, scenarios/PartialRepaint.inc and ReturnTracks.inc, tests/Pattern/scenarios/NewProject.inc
+- updated: pages/track-kinds.md (the starter order and when it changed; untargeted `importAudio` fills index 2)
+- updated: pages/return-tracks.md (summary; starter returns written folded, `trackFoldedID` moved to SessionInternal, later returns open, no migration; a folded return at 32 px, the new block 64 px; the cards scenario's new checks)
+- updated: pages/arrangement-view.md (the starter returns open folded and unfold to `defaultReturnLaneHeight`)
+- updated: pages/writing-rhino-tests.md (rule 13: exact pixel comparisons on a software image; rule 22: the shared session reshaped to the old stack, documents of a scenario's own in the new one; rule 23: 108 px open, 64 folded; --self-test also times out idle)
+- updated: pages/juce-rasteriser-not-clip-invariant.md (summary, tags; PartialRepaint.inc's fold-arrow pixel under Direct2D, fixed by software canvases)
+- updated: pages/buffered-child-breaks-pixel-stability.md (Rhino met the same Direct2D behaviour; link)
+- updated: pages/profile-paint-on-a-software-image.md (compare pixels on software images too)
+- updated: pages/build-and-test-rhino.md (native_device_correctness at about its 30 s limit on an idle machine, committed tree included, not a hang; arrangement workflow 108-119 s later that day)
+- updated: index.md (summaries of Return tracks and sends, JUCE's rasteriser is not clip-invariant)

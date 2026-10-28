@@ -100,11 +100,15 @@ run, which carries every DJ scenario, at 114 s on 2026-10-11; what each case cov
   face check taken out included, while the user's RhinoDAW was open (started 08:26); a run before 08:19 had passed,
   its DJ booth checks taking 6 s. Timed, it spent about 23 s on checks before `checkDjCore` begins, so a loaded machine
   tips it over; whether there is also a hang was not established. Put a new check that builds or paints faces, or
-  otherwise costs seconds, in `--device-test` (120 s), as the face check was, not in `--self-test`.
+  otherwise costs seconds, in `--device-test` (120 s), as the face check was, not in `--self-test`. Later that day it
+  timed out under `ctest` three times at 30.9-31.0 s on an idle machine (CPU about 9%, no other RhinoDAW). Run
+  directly with ctest's own command it passed (exit 0) every time, either side of the line: the committed tree in 31.3
+  and 27.8 s, the working tree in 28.3, 30.9 and 31.4 s. So it is neither a hang nor that day's change: on this
+  machine, idle, the case now costs about its 30 s.
 - `native_arrangement_workflow` took about 244 s on 2026-10-28, against its 300 s limit, with or without that
   day's undo changes. The final full run of commit `8d2d883` passed all six cases, this one in 242.9 s and the whole
   suite in 321.7 s. The table's note above puts it at 114 s on 2026-10-11, and runs logged earlier in October took
-  80-114 s. The cause was not looked for.
+  80-114 s. The cause was not looked for. Later the same day, on an idle machine, it took 108-119 s.
 - `native_arrangement_geometry` also runs the layer lint (`tests/LayerLintTest.cpp`, 2026-10-23): it reads every
   source under `native/src/ui` and `native/src/app` and fails, naming file and line, on a line that reaches past
   `Session` into the engine ([Dependency direction](dependency-direction.md#the-views-ask-session-not-the-engine)).

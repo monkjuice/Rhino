@@ -27,9 +27,14 @@
 //   listed in `pending`, with the reason, printed on every run. The list only
 //   shrinks: a listed failure that starts passing fails the run until its line
 //   is deleted.
+//
+// Then every device the browser offers is shown on the face the rack gives it,
+// in DeviceFacesTest.cpp.
 
 namespace rhino
 {
+void checkDeviceFaces(Session&);
+
 void runArpMechanicsTests(te::Edit&);
 
 namespace
@@ -738,6 +743,8 @@ int runDeviceConformance()
             juce::Logger::writeToLog(line);
             std::fprintf(stderr, "%s\n", line.toRawUTF8());
         };
+        juce::Logger::writeToLog("Rhino: device conformance, every device's face");
+        checkDeviceFaces(session);
         report("Rhino: device conformance checked " + juce::String(checked) + " devices");
         for (const auto& entry : pending)
             report(juce::String("  pending ") + entry.deviceId + "/" + entry.check + ": " + entry.reason);

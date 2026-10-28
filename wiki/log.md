@@ -1589,7 +1589,7 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/automation.md (a control with no lane shows no A)
 - updated: index.md (Device rack's summary)
 
-## [2026-10-28] update | A new document is MIDI, MIDI, Audio, Audio with its returns folded (uncommitted)
+## [2026-10-28] update | A new document is MIDI, MIDI, Audio, Audio with its returns folded (46c38ee)
 - source: the main agent's brief, checked against native/src/model/Session.cpp (`starterTypes`), SessionReturns.cpp (`addStarterReturns`), SessionInternal.h/.cpp (`trackFoldedID`), ui/arrangement/ArrangementGeometry.cpp (`laneHeightFor`), tests/Arrangement/WorkflowTest.cpp, scenarios/PartialRepaint.inc and ReturnTracks.inc, tests/Pattern/scenarios/NewProject.inc
 - updated: pages/track-kinds.md (the starter order and when it changed; untargeted `importAudio` fills index 2)
 - updated: pages/return-tracks.md (summary; starter returns written folded, `trackFoldedID` moved to SessionInternal, later returns open, no migration; a folded return at 32 px, the new block 64 px; the cards scenario's new checks)

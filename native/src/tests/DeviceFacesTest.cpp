@@ -87,8 +87,8 @@ void checkDeviceFaces(Session& session)
             require(stream != nullptr && juce::PNGImageFormat().writeImageToStream(snapshot, *stream),
                     descriptor.id + ": the snapshot is writable");
         }
-        // Left in the edit, every device keeps running in the live graph, and
-        // the DJ checks after this one slowed past the runner's limit.
+        // The device goes with its track, leaving the edit as the check found
+        // it for whatever the runner checks next.
         panel.reset();
         require(session.removeAudioTrack(track).wasOk(), descriptor.id + ": its track comes off again");
         ++checked;

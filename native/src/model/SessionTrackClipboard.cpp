@@ -266,7 +266,7 @@ juce::Result Session::insertTrackCopies(const TrackClipboard& clipboard, int bel
         {
             // The engine's limit on tracks: whatever landed before it goes too.
             undoManager.undoCurrentTransactionOnly();
-            repairPatternClip();
+            repairPatternClip(false);
             sendSynchronousChangeMessage();
             return juce::Result::fail("The document cannot take any more tracks.");
         }
@@ -303,7 +303,7 @@ juce::Result Session::insertTrackCopies(const TrackClipboard& clipboard, int bel
     reconcileTrackGroups();
     ensureSceneSlots(scenes);
     ensureTrackMixers();
-    undoManager.beginNewTransaction();
+    closeUndoStep();
     if (inserted != nullptr)
     {
         inserted->clear();
@@ -362,7 +362,7 @@ juce::Result Session::removeTracks(const std::vector<int>& chosen)
     repairPatternClip();
     reconcileTrackGroups();
     refreshLoop();
-    undoManager.beginNewTransaction();
+    closeUndoStep();
     markModified(-1, ModelChange::unknown);
     sendSynchronousChangeMessage();
     return juce::Result::ok();

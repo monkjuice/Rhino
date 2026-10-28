@@ -166,18 +166,18 @@ juce::Result Session::editClip(te::EditItemID id, ClipGeometry next, ClipGesture
         // halfway through - a lane made, an instrument switched - leaves the
         // document as it was rather than half done.
         undoManager.undoCurrentTransactionOnly();
-        repairPatternClip();
+        repairPatternClip(false);
         return result;
     }
     // A press that never moved the clip is not an edit: nothing to mark,
     // nothing to restart, nothing to announce.
     if (!changed)
     {
-        undoManager.beginNewTransaction();
+        closeUndoStep();
         return juce::Result::ok();
     }
     refreshLoop();
-    undoManager.beginNewTransaction();
+    closeUndoStep();
     // The lane the clip left and the lane it reached, with its devices where
     // a MIDI clip changed them there.
     markClipsModified({from});
@@ -229,17 +229,17 @@ juce::Result Session::moveClips(const std::vector<ClipMove>& moves)
     if (const auto result = moveClipsInEdit(moves, outcome); result.failed())
     {
         undoManager.undoCurrentTransactionOnly();
-        repairPatternClip();
+        repairPatternClip(false);
         sendSynchronousChangeMessage();
         return result;
     }
     if (!outcome.anyChanged)
     {
-        undoManager.beginNewTransaction();
+        closeUndoStep();
         return juce::Result::ok();
     }
     refreshLoop();
-    undoManager.beginNewTransaction();
+    closeUndoStep();
     markClipsModified(outcome.reached);
     if (!outcome.gainedDevices.empty())
         markClipsModified(outcome.gainedDevices, ModelChange::devices);
@@ -286,7 +286,7 @@ juce::Result Session::splitClips(const std::vector<te::EditItemID>& ids, double 
         return juce::Result::fail("The right-hand split clip could not be created.");
     if (splitCount != nullptr) *splitCount = cut;
     refreshLoop();
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markClipsModified(tracks);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
@@ -326,7 +326,7 @@ juce::Result Session::duplicateClip(te::EditItemID id)
 // track - never an audio track, which may not hold a MIDI clip - and to a
 // hidden starter clip there if it has none. A document with no MIDI track
 // leaves the editor with no clip, which hasPatternClip() reports.
-void Session::repairPatternClip()
+void Session::repairPatternClip(bool mayCreate)
 {
     if (auto* midi = dynamic_cast<te::MidiClip*>(findClip(patternClipID)))
     {
@@ -345,6 +345,8 @@ void Session::repairPatternClip()
             patternClipID = midi->itemID;
             return;
         }
+    if (!mayCreate)
+        return;
     const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beatsPerBar()));
     patternClip = track->insertMIDIClip("Pattern 1", {{}, end}, nullptr).get();
     if (patternClip != nullptr)
@@ -379,7 +381,7 @@ void Session::deleteClips(const std::vector<te::EditItemID>& ids)
         }
     repairPatternClip();
     refreshLoop();
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markClipsModified(tracks);
     sendSynchronousChangeMessage();
 }
@@ -405,7 +407,7 @@ juce::Result Session::cycleClipColour(te::EditItemID id)
         return juce::Result::fail("Select a clip first.");
     edit->getUndoManager().beginNewTransaction("Color clip");
     setClipColour(*clip, nextClipColour(clipColour(*clip)), &edit->getUndoManager());
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markModified(clipTrackIndex(*edit, *clip), ModelChange::none);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
@@ -435,7 +437,7 @@ juce::Result Session::setClipsMuted(const std::vector<te::EditItemID>& ids, bool
         tracks.push_back(clipTrackIndex(*edit, *clip));
         clip->setMuted(muted);
     }
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markClipsModified(tracks);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
@@ -467,7 +469,7 @@ void Session::toggleTrackMute(int track)
     if (!juce::isPositiveAndBelow(track, tracks.size())) return;
     edit->getUndoManager().beginNewTransaction("Track mute");
     tracks[track]->state.setProperty(te::IDs::mute, !tracks[track]->isMuted(false), &edit->getUndoManager());
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     followReturnSolo(true);
     // How the song is being listened to, not what any deck plays: a deck's
     // copy of the document leaves the song's mute and solo out.
@@ -481,7 +483,7 @@ void Session::toggleTrackSolo(int track)
     if (!juce::isPositiveAndBelow(track, tracks.size())) return;
     edit->getUndoManager().beginNewTransaction("Track solo");
     tracks[track]->state.setProperty(te::IDs::solo, !tracks[track]->isSolo(false), &edit->getUndoManager());
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     followReturnSolo(false);
     markModified(track, ModelChange::none);
     sendSynchronousChangeMessage();

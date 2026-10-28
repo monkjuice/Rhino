@@ -278,7 +278,7 @@ juce::Result Session::showTrackAutomation(DeviceTarget target, bool ownLane)
     if (ownLane)
         automationOwnerState(target.track).removeProperty(trackAutomationFoldedID, nullptr);
     markModified(target.track, ModelChange::curves);
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
@@ -321,7 +321,7 @@ juce::Result Session::hideTrackAutomation(DeviceTarget target)
         runtime->overridden = false;
     }
     markModified(target.track, ModelChange::curves);
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
@@ -364,7 +364,7 @@ juce::Result Session::setTrackAutomationPoints(DeviceTarget target, std::vector<
     if (auto* runtime = findAutomationRuntime(target))
         runtime->overridden = false;
     markModified(target.track, ModelChange::curves);
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
@@ -387,7 +387,7 @@ juce::Result Session::clearTrackAutomationPoints(DeviceTarget target)
         runtime->overridden = false;
     }
     markModified(target.track, ModelChange::curves);
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
@@ -596,7 +596,21 @@ void Session::mirrorAutomationToEngine()
                                        runtime->baseValue);
         if (std::abs(before.parameter->getCurrentValue() - next) > 0.0001f)
         {
-            before.parameter->setParameter(next, juce::sendNotification);
+            // Outside the history: the hand-back follows from whatever stopped
+            // the lane, and runs after it has closed its step - or after an
+            // undo, where a write of its own threw away what could be redone
+            // and Ctrl+Z took back only the hand-back. A knob stored on its
+            // device under its own id is written there and the parameter
+            // follows; any other goes through the engine as before.
+            if (auto& state = before.plugin->state; state.hasProperty(before.parameter->paramID))
+            {
+                state.setProperty(before.parameter->paramID, next, nullptr);
+                before.parameter->updateFromAttachedValue();
+            }
+            else
+            {
+                before.parameter->setParameter(next, juce::sendNotification);
+            }
             handedBack = true;
         }
     }

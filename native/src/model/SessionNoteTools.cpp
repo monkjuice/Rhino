@@ -86,6 +86,7 @@ bool Session::placeNotes(const std::vector<EditorNote>& placements)
 
 juce::Result Session::reverseNotes(const std::vector<juce::ValueTree>& states)
 {
+    const NoteStep undoStep(*this, "Reverse notes");
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     if (patternClip == nullptr)
         return juce::Result::fail("Open a MIDI clip to edit its notes.");
@@ -121,6 +122,7 @@ juce::Result Session::reverseNotes(const std::vector<juce::ValueTree>& states)
 
 juce::Result Session::legatoNotes(const std::vector<juce::ValueTree>& states)
 {
+    const NoteStep undoStep(*this, "Legato");
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     if (patternClip == nullptr)
         return juce::Result::fail("Open a MIDI clip to edit its notes.");
@@ -155,6 +157,7 @@ juce::Result Session::legatoNotes(const std::vector<juce::ValueTree>& states)
 
 juce::Result Session::humanizeNotes(const std::vector<juce::ValueTree>& states, double amount, juce::int64 seed)
 {
+    const NoteStep undoStep(*this, "Humanize");
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     if (patternClip == nullptr)
         return juce::Result::fail("Open a MIDI clip to edit its notes.");

@@ -328,7 +328,23 @@ public:
         return plugin == nullptr || session.ownsDevice(*plugin);
     }
 
+    // Undo and redo answer here as they do in the main window: with the focus
+    // in a device's window they went nowhere. Only those two - a plain letter
+    // typed into a plugin's own field must not reach the shell's shortcuts.
+    bool keyPressed(const juce::KeyPress& key) override
+    {
+        const auto command = key.getModifiers().isCommandDown();
+        const auto undoKey = command && (key.getKeyCode() == 'Z' || key.getKeyCode() == 'Y');
+        // A shortcut can close this window - an undo can take its device away
+        // - so the call runs on a copy, and nothing of the window is touched
+        // after.
+        if (const auto forward = shortcut; undoKey && forward != nullptr && forward(key))
+            return true;
+        return DocumentWindow::keyPressed(key);
+    }
+
     std::function<void()> onClose;
+    std::function<bool(const juce::KeyPress&)> shortcut;
 
 private:
     te::Plugin::Ptr plugin;
@@ -475,6 +491,7 @@ void DeviceRack::openDevice(int pluginIndex)
     // processor and createEditorIfNeeded may otherwise return the old pointer.
     floatingWindow.reset();
     floatingWindow = std::make_unique<FloatingDeviceWindow>(session, selectedTrack, pluginIndex);
+    floatingWindow->shortcut = [this] (const juce::KeyPress& key) { return shortcut != nullptr && shortcut(key); };
     if (keepAboveShell) keepAboveShell(*floatingWindow, true);
     // Destroyed after the click that closed it has finished with it, and only
     // if it is still the window open by then. A mapping from it ends with it:

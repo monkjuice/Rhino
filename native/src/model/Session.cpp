@@ -163,6 +163,7 @@ Session::~Session()
 // New project can ask for the very same thing the app opens with.
 void Session::buildStarterEdit()
 {
+    unwatchEdit();
     edit = te::createEmptyEdit(engine, {});
     documentSerial = nextDocumentSerial();
     watchEditTree();
@@ -214,6 +215,9 @@ void Session::buildStarterEdit()
     // The main row's card, coloured as a new track is.
     edit->state.setProperty(mainColourID, pickTrackColour().toString(), nullptr);
     refreshLoop();
+    // Before the history begins: left to the engine, its sort of the stack
+    // just built was the new document's first undo step.
+    sortAsTheEngineWill(nullptr);
     edit->getUndoManager().clearUndoHistory();
     edit->resetChangedStatus();
 }
@@ -283,22 +287,46 @@ void Session::panicReset(bool restartAudioDevice)
 // A bounce or an export in flight renders tracks and clips that an undo could
 // take away under it; the shell blocks input meanwhile, and this holds the
 // line for anything that reaches here anyway.
+//
+// Every step a person makes is named. An unnamed step is something written on
+// the way out of one - the engine re-sorting a track, a knob handed back from
+// its lane - and is part of the named step before it: one Ctrl+Z takes back
+// both, and one redo puts both back. Undone on its own it changed nothing on
+// screen, and Ctrl+Z seemed to need pressing twice.
 void Session::undo()
 {
-    if (!isBouncing() && !isExporting())
-        refreshAfterUndoRedo(edit->getUndoManager().undo());
+    if (isBouncing() || isExporting() || !canUndo())
+        return;
+    auto& undoManager = edit->getUndoManager();
+    auto changed = false;
+    while (undoManager.canUndo() && undoManager.getUndoDescription().isEmpty())
+        changed = undoManager.undo() || changed;
+    if (undoManager.canUndo())
+        changed = undoManager.undo() || changed;
+    refreshAfterUndoRedo(changed);
 }
 
 void Session::redo()
 {
-    if (!isBouncing() && !isExporting())
-        refreshAfterUndoRedo(edit->getUndoManager().redo());
+    if (isBouncing() || isExporting() || !canRedo())
+        return;
+    auto& undoManager = edit->getUndoManager();
+    auto changed = undoManager.redo();
+    while (undoManager.canRedo() && undoManager.getRedoDescription().isEmpty())
+        changed = undoManager.redo() || changed;
+    refreshAfterUndoRedo(changed);
 }
 
 void Session::refreshAfterUndoRedo(bool changed)
 {
+    // The engine re-sorts nothing during an undo; what was sorted is back in
+    // its order, so nothing seen moving is left to sort.
+    unsortedClipOwners.clear();
+    tracksUnsorted = false;
+    looseControl = {};
     // An undo can take back any edit at all, so it cannot say what it changed.
     if (changed) markModified(-1, ModelChange::unknown);
+    if (changed) followRestoredParameters();
     // A solo or a mute may have come back, on a return or under one soloed.
     if (changed) followReturnSolo(true);
     // A track's output names a bus as "track N", resolved by the engine the
@@ -311,7 +339,7 @@ void Session::refreshAfterUndoRedo(bool changed)
         for (auto* track : audioTracks())
             if (auto& output = track->getOutput(); !output.usesDefaultAudioOut())
                 output.updateOutput();
-    repairPatternClip();
+    repairPatternClip(false);
     edit->tempoSequence.updateTempoData();
     refreshLoop();
     if (changed && edit->getTransport().isPlaying())
@@ -381,16 +409,29 @@ void Session::watchEditTree()
     audioTracksStale = true;
     cachedAudioTracks.clear();
     trackRevisions.clear();
+    unsortedClipOwners.clear();
+    tracksUnsorted = false;
+    looseControl = {};
     edit->state.addListener(&trackCacheWatcher);
+    edit->state.addListener(&engineOrderWatcher);
     edit->getTransport().addChangeListener(&engineStateRelay);
     edit->getUndoManager().addChangeListener(&engineStateRelay);
+    // The engine keeps 30 steps (te::Edit::getDefaultNumUndoLevels), which a
+    // session of clip edits used up within minutes; at least 500 are kept,
+    // and more while they stay small.
+    edit->getUndoManager().setMaxNumberOfStoredUnits(50 * 1000 * 1000, 500);
+    // A gesture still open carries its hold onto the new edit.
+    updateUndoTimerHold();
 }
 
 void Session::unwatchEdit()
 {
+    // An edit may not go while its undo timer is held (te::Edit::~Edit).
+    undoTimerHold.reset();
     if (edit == nullptr)
         return;
     edit->state.removeListener(&trackCacheWatcher);
+    edit->state.removeListener(&engineOrderWatcher);
     edit->getTransport().removeChangeListener(&engineStateRelay);
     edit->getUndoManager().removeChangeListener(&engineStateRelay);
 }
@@ -403,14 +444,180 @@ void Session::EngineStateRelay::changeListenerCallback(juce::ChangeBroadcaster* 
         session.undoHistory.sendChangeMessage();
 }
 
+// Only a named step is something to undo: a history holding nothing but the
+// engine's own bookkeeping has nothing in it the person did.
 bool Session::canUndo() const
 {
-    return edit->getUndoManager().canUndo();
+    auto& undoManager = edit->getUndoManager();
+    if (!undoManager.canUndo())
+        return false;
+    if (undoManager.getUndoDescription().isNotEmpty())
+        return true;
+    for (const auto& name : undoManager.getUndoDescriptions())
+        if (name.isNotEmpty())
+            return true;
+    return false;
 }
 
 bool Session::canRedo() const
 {
     return edit->getUndoManager().canRedo();
+}
+
+void Session::closeUndoStep()
+{
+    sortAsTheEngineWill(&edit->getUndoManager());
+    looseControl = {};
+    edit->getUndoManager().beginNewTransaction();
+}
+
+namespace
+{
+// te::ClipOwner's ClipList sorter at 4536d8a (tracktion_ClipOwner.cpp), which
+// is private to it: its order exactly, or the engine's own pass would still
+// find something to move.
+struct EngineClipOrder
+{
+    static int priority(const juce::Identifier& type)
+    {
+        if (type == te::IDs::AUTOMATIONTRACK) return 0;
+        if (te::Clip::isClipState(type))      return 1;
+        if (type == te::IDs::PLUGIN)          return 2;
+        if (type == te::IDs::OUTPUTDEVICES)   return 3;
+        if (type == te::IDs::LFOS)            return 4;
+        return -1;
+    }
+
+    int compareElements(const juce::ValueTree& first, const juce::ValueTree& second) const noexcept
+    {
+        if (const auto difference = priority(first.getType()) - priority(second.getType()); difference != 0)
+            return difference;
+        if (te::Clip::isClipState(first) && te::Clip::isClipState(second))
+        {
+            const double a = first[te::IDs::start];
+            const double b = second[te::IDs::start];
+            return a < b ? -1 : (b < a ? 1 : 0);
+        }
+        return 0;
+    }
+};
+}
+
+void Session::sortAsTheEngineWill(juce::UndoManager* undoManager)
+{
+    if (tracksUnsorted)
+        te::TrackList::sortTracksByType(edit->state, undoManager);
+    EngineClipOrder order;
+    for (auto& owner : unsortedClipOwners)
+        if (owner.isAChildOf(edit->state))
+        {
+            owner.sort(order, undoManager, true);
+            // The playback graph asks a cell's clip for its follow actions as
+            // it is next built, and the clip makes them then, through the
+            // undo manager (te::MidiClip::getFollowActions): another unnamed
+            // step after every clip put in a cell. Made now, inside the step.
+            if (owner.hasType(te::IDs::CLIPSLOT))
+                for (const auto& child : owner)
+                    if (te::Clip::isClipState(child) && !child.getChildWithName(te::IDs::FOLLOWACTIONS).isValid())
+                        if (auto* clip = findClip(te::EditItemID::fromString(child[te::IDs::id].toString())))
+                            (void) clip->getFollowActions();
+        }
+    // The sorts are heard by the watcher too, and leave nothing to sort.
+    unsortedClipOwners.clear();
+    tracksUnsorted = false;
+}
+
+// Once each: a drag moves its clip at every pixel, and each owner is sorted
+// once when the step closes.
+void Session::EngineOrderWatcher::noteOwner(const juce::ValueTree& owner)
+{
+    auto& owners = session.unsortedClipOwners;
+    if (owner.isValid() && std::find(owners.begin(), owners.end(), owner) == owners.end())
+        owners.push_back(owner);
+}
+
+void Session::EngineOrderWatcher::valueTreePropertyChanged(juce::ValueTree& tree, const juce::Identifier& property)
+{
+    if ((property == te::IDs::start || property == te::IDs::length) && te::Clip::isClipState(tree))
+        noteOwner(tree.getParent());
+}
+
+void Session::EngineOrderWatcher::valueTreeChildAdded(juce::ValueTree& parent, juce::ValueTree& child)
+{
+    if (te::Clip::isClipState(child))
+        noteOwner(parent);
+    else if (parent == session.edit->state && te::TrackList::isTrack(child))
+        session.tracksUnsorted = true;
+}
+
+void Session::EngineOrderWatcher::valueTreeChildRemoved(juce::ValueTree& parent, juce::ValueTree& child, int)
+{
+    if (te::Clip::isClipState(child))
+        noteOwner(parent);
+}
+
+void Session::EngineOrderWatcher::valueTreeChildOrderChanged(juce::ValueTree& parent, int, int)
+{
+    if (parent != session.edit->state)
+        noteOwner(parent);
+}
+
+void Session::openLooseControlStep(const juce::String& control, const juce::String& actionName)
+{
+    auto& undoManager = edit->getUndoManager();
+    if (control == looseControl && undoManager.getNumActionsInCurrentTransaction() > 0)
+        return;
+    undoManager.beginNewTransaction(actionName);
+    looseControl = control;
+}
+
+// The engine leaves a parameter where it is when an undo puts back the value
+// it is attached to (AutomatableParameter::valueTreePropertyChanged at
+// 4536d8a), so a fader, a send, Rhino EQ and the engine's own devices went on
+// sounding as they did before the Ctrl+Z, whatever their stored value said.
+// A parameter on a curve is the curve's.
+void Session::followRestoredParameters()
+{
+    const auto follow = [](te::Plugin& plugin)
+    {
+        for (auto* parameter : plugin.getAutomatableParameters())
+            if (parameter != nullptr && !parameter->hasAutomationPoints())
+                parameter->updateFromAttachedValue();
+    };
+    const auto followList = [&follow](te::PluginList* list)
+    {
+        if (list != nullptr)
+            for (auto* plugin : *list)
+                if (plugin != nullptr)
+                    follow(*plugin);
+    };
+    for (auto* track : audioTracks())
+    {
+        followList(&track->pluginList);
+        for (auto* clip : track->getClips())
+            followList(clip->getPluginList());
+    }
+    followList(&edit->getMasterPluginList());
+    if (auto master = edit->getMasterVolumePlugin())
+        follow(*master);
+    // A value the undo took away altogether - a knob never moved from its
+    // default until the step undone - is written back as the parameter
+    // follows it, by the engine, through the history: a step of its own that
+    // threw away what could be redone. It holds the default and nothing else,
+    // so it is taken back at once, which leaves the value unwritten, as the
+    // undo left it, the parameter on the default, and the redo steps in place.
+    if (auto& undoManager = edit->getUndoManager(); undoManager.getNumActionsInCurrentTransaction() > 0)
+        undoManager.undoCurrentTransactionOnly();
+}
+
+void Session::updateUndoTimerHold()
+{
+    const auto held = noteGestureOpen || noteVelocityGestureDepth > 0 || audioClipGestureDepth > 0
+                   || tempoGestureDepth > 0 || parameterGestureDepth > 0 || mixerGestureDepth > 0;
+    if (held && undoTimerHold == nullptr && edit != nullptr)
+        undoTimerHold = std::make_unique<te::Edit::UndoTransactionInhibitor>(*edit);
+    else if (!held)
+        undoTimerHold.reset();
 }
 
 bool Session::ownsDevice(const te::Plugin& plugin) const
@@ -521,6 +728,14 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
     readDjState();
     projectFile = file;
     savedRevision = ++changeRevision;
+    // What opening added - a starter clip, a fader - sorted before the
+    // history begins, as a new document's is, and every cell's clip given the
+    // follow actions the first graph built for it would make.
+    for (auto* track : audioTracks())
+        for (auto* slot : track->getClipSlotList().getClipSlots())
+            if (auto* clip = slot->getClip())
+                (void) clip->getFollowActions();
+    sortAsTheEngineWill(nullptr);
     edit->getUndoManager().clearUndoHistory();
     edit->resetChangedStatus();
     refreshLoop();

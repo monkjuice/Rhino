@@ -103,7 +103,7 @@ juce::Result Session::addTrack(TrackType type, int below, int* added)
     reconcileTrackGroups();
     ensureSceneSlots();
     ensureTrackMixers();
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     const auto index = after < 0 ? firstReturnTrack() - 1 : after + 1;
     if (added != nullptr)
         *added = index;
@@ -149,7 +149,7 @@ juce::Result Session::removeAudioTrack(int track)
     repairPatternClip();
     reconcileTrackGroups();
     refreshLoop();
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     // A deck's own track, a group's member or bus, or a sidechain's source
     // may have gone, and the lanes below move up: every deck is behind.
     markModified(-1, ModelChange::unknown);
@@ -243,7 +243,7 @@ juce::Result Session::setTrackName(int track, const juce::String& name)
         return juce::Result::fail("A track needs a name.");
     edit->getUndoManager().beginNewTransaction("Rename track");
     tracks[track]->setName(trimmed);
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markModified(track, ModelChange::none);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
@@ -264,7 +264,7 @@ juce::Result Session::setTrackColour(int track, juce::Colour colour)
     {
         edit->getUndoManager().beginNewTransaction("Colour main");
         edit->state.setProperty(mainColourID, colour.toString(), &edit->getUndoManager());
-        edit->getUndoManager().beginNewTransaction();
+        closeUndoStep();
         markModified(track, ModelChange::none);
         sendSynchronousChangeMessage();
         return juce::Result::ok();
@@ -273,7 +273,7 @@ juce::Result Session::setTrackColour(int track, juce::Colour colour)
         return juce::Result::fail("Select a track to colour.");
     edit->getUndoManager().beginNewTransaction("Colour track");
     tracks[track]->setColour(colour);
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markModified(track, ModelChange::none);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
@@ -403,7 +403,7 @@ juce::Result Session::moveTrack(int track, int destination, int* landed)
     // joins, carried out of one it leaves. Inside the move's own transaction,
     // so undoing the move undoes that too.
     reconcileTrackGroups();
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     // A group may have gained or lost a member, which its deck renders; no
     // kind says that, so every deck is counted behind.
     markModified(-1, ModelChange::unknown);

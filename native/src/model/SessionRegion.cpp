@@ -264,12 +264,12 @@ juce::Result Session::clearClipRegion(double startSeconds, double endSeconds, in
     edit->getUndoManager().beginNewTransaction("Delete time selection");
     if (!clearClipRegionInEdit(startSeconds, endSeconds, firstTrack, lastTrack))
     {
-        edit->getUndoManager().beginNewTransaction();
+        closeUndoStep();
         return juce::Result::ok();
     }
     repairPatternClip();
     refreshLoop();
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     std::vector<int> cleared;
     for (int track = std::max(0, firstTrack); track <= lastTrack; ++track)
         cleared.push_back(track);
@@ -325,7 +325,7 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
     const auto rollBack = [this](juce::Result failure)
     {
         edit->getUndoManager().undoCurrentTransactionOnly();
-        repairPatternClip();
+        repairPatternClip(false);
         sendSynchronousChangeMessage();
         return failure;
     };
@@ -478,7 +478,7 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
     // instead of a starter clip being made and immediately buried.
     repairPatternClip();
     refreshLoop();
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markClipsModified(rows);
     if (!gainedDevices.empty())
         markClipsModified(gainedDevices, ModelChange::devices);

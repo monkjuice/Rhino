@@ -118,7 +118,7 @@ juce::Result Session::addDrumKit(const juce::File& file, int trackIndex)
     // The track is named after its instrument, and the kit is what the
     // instrument now is.
     track->setName(name);
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markModified(trackIndex, ModelChange::devices);
     // A new rack is a new node in the graph. A kit loaded into the rack
     // already there is not, so playback goes on undisturbed.
@@ -138,7 +138,7 @@ juce::Result Session::loadDrumKit(int track, int slot, const juce::File& file)
         return juce::Result::fail("There is no Drum Rack there to load " + DrumFiles::nameOf(file) + " into.");
     edit->getUndoManager().beginNewTransaction("Load " + DrumFiles::nameOf(file));
     drums->setKit(kit);
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markModified(track, ModelChange::devices);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
@@ -165,7 +165,7 @@ juce::Result Session::loadDrumPadSample(int track, int slot, int pad, const juce
     drums->setPadSample(pad, sample);
     // The pad just filled is the one worth looking at.
     drums->setSelectedPad(pad);
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markModified(track, ModelChange::devices);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
@@ -188,7 +188,7 @@ juce::Result Session::loadDrumPadPreset(int track, int slot, int pad, const juce
     edit->getUndoManager().beginNewTransaction("Load " + sound.name + " on " + padNumber(pad));
     drums->setPadSound(pad, sound);
     drums->setSelectedPad(pad);
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markModified(track, ModelChange::devices);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
@@ -262,7 +262,7 @@ juce::Result Session::addDrumSound(const juce::File& file, int trackIndex)
     else
         drums->setPadSample(pad, file);
     drums->setSelectedPad(pad);
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markModified(trackIndex, ModelChange::devices);
     if (added && edit->getTransport().isPlaying())
         edit->restartPlayback();
@@ -299,7 +299,7 @@ juce::Result Session::spreadDrumSlices(int track, int slot, int pad, int* spread
     edit->getUndoManager().beginNewTransaction("Slice " + view.sound->displayName() + " to pads");
     filled = drums->spreadSlices(pad);
     drums->setSelectedPad(pad);
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     if (spread != nullptr)
         *spread = filled;
     if (filled == 0)
@@ -329,7 +329,7 @@ juce::Result Session::moveDrumPad(int track, int slot, int from, int to)
     drums->movePad(from, to);
     // The sound that was dragged is the one worth looking at.
     drums->setSelectedPad(to);
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markModified(track, ModelChange::devices);
     sendSynchronousChangeMessage();
     return juce::Result::ok();

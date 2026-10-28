@@ -14,7 +14,7 @@ void Session::clearPattern()
     pattern().getSequence().removeAllNotes(&edit->getUndoManager());
     pattern().state.setProperty(starterPlaceholderID, true, &edit->getUndoManager());
     markModified(patternTrackIndex(), ModelChange::notes);
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     sendSynchronousChangeMessage();
 }
 
@@ -30,14 +30,14 @@ void Session::applyPatternPreset(PatternPreset preset)
     auto devicesChanged = false;
     if (preparePresetTrack(trackIndex, data, devicesChanged).failed())
     {
-        edit->getUndoManager().beginNewTransaction();
+        closeUndoStep();
         return;
     }
     fillMidiClip(pattern(), data, edit->getUndoManager());
     // The preset's notes, and the instrument and patch it plays them with
     // when the track was not running them already.
     markModified(trackIndex, devicesChanged ? ModelChange::notes | ModelChange::devices : ModelChange::notes);
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();
@@ -66,7 +66,7 @@ juce::Result Session::insertPatternPreset(PatternPreset preset, int trackIndex, 
     makeRoomForClip(*clip);
     refreshLoop();
     markModified(trackIndex, devicesChanged ? ModelChange::notes | ModelChange::devices : ModelChange::notes);
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();
@@ -143,7 +143,7 @@ juce::Result Session::createClip(int trackIndex, double startSeconds, te::EditIt
     patternClipID = patternClip->itemID;
     if (created != nullptr) *created = patternClipID;
     refreshLoop();
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markModified(trackIndex, ModelChange::notes);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();

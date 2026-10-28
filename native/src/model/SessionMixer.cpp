@@ -83,7 +83,8 @@ void Session::announceMixerChange(int track, ModelChange changes)
 void Session::endMixerGesture()
 {
     mixerGestureDepth = std::max(0, mixerGestureDepth - 1);
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
+    updateUndoTimerHold();
     if (mixerGestureDepth == 0)
         sendSynchronousChangeMessage();
 }
@@ -134,6 +135,8 @@ juce::Result Session::setTrackVolumeDb(int track, float decibels)
     if (volume == nullptr)
         return juce::Result::fail("That track has no fader.");
     // A double-click or an encoder sets it with no drag around it.
+    if (mixerGestureDepth == 0)
+        openLooseControlStep("volume " + volume->itemID.toString(), "Track volume");
     takeMixerFromLane(track, MixerControl::volume);
     volume->setVolumeDb(juce::jlimit(minimumVolumeDb, maximumVolumeDb, decibels));
     // The fader is a parameter of the track's own chain.
@@ -146,6 +149,8 @@ juce::Result Session::setTrackPan(int track, float pan)
     auto* volume = trackVolumePlugin(track);
     if (volume == nullptr)
         return juce::Result::fail("That track has no fader.");
+    if (mixerGestureDepth == 0)
+        openLooseControlStep("pan " + volume->itemID.toString(), "Track pan");
     takeMixerFromLane(track, MixerControl::pan);
     volume->setPan(juce::jlimit(-1.0f, 1.0f, pan));
     announceMixerChange(track, ModelChange::parameters);
@@ -163,6 +168,7 @@ void Session::beginTrackVolumeGesture(int track)
         edit->getUndoManager().beginNewTransaction("Track volume");
         volume->volParam->parameterChangeGestureBegin();
         ++mixerGestureDepth;
+        updateUndoTimerHold();
     }
 }
 
@@ -183,6 +189,7 @@ void Session::beginTrackPanGesture(int track)
         edit->getUndoManager().beginNewTransaction("Track pan");
         volume->panParam->parameterChangeGestureBegin();
         ++mixerGestureDepth;
+        updateUndoTimerHold();
     }
 }
 
@@ -222,6 +229,8 @@ void Session::setMasterVolumeDb(float decibels)
 {
     if (auto master = edit->getMasterVolumePlugin())
     {
+        if (mixerGestureDepth == 0)
+            openLooseControlStep("main volume", "Main volume");
         master->setVolumeDb(juce::jlimit(minimumVolumeDb, maximumVolumeDb, decibels));
         // The main output is the song's, which no deck plays through.
         announceMixerChange(masterTrackIndex(), ModelChange::none);
@@ -239,6 +248,8 @@ void Session::setMasterPan(float pan)
 {
     if (auto master = edit->getMasterVolumePlugin())
     {
+        if (mixerGestureDepth == 0)
+            openLooseControlStep("main pan", "Main pan");
         master->setPan(juce::jlimit(-1.0f, 1.0f, pan));
         announceMixerChange(masterTrackIndex(), ModelChange::none);
     }
@@ -251,6 +262,7 @@ void Session::beginMasterPanGesture()
         edit->getUndoManager().beginNewTransaction("Main pan");
         master->panParam->parameterChangeGestureBegin();
         ++mixerGestureDepth;
+        updateUndoTimerHold();
     }
 }
 
@@ -270,6 +282,7 @@ void Session::beginMasterVolumeGesture()
         edit->getUndoManager().beginNewTransaction("Main volume");
         master->volParam->parameterChangeGestureBegin();
         ++mixerGestureDepth;
+        updateUndoTimerHold();
     }
 }
 

@@ -47,6 +47,7 @@ int Session::gridChopParts(double startSteps, double lengthSteps)
 juce::Result Session::chopNotes(const std::vector<juce::ValueTree>& current, const std::vector<NoteChop>& chops,
                                 std::vector<juce::ValueTree>& pieces)
 {
+    const NoteStep undoStep(*this, "Chop notes");
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     pieces.clear();
     if (patternClip == nullptr)

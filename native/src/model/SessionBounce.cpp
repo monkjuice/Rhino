@@ -548,6 +548,9 @@ void Session::finishBounce()
         job->made = appendTrack(TrackType::audio, job->after);
         if (job->made == nullptr)
         {
+            // Taken back whole: the sources muted, any track already made.
+            undo.undoCurrentTransactionOnly();
+            repairPatternClip(false);
             lastBounce = juce::Result::fail("Could not create the track for " + job->name + "'s bounce.");
             return;
         }
@@ -577,6 +580,8 @@ void Session::finishBounce()
             auto clip = job.made->insertWaveClip(piece.name, job.file, {{at(piece.start), at(piece.end)}, offset}, false);
             if (clip == nullptr)
             {
+                undo.undoCurrentTransactionOnly();
+                repairPatternClip(false);
                 lastBounce = juce::Result::fail("The bounced clip could not be added.");
                 return;
             }
@@ -586,7 +591,7 @@ void Session::finishBounce()
         }
     }
     refreshLoop();
-    undo.beginNewTransaction();
+    closeUndoStep();
 
     BounceResult result;
     const auto now = audioTracks();

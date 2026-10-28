@@ -100,7 +100,7 @@ juce::Result Session::moveClipRegion(double startSeconds, double endSeconds, int
     const auto rollBack = [this, &undoManager](juce::Result failure)
     {
         undoManager.undoCurrentTransactionOnly();
-        repairPatternClip();
+        repairPatternClip(false);
         sendSynchronousChangeMessage();
         return failure;
     };
@@ -160,7 +160,7 @@ juce::Result Session::moveClipRegion(double startSeconds, double endSeconds, int
         return rollBack(result);
     repairPatternClip();
     refreshLoop();
-    undoManager.beginNewTransaction();
+    closeUndoStep();
     // The rows the selection left and the rows it reached, cut and cleared
     // ones included, and the rows whose devices a MIDI clip changed.
     auto rows = outcome.reached;

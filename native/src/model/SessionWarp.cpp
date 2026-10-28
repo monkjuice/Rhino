@@ -356,14 +356,14 @@ juce::Result Session::detectClipBpm(te::EditItemID id)
     const auto detected = clip->performTempoDetect();
     if (!detected)
     {
-        edit->getUndoManager().beginNewTransaction();
+        closeUndoStep();
         return juce::Result::fail("No steady tempo found in this clip - set it by hand.");
     }
     if (storedWarpOn(*clip) && storedMode(*clip) == WarpMode::repitch)
         clip->setSpeedRatio(repitchSpeedFor(*clip, tempo()));
     rescaleWarpedClip(*clip, before);
     makeRoomForClip(*clip);
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markModified(clipTrackIndex(*edit, *clip), ModelChange::audioClips);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
@@ -438,7 +438,7 @@ juce::Result Session::addClipWarpMarker(te::EditItemID id, double sourceSeconds)
     edit->getUndoManager().beginNewTransaction("Add warp marker");
     manager.insertMarker({tracktion::core::TimePosition::fromSeconds(sourceSeconds),
                           tracktion::core::TimePosition::fromSeconds(warpSeconds)});
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markModified(clipTrackIndex(*edit, *clip), ModelChange::audioClips);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
@@ -468,7 +468,7 @@ juce::Result Session::moveClipWarpMarker(te::EditItemID id, int index, double wa
     markModified(clipTrackIndex(*edit, *clip), ModelChange::audioClips);
     if (insideGesture)
         return juce::Result::ok();
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
@@ -487,7 +487,7 @@ juce::Result Session::removeClipWarpMarker(te::EditItemID id, int index)
     // The engine straightens the first and last markers rather than removing
     // them, because they are the ends of the file and the mapping needs both.
     manager.removeMarker(index);
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markModified(clipTrackIndex(*edit, *clip), ModelChange::audioClips);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
@@ -502,7 +502,7 @@ juce::Result Session::resetClipWarpMarkers(te::EditItemID id)
         return juce::Result::fail("Turn warp markers on first.");
     edit->getUndoManager().beginNewTransaction("Straighten warp markers");
     clip->getWarpTimeManager().removeAllMarkers();
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markModified(clipTrackIndex(*edit, *clip), ModelChange::audioClips);
     sendSynchronousChangeMessage();
     return juce::Result::ok();

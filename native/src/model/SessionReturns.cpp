@@ -233,7 +233,7 @@ juce::Result Session::addReturnTrack(int* added)
         undoManager.undoCurrentTransactionOnly();
         return juce::Result::fail("Could not create a return track.");
     }
-    undoManager.beginNewTransaction();
+    closeUndoStep();
     if (added != nullptr)
         *added = trackCount() - 1;
     // Every track gained a send, which is a device of its chain.
@@ -303,6 +303,8 @@ juce::Result Session::setTrackSendDb(int track, int returnTrack, float decibels)
     if (send == nullptr)
         return juce::Result::fail(isReturnTrack(track) ? "A return track sends to no other return."
                                                        : "That track has no send to that return.");
+    if (mixerGestureDepth == 0)
+        openLooseControlStep("send " + send->itemID.toString(), "Send to " + trackName(returnTrack));
     send->setGainDb(juce::jlimit(minimumSendDb, maximumSendDb, decibels));
     // A send is a parameter of the track's own chain, as its fader is.
     announceMixerChange(track, ModelChange::parameters);
@@ -316,6 +318,7 @@ void Session::beginTrackSendGesture(int track, int returnTrack)
         edit->getUndoManager().beginNewTransaction("Send to " + trackName(returnTrack));
         send->gain->parameterChangeGestureBegin();
         ++mixerGestureDepth;
+        updateUndoTimerHold();
     }
 }
 

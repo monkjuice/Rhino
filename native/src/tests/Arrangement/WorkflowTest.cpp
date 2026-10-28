@@ -69,12 +69,18 @@ int runArrangementTest()
             }
             require(writer->writeFromAudioSampleBuffer(audio, 0, audio.getNumSamples()), "Write fixture");
         }
-        Session session;
         const auto scenario = [](const char* name)
         {
             std::fprintf(stderr, "Arrangement scenario: %s\n", name);
             std::fflush(stderr);
         };
+        // First, before any other document exists: it dispatches the message
+        // loop, which the runner otherwise never does, and later in the run
+        // that delivered what earlier scenarios had posted for documents long
+        // gone - a crash in the engine as an edit was torn down.
+        scenario("undo steps: one Ctrl+Z, one thing done, all of it, left to redo");
+       #include "scenarios/UndoSteps.inc"
+        Session session;
         scenario("transport readout");
        #include "scenarios/TransportReadout.inc"
         scenario("control bar fields");

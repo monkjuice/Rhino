@@ -58,6 +58,12 @@ AudioClipPanel::AudioClipPanel(Session& s) : session(s)
 AudioClipPanel::~AudioClipPanel()
 {
     stopTimer();
+    // A drag whose release will never come closes its bracket here, or every
+    // later clip edit would be folded into it (editWillChange does the same).
+    if (warpGestureOpen)
+        session.endAudioClipGesture();
+    if (envelopeGestureOpen)
+        session.endAudioClipGesture();
     for (auto& slider : sliders)
         slider.removeMouseListener(&knobMenu);
     session.listeners.remove(this);

@@ -1983,8 +1983,11 @@ private:
     // clip the note editor is pointed at. This finds it again by id, and
     // otherwise puts the editor on the first MIDI track's first MIDI clip,
     // giving that track a hidden starter clip if it has none. A document with
-    // no MIDI track leaves the editor with no clip at all.
-    void repairPatternClip();
+    // no MIDI track leaves the editor with no clip at all. Outside a command -
+    // after an undo, a redo or a command taken back - it makes no clip, since
+    // anything written then is a step of its own that discards what could be
+    // redone, and undoing it made the clip again: Ctrl+Z went no further.
+    void repairPatternClip(bool mayCreate = true);
     // SessionRecording.cpp - arming is Rhino's state, held on the track, and
     // the engine's input destinations are rebuilt from it rather than being a
     // second place the answer lives.
@@ -2107,6 +2110,26 @@ private:
     void startPreview(std::unique_ptr<juce::PositionableAudioSource>, double sampleRate);
     void buildStarterEdit();
     void refreshAfterUndoRedo(bool changed);
+    // Ends the open undo step: what every command closes with. It first sorts
+    // what the engine would re-sort a message later (EngineOrderWatcher), so
+    // that sort lands inside this step rather than as an unnamed one after it.
+    void closeUndoStep();
+    // The engine's two re-sorts, on what the watcher saw change: the edit's
+    // children by track type (te::TrackList::sortTracksByType) and a clip
+    // owner's children with its clips by start and ahead of its devices
+    // (te::ClipOwner's private ClipList, restated in Session.cpp).
+    void sortAsTheEngineWill(juce::UndoManager*);
+    // A control set with no drag around it - a double-click, a wheel notch,
+    // an encoder - opens a named step of its own, and a run of them on the
+    // same control stays one step until something closes it.
+    void openLooseControlStep(const juce::String& control, const juce::String& actionName);
+    // Undo restores a parameter's stored value without the engine moving the
+    // parameter to it; this moves every parameter not following a curve.
+    void followRestoredParameters();
+    // Holds the engine's undo timer off while a gesture is open, so a pause in
+    // a gesture made without a mouse button - V held over the velocity lane,
+    // Ctrl over a chop, a finger on an encoder - does not split it in two.
+    void updateUndoTimerHold();
     te::PluginList* pluginListForTrack(int track) const;
     // SessionSidechain.cpp - called as a track is deleted, so nothing is left
     // pointing at it. Inside the caller's transaction, so undo restores both.
@@ -2234,6 +2257,25 @@ private:
         Session& session;
     };
     TrackCacheWatcher trackCacheWatcher {*this};
+    // Notes what the engine will re-sort: a clip owner whose clips arrived,
+    // left, moved or changed start or length, and the edit when a track
+    // arrived - the engine's own triggers (te::ClipOwner, te::TrackList).
+    struct EngineOrderWatcher final : juce::ValueTree::Listener
+    {
+        explicit EngineOrderWatcher(Session& owner) : session(owner) {}
+        void valueTreePropertyChanged(juce::ValueTree&, const juce::Identifier&) override;
+        void valueTreeChildAdded(juce::ValueTree&, juce::ValueTree&) override;
+        void valueTreeChildRemoved(juce::ValueTree&, juce::ValueTree&, int) override;
+        void valueTreeChildOrderChanged(juce::ValueTree&, int, int) override;
+        void noteOwner(const juce::ValueTree&);
+        Session& session;
+    };
+    EngineOrderWatcher engineOrderWatcher {*this};
+    std::vector<juce::ValueTree> unsortedClipOwners;
+    bool tracksUnsorted = false;
+    juce::String looseControl;
+    bool noteGestureOpen = false;
+    std::unique_ptr<te::Edit::UndoTransactionInhibitor> undoTimerHold;
     // Relays the engine's own announcements - the transport starting and
     // stopping, the undo history changing - onto transportState and
     // undoHistory, so the shell listens to the model whichever edit is open.
@@ -2383,6 +2425,23 @@ private:
     bool pointerHeld = false;
     // SessionNotes.cpp: the track the note editor's clip sits on, or -1.
     int patternTrackIndex() const;
+    // A note edit made with no note gesture open is a step of its own, named
+    // and closed on the way out; inside a gesture, or inside another note
+    // edit, it is that one's. Without it, an edit the caller had not
+    // bracketed was an unnamed step, which undo takes for the engine's own
+    // bookkeeping and folds into the step before.
+    class NoteStep
+    {
+    public:
+        NoteStep(Session&, const juce::String& actionName);
+        ~NoteStep();
+        NoteStep(const NoteStep&) = delete;
+        NoteStep& operator=(const NoteStep&) = delete;
+
+    private:
+        Session& session;
+        bool opened = false;
+    };
     // SessionNoteTools.cpp: each note put where the one beside it says, in the
     // editor's steps, and the edit announced once. False when nothing moved.
     bool placeNotes(const std::vector<EditorNote>&);

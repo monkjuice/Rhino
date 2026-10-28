@@ -69,7 +69,7 @@ juce::Result Session::importAudio(const juce::File& file)
         undoManager.undoCurrentTransactionOnly();
         return imported;
     }
-    undoManager.beginNewTransaction();
+    closeUndoStep();
     markClipsModified({lane});
     sendSynchronousChangeMessage();
     return juce::Result::ok();
@@ -81,7 +81,7 @@ juce::Result Session::importAudioAt(const juce::File& file, int trackIndex, doub
     undoManager.beginNewTransaction("Import audio");
     const auto imported = importAudioInEdit(file, trackIndex, startSeconds);
     // Closed either way, so the next edit is never folded into this one.
-    undoManager.beginNewTransaction();
+    closeUndoStep();
     if (imported.failed())
         return imported;
     markClipsModified({trackIndex});
@@ -102,11 +102,11 @@ juce::Result Session::importAudioFilesAt(const std::vector<juce::File>& files, i
         if (const auto imported = importAudioInEdit(file, trackIndex, next, &next); imported.failed())
         {
             undoManager.undoCurrentTransactionOnly();
-            undoManager.beginNewTransaction();
+            closeUndoStep();
             return files.size() > 1 ? juce::Result::fail(file.getFileName() + ": " + imported.getErrorMessage())
                                     : imported;
         }
-    undoManager.beginNewTransaction();
+    closeUndoStep();
     markClipsModified({trackIndex});
     sendSynchronousChangeMessage();
     return juce::Result::ok();
@@ -332,7 +332,7 @@ juce::Result Session::setTimeSignature(int numerator, int denominator)
     markModified(-1, ModelChange::tempo);
     if (edit->getTransport().isPlaying()) edit->restartPlayback();
     if (!insideGesture)
-        edit->getUndoManager().beginNewTransaction();
+        closeUndoStep();
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
@@ -382,13 +382,15 @@ void Session::beginTempoGesture()
 {
     if (tempoGestureDepth++ == 0)
         edit->getUndoManager().beginNewTransaction("Change tempo");
+    updateUndoTimerHold();
 }
 
 void Session::endTempoGesture()
 {
     if (tempoGestureDepth <= 0) return;
     if (--tempoGestureDepth > 0) return;
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
+    updateUndoTimerHold();
     sendSynchronousChangeMessage();
 }
 
@@ -434,7 +436,7 @@ void Session::setTempo(double bpm)
     updateRepitchedClips();
     refreshLoop();
     if (!insideGesture)
-        edit->getUndoManager().beginNewTransaction();
+        closeUndoStep();
     sendSynchronousChangeMessage();
 }
 

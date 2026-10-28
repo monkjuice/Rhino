@@ -76,7 +76,7 @@ juce::Result Session::loadDevicePreset(int track, int slot, const juce::File& fi
     }
     edit->getUndoManager().beginNewTransaction("Load " + DevicePreset::nameOf(file));
     const auto changed = applyDevicePreset(*plugin, preset);
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     // A preset is every control's value and nothing else (applyDevicePreset).
     if (changed)
         markModified(track, ModelChange::parameters);

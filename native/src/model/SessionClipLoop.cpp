@@ -61,7 +61,7 @@ juce::Result Session::setPatternLooping(bool shouldLoop)
         clip.setLoopRangeBeats({});
         clip.setPosition({position.time, tracktion::core::TimeDuration::fromSeconds((loopStart + phase) * secondsPerBeat)});
     }
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markModified(patternTrackIndex(), ModelChange::notes);
     if (edit->getTransport().isPlaying())
     {

@@ -79,7 +79,7 @@ juce::Result Session::deleteSlotClip(int track, int scene)
     // The note editor may have been pointed at it, since a console opens a
     // slot clip there; left pointing, the next paint read a freed clip.
     repairPatternClip();
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markClipsModified({track});
     sendSynchronousChangeMessage();
     return juce::Result::ok();
@@ -116,7 +116,7 @@ juce::Result Session::insertPatternPresetInSlot(PatternPreset preset, int track,
         return juce::Result::fail("The pattern clip could not be added to that slot.");
     fillMidiClip(*clip, data, edit->getUndoManager());
     clip->setLoopRangeBeats({tracktion::core::BeatPosition(), tracktion::core::BeatPosition::fromBeats(beats)});
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     // A preset may switch the track's instrument, which the track's own
     // arrangement plays too: every deck on the track is behind, and no other,
     // on its devices only when the preset changed them.
@@ -167,7 +167,7 @@ juce::Result Session::insertAudioFileInSlot(const juce::File& file, int track, i
         return juce::Result::fail("The audio clip could not be added to that slot.");
     // The clip the slot held is gone, and the note editor may have had it.
     repairPatternClip();
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markModified(track, ModelChange::audioClips);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
@@ -287,7 +287,7 @@ juce::Result Session::copySlotClipToArrangement(int track, int scene, double sta
     // clip that arrives is the one that wins that ground.
     makeRoomForClip(*copy);
     refreshLoop();
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     // The cell is untouched; the lane's arrangement is what changed.
     markClipsModified({lane});
     if (edit->getTransport().isPlaying())
@@ -363,7 +363,7 @@ juce::Result Session::copyClipToTrackSlot(te::EditItemID id, int track, int scen
     else
         copy->setLoopRangeBeats({tracktion::core::BeatPosition(), tracktion::core::BeatPosition::fromBeats(beats)});
     copy->state.removeProperty(starterPlaceholderID, &edit->getUndoManager());
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markClipsModified({track});
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
@@ -398,7 +398,7 @@ juce::Result Session::createSlotClip(int track, int scene)
     if (clip == nullptr)
         return juce::Result::fail("The clip could not be added to that slot.");
     clip->setLoopRangeBeats({tracktion::core::BeatPosition(), tracktion::core::BeatPosition::fromBeats(beats)});
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markModified(track, ModelChange::notes);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();

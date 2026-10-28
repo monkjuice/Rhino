@@ -240,7 +240,7 @@ juce::Result Session::mapDeviceParameterInEdit(int track, int slot, int pluginPa
     auto& undoManager = edit->getUndoManager();
     undoManager.beginNewTransaction("Map " + name);
     plugin->state.setProperty(mappedParametersID, ids.joinIntoString(","), &undoManager);
-    undoManager.beginNewTransaction();
+    closeUndoStep();
     // A knob on the rack renders nothing: no lane moved, no deck's clip changed.
     markModified(track, ModelChange::none);
     return juce::Result::ok();
@@ -305,7 +305,7 @@ juce::Result Session::unmapDeviceParameter(int track, int slot, int index)
         lastTouchedParameter = {};
     ids.remove(index);
     plugin->state.setProperty(mappedParametersID, ids.joinIntoString(","), &undoManager);
-    undoManager.beginNewTransaction();
+    closeUndoStep();
     markModified(track, ModelChange::curves);
     sendSynchronousChangeMessage();
     return juce::Result::ok();

@@ -707,7 +707,7 @@ void Session::finishRecording()
         juce::ignoreUnused(applyRecordArming());
     }
     refreshLoop();
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     // A MIDI take is notes on its track, an audio take an audio clip on its.
     if (!recorded.empty())
         markClipsModified(recorded);

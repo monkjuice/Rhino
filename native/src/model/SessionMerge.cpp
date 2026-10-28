@@ -335,7 +335,7 @@ juce::Result Session::mergeClips(const std::vector<te::EditItemID>& ids, MergeRe
     }
     repairPatternClip();
     refreshLoop();
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markClipsModified(mergedTracks);
     sendSynchronousChangeMessage();
     if (summary != nullptr)

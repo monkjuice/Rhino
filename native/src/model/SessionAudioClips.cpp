@@ -41,6 +41,7 @@ void Session::beginAudioClipGesture(const juce::String& actionName)
 {
     if (audioClipGestureDepth++ == 0)
         edit->getUndoManager().beginNewTransaction(actionName);
+    updateUndoTimerHold();
 }
 
 void Session::endAudioClipGesture()
@@ -49,7 +50,8 @@ void Session::endAudioClipGesture()
         return;
     if (--audioClipGestureDepth > 0)
         return;
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
+    updateUndoTimerHold();
     // Every edit inside the drag marked its own clip's track as it went.
     sendSynchronousChangeMessage();
 }
@@ -70,7 +72,7 @@ juce::Result Session::applyAudioClipEdit(te::EditItemID id, const juce::String& 
     markModified(track, ModelChange::audioClips);
     if (insideGesture)
         return juce::Result::ok();
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }

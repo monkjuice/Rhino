@@ -106,10 +106,17 @@ juce::Result Session::addDevice(const juce::String& deviceId, int trackIndex, co
         return juce::Result::fail(device->bundle + " was not found. Build or install the " + name + " VST3 first.");
 
     edit->getUndoManager().beginNewTransaction("Add " + name);
+    // A refusal takes back what making the device wrote, rather than leaving
+    // a step that undoes nothing open for the next edit to join.
+    const auto refuse = [this](const juce::String& why)
+    {
+        edit->getUndoManager().undoCurrentTransactionOnly();
+        return juce::Result::fail(why);
+    };
     auto plugin = external != nullptr ? edit->getPluginCache().createNewPlugin(te::ExternalPlugin::xmlTypeName, *external)
                                       : edit->getPluginCache().createNewPlugin(type, {});
     if (plugin == nullptr)
-        return juce::Result::fail(name + " could not be created.");
+        return refuse(name + " could not be created.");
     // The engine can refuse an insert without saying so - a list at the
     // engine's limit - and reporting that as success left the rack unchanged
     // under a status line that said the device was added.
@@ -117,7 +124,7 @@ juce::Result Session::addDevice(const juce::String& deviceId, int trackIndex, co
     if (isMasterTrack(trackIndex))
     {
         if (!plugin->canBeAddedToMaster())
-            return juce::Result::fail(name + " cannot go on the main track.");
+            return refuse(name + " cannot go on the main track.");
         list->insertPlugin(plugin, list->size(), nullptr);
     }
     else
@@ -126,10 +133,10 @@ juce::Result Session::addDevice(const juce::String& deviceId, int trackIndex, co
         list->insertPlugin(plugin, channelStripInsertIndex(*track), nullptr);
     }
     if (list->size() == devicesBefore)
-        return juce::Result::fail(name + " could not be added: this chain holds as many devices as it can.");
+        return refuse(name + " could not be added: this chain holds as many devices as it can.");
     if (preset != nullptr)
         applyDevicePreset(*plugin, *preset);
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markModified(trackIndex, ModelChange::devices);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
@@ -161,15 +168,19 @@ juce::Result Session::addClipDevice(const juce::String& deviceId, te::EditItemID
     if (!clip->canHaveEffects())
         return juce::Result::fail("This audio clip cannot host effects while warped or reversed.");
 
-    auto plugin = edit->getPluginCache().createNewPlugin(type, {});
-    if (plugin == nullptr)
-        return juce::Result::fail(name + " could not be created.");
-    if (!plugin->canBeAddedToClip())
-        return juce::Result::fail(name + " cannot be added to a clip.");
-
+    // Opened before the device is made, which writes its first settings
+    // through the undo manager: made first, those writes were an unnamed step
+    // of their own, and Ctrl+Z had to be pressed twice to take the device off.
     edit->getUndoManager().beginNewTransaction("Add " + name + " to clip");
+    auto plugin = edit->getPluginCache().createNewPlugin(type, {});
+    if (plugin == nullptr || !plugin->canBeAddedToClip())
+    {
+        edit->getUndoManager().undoCurrentTransactionOnly();
+        return juce::Result::fail(plugin == nullptr ? name + " could not be created."
+                                                    : name + " cannot be added to a clip.");
+    }
     clip->getPluginList()->insertPlugin(plugin, clip->getPluginList()->size(), nullptr);
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markModified(clipTrackIndex(*edit, *clip), ModelChange::devices);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
@@ -232,7 +243,7 @@ juce::Result Session::addInstrumentDevice(const DeviceDescriptor& device, int tr
     }
     // In the same transaction as the add, so undoing it takes both away.
     const auto valuesSet = preset != nullptr && plugin != nullptr && applyDevicePreset(*plugin, *preset);
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     if (changed)
         markModified(trackIndex, ModelChange::devices);
     else if (valuesSet)
@@ -298,7 +309,7 @@ juce::Result Session::addMidiEffectDevice(const DeviceDescriptor& device, int tr
     track->pluginList.insertPlugin(plugin, juce::jlimit(0, track->pluginList.size(), insertIndex), nullptr);
     if (preset != nullptr)
         applyDevicePreset(*plugin, *preset);
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markModified(trackIndex, ModelChange::devices);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
@@ -507,6 +518,11 @@ juce::Result Session::beginDeviceParameterGesture(int track, int slot, int param
     auto* parameter = exposedParameterAt(*plugin, parameterIndex);
     if (parameter == nullptr) return juce::Result::fail("Select a parameter first.");
     lastTouchedParameter = {track, slot, parameterIndex};
+    // A step of its own, named, from the grab: the drag used to write into
+    // whatever step was open, so a wheel turn or a double-click just before it
+    // went with it under one Ctrl+Z, and on its own it had no name.
+    if (parameterGestureDepth == 0)
+        edit->getUndoManager().beginNewTransaction("Change " + parameter->getParameterName());
     // Taking hold of an automated knob takes it from its lane, at once: the
     // engine would otherwise go on playing the curve under the drag.
     if (auto* runtime = findAutomationRuntime(lastTouchedParameter);
@@ -518,6 +534,7 @@ juce::Result Session::beginDeviceParameterGesture(int track, int slot, int param
     parameter->parameterChangeGestureBegin();
     if (parameterGestureDepth++ == 0)
         latencyAtGestureStart = plugin->getLatencySeconds();
+    updateUndoTimerHold();
     return juce::Result::ok();
 }
 
@@ -532,7 +549,7 @@ juce::Result Session::editDeviceSettings(int track, int slot, const juce::String
     auto& undoManager = edit->getUndoManager();
     undoManager.beginNewTransaction(actionName);
     change();
-    undoManager.beginNewTransaction();
+    closeUndoStep();
     markModified(track, ModelChange::devices);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
@@ -548,6 +565,9 @@ juce::Result Session::setDeviceParameter(int track, int slot, int parameterIndex
     auto* parameter = exposedParameterAt(*plugin, parameterIndex);
     if (parameter == nullptr) return juce::Result::fail("Select a parameter first.");
     lastTouchedParameter = {track, slot, parameterIndex};
+    if (parameterGestureDepth == 0)
+        openLooseControlStep("parameter " + plugin->itemID.toString() + " " + parameter->paramID,
+                             "Change " + parameter->getParameterName());
     const auto range = parameter->getValueRange();
     const auto next = juce::jlimit(range.getStart(), exposedParameterMaximum(*plugin, parameterIndex, range.getEnd()), value);
     auto& runtime = automationRuntimeFor(lastTouchedParameter);
@@ -576,7 +596,8 @@ juce::Result Session::setDeviceParameter(int track, int slot, int parameterIndex
 juce::Result Session::endDeviceParameterGesture(int track, int slot, int parameterIndex)
 {
     parameterGestureDepth = std::max(0, parameterGestureDepth - 1);
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
+    updateUndoTimerHold();
     auto* list = pluginListForTrack(track);
     auto* plugin = list != nullptr && juce::isPositiveAndBelow(slot, list->size()) ? (*list)[slot] : nullptr;
     auto* parameter = plugin != nullptr ? exposedParameterAt(*plugin, parameterIndex) : nullptr;
@@ -604,7 +625,7 @@ juce::Result Session::toggleDeviceEnabled(int track, int slot)
     if (plugin == nullptr) return juce::Result::fail("Select a device first.");
     edit->getUndoManager().beginNewTransaction(plugin->isEnabled() ? "Bypass device" : "Enable device");
     plugin->setEnabled(!plugin->isEnabled());
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markModified(track, ModelChange::devices);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
@@ -657,7 +678,7 @@ juce::Result Session::moveDevice(int track, int fromDevice, int toDevice)
     edit->getUndoManager().beginNewTransaction("Move " + moved.name);
     plugin->removeFromParent();
     list->insertPlugin(plugin, juce::jlimit(0, list->size(), insertIndex), nullptr);
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     markModified(track, ModelChange::devices);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
@@ -682,7 +703,7 @@ juce::Result Session::deleteDevice(int track, int slot)
     edit->getUndoManager().beginNewTransaction("Delete device");
     removeDeviceLanes(automationOwnerState(track), *plugin, &edit->getUndoManager());
     plugin->removeFromParent();
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     // The device and the lanes that drove it.
     markModified(track, ModelChange::devices | ModelChange::curves);
     if (edit->getTransport().isPlaying())

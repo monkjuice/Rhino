@@ -73,6 +73,7 @@ int Session::patternTrackIndex() const
 juce::Result Session::addNote(double startSteps, int pitch, double lengthSteps,
                               juce::ValueTree* addedState, int velocity)
 {
+    const NoteStep undoStep(*this, "Draw notes");
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     if (patternClip == nullptr)
         return noOpenClip();
@@ -104,6 +105,7 @@ juce::Result Session::addNote(double startSteps, int pitch, double lengthSteps,
 
 bool Session::removeNotes(const std::vector<juce::ValueTree>& states)
 {
+    const NoteStep undoStep(*this, "Delete notes");
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     if (patternClip == nullptr)
         return false;
@@ -151,6 +153,7 @@ bool Session::removeNotes(const std::vector<juce::ValueTree>& states)
 // nothing sounding needs cutting off.
 bool Session::setNoteVelocities(const std::vector<NoteVelocity>& values)
 {
+    const NoteStep undoStep(*this, "Change velocity");
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     if (patternClip == nullptr || values.empty())
         return false;
@@ -178,8 +181,37 @@ bool Session::setNoteVelocities(const std::vector<NoteVelocity>& values)
     return true;
 }
 
-void Session::beginNoteGesture(juce::String actionName) { edit->getUndoManager().beginNewTransaction(actionName); }
-void Session::endNoteGesture() { edit->getUndoManager().beginNewTransaction(); }
+Session::NoteStep::NoteStep(Session& owner, const juce::String& actionName) : session(owner)
+{
+    if (session.noteGestureOpen || session.noteVelocityGestureDepth > 0)
+        return;
+    session.edit->getUndoManager().beginNewTransaction(actionName);
+    // As a gesture would: a note edit this one makes on the way is its own.
+    session.noteGestureOpen = true;
+    opened = true;
+}
+
+Session::NoteStep::~NoteStep()
+{
+    if (!opened)
+        return;
+    session.noteGestureOpen = false;
+    session.closeUndoStep();
+}
+
+void Session::beginNoteGesture(juce::String actionName)
+{
+    edit->getUndoManager().beginNewTransaction(actionName);
+    noteGestureOpen = true;
+    updateUndoTimerHold();
+}
+
+void Session::endNoteGesture()
+{
+    closeUndoStep();
+    noteGestureOpen = false;
+    updateUndoTimerHold();
+}
 
 void Session::beginNoteVelocityGesture(const juce::String& actionName)
 {
@@ -188,6 +220,7 @@ void Session::beginNoteVelocityGesture(const juce::String& actionName)
         noteVelocitiesChangedInGesture = false;
         edit->getUndoManager().beginNewTransaction(actionName);
     }
+    updateUndoTimerHold();
 }
 
 void Session::endNoteVelocityGesture()
@@ -196,7 +229,8 @@ void Session::endNoteVelocityGesture()
         return;
     if (--noteVelocityGestureDepth > 0)
         return;
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
+    updateUndoTimerHold();
     if (std::exchange(noteVelocitiesChangedInGesture, false))
         sendSynchronousChangeMessage();
 }
@@ -262,13 +296,17 @@ void Session::setEditorStepCount(int newSteps)
     const auto clamped = juce::jlimit(defaultSteps, 64, newSteps);
     if (patternClip == nullptr || editorStepResolution() == clamped)
         return;
-    patternClip->state.setProperty(editorStepsID, clamped, &edit->getUndoManager());
+    // How finely the editor divides the clip is how the clip is looked at, as
+    // a grid is, so no undo step: written through the history it was an
+    // unnamed step left open, which the next unbracketed write joined.
+    patternClip->state.setProperty(editorStepsID, clamped, nullptr);
     markModified(patternTrackIndex(), ModelChange::notes);
     sendSynchronousChangeMessage();
 }
 
 void Session::setNote(int step, int pitch, bool enabled)
 {
+    const NoteStep undoStep(*this, "Draw notes");
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     if (patternClip == nullptr)
         return;
@@ -347,11 +385,13 @@ int Session::noteLengthSteps(int step, int pitch) const
 
 juce::Result Session::resizeNote(int step, int pitch, int lengthSteps)
 {
+    const NoteStep undoStep(*this, "Resize note");
     return resizeNote(step, pitch, static_cast<double>(lengthSteps));
 }
 
 juce::Result Session::resizeNote(int step, int pitch, double lengthSteps)
 {
+    const NoteStep undoStep(*this, "Resize note");
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     if (patternClip == nullptr)
         return noOpenClip();
@@ -387,6 +427,7 @@ juce::Result Session::resizeNote(int step, int pitch, double lengthSteps)
 
 juce::Result Session::resizeNote(const juce::ValueTree& state, double lengthSteps)
 {
+    const NoteStep undoStep(*this, "Resize note");
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     if (patternClip == nullptr)
         return noOpenClip();
@@ -422,6 +463,7 @@ juce::Result Session::resizeNote(const juce::ValueTree& state, double lengthStep
 
 juce::Result Session::resizeNoteFromLeft(double startStep, int pitch, double newStartStep)
 {
+    const NoteStep undoStep(*this, "Resize note");
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     if (patternClip == nullptr)
         return noOpenClip();
@@ -451,6 +493,7 @@ juce::Result Session::resizeNoteFromLeft(double startStep, int pitch, double new
 
 juce::Result Session::resizeNoteFromLeft(const juce::ValueTree& state, double newStartStep)
 {
+    const NoteStep undoStep(*this, "Resize note");
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     if (patternClip == nullptr)
         return noOpenClip();
@@ -478,6 +521,7 @@ juce::Result Session::resizeNoteFromLeft(const juce::ValueTree& state, double ne
 
 bool Session::ensurePatternLengthSteps(int requiredSteps)
 {
+    const NoteStep undoStep(*this, "Lengthen clip");
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     if (requiredSteps <= editorStepCount())
         return true;
@@ -508,6 +552,7 @@ bool Session::ensurePatternLengthSteps(int requiredSteps)
 
 juce::Result Session::fillNoteToClipEnd(int step, int pitch)
 {
+    const NoteStep undoStep(*this, "Resize note");
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     if (patternClip == nullptr)
         return noOpenClip();
@@ -543,6 +588,7 @@ juce::Result Session::fillNoteToClipEnd(int step, int pitch)
 
 juce::Result Session::fillNoteToClipEnd(const juce::ValueTree& state)
 {
+    const NoteStep undoStep(*this, "Resize note");
     if (patternClip == nullptr)
         return noOpenClip();
     auto& sequence = pattern().getSequence();
@@ -557,6 +603,7 @@ juce::Result Session::fillNoteToClipEnd(const juce::ValueTree& state)
 
 juce::Result Session::moveNote(int sourceStep, int sourcePitch, int targetStep, int targetPitch)
 {
+    const NoteStep undoStep(*this, "Move notes");
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     if (patternClip == nullptr)
         return noOpenClip();
@@ -598,6 +645,7 @@ juce::Result Session::moveNote(int sourceStep, int sourcePitch, int targetStep, 
 
 juce::Result Session::moveNotes(const std::vector<std::pair<int, int>>& sources, int stepDelta, int pitchDelta)
 {
+    const NoteStep undoStep(*this, "Move notes");
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     if (sources.empty() || (stepDelta == 0 && pitchDelta == 0))
         return juce::Result::ok();
@@ -660,6 +708,7 @@ juce::Result Session::moveNotes(const std::vector<std::pair<int, int>>& sources,
 juce::Result Session::moveNotes(const std::vector<juce::ValueTree>& states, double stepDelta, int pitchDelta,
                                 const std::vector<int>& lanes)
 {
+    const NoteStep undoStep(*this, "Move notes");
     if (states.empty() || (std::abs(stepDelta) < 0.0001 && pitchDelta == 0))
         return juce::Result::ok();
     if (patternClip == nullptr)
@@ -764,6 +813,7 @@ juce::Result Session::moveNotes(const std::vector<juce::ValueTree>& states, doub
 juce::Result Session::redistributeNotes(const std::vector<juce::ValueTree>& states, int divisions,
                                         std::vector<juce::ValueTree>& replacementStates)
 {
+    const NoteStep undoStep(*this, "Split notes");
     replacementStates.clear();
     divisions = juce::jlimit(2, 32, divisions);
     if (states.empty())

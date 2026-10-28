@@ -175,7 +175,7 @@ juce::Result Session::setDeviceSidechainSource(int track, int slot, int sourceTr
         rewire(*plugin);
     }
     followSidechain(*plugin, routed);
-    edit->getUndoManager().beginNewTransaction();
+    closeUndoStep();
     // The routing belongs to the device, on its own track: the source track
     // plays as it did.
     markModified(track, ModelChange::devices);

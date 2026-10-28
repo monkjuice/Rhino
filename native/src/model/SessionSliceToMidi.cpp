@@ -330,7 +330,7 @@ juce::Result Session::sliceClipToNewMidiTrack(te::EditItemID id, double everyBea
     }
     makeRoomForClip(*midi);
     refreshLoop();
-    undo.beginNewTransaction();
+    closeUndoStep();
 
     if (summary != nullptr)
         *summary = {audioTracks().indexOf(made), midi->itemID, count};

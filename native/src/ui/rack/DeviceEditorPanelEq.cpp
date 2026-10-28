@@ -705,8 +705,16 @@ bool DeviceEditorPanel::handleEqDoubleClick(const juce::MouseEvent& event)
                                  device->spectrumRate(), position.toFloat());
     if (band < 0)
         return false;
-    // The drag that the first click of this double-click started never
-    // moved, so there is nothing to undo -- just stop holding the band.
+    // The second click of this double-click took hold of the band, as every
+    // press does, and never moved, so there is nothing to undo -- just let go.
+    // Ended here, since the release that follows finds nothing held: left
+    // open, the two gestures kept every later knob turn from being announced
+    // and held the engine's undo timer off for good.
+    if (eqDragging && eqDragBand >= 0)
+    {
+        session.endDeviceParameterGesture(track, pluginSlot, RhinoEqDevice::frequencyParameter(eqDragBand));
+        session.endDeviceParameterGesture(track, pluginSlot, RhinoEqDevice::gainParameter(eqDragBand));
+    }
     eqDragging = false;
     eqDragBand = -1;
     session.editDeviceSettings(track, pluginSlot, "Switch EQ band", [device, band]

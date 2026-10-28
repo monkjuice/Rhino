@@ -231,7 +231,7 @@ juce::Result Session::groupTracks(std::vector<int> tracks, const juce::String& n
     ensureSceneSlots();
     ensureTrackMixers();
     applyGroupGathering(plan, bus.get());
-    undoManager.beginNewTransaction();
+    closeUndoStep();
     // Tracks moved and a group's members changed; no kind says that, so
     // every deck is counted behind.
     markModified(-1, ModelChange::unknown);
@@ -274,7 +274,7 @@ juce::Result Session::addTracksToGroup(std::vector<int> tracks, int groupId)
     auto& undoManager = edit->getUndoManager();
     undoManager.beginNewTransaction("Add to group");
     applyGroupGathering(plan, nullptr);
-    undoManager.beginNewTransaction();
+    closeUndoStep();
     markModified(-1, ModelChange::unknown);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
@@ -296,7 +296,7 @@ juce::Result Session::removeTrackFromGroup(int track)
     auto& undoManager = edit->getUndoManager();
     undoManager.beginNewTransaction("Remove from group");
     applyGroupGathering(gatherTracks(stack, moving, lastStaying(*group, moving), group->parent), nullptr);
-    undoManager.beginNewTransaction();
+    closeUndoStep();
     markModified(-1, ModelChange::unknown);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
@@ -374,7 +374,7 @@ juce::Result Session::ungroupTracks(int groupId)
     if (juce::isPositiveAndBelow(busTrack, tracks.size()))
         edit->deleteTrack(tracks[busTrack]);
     reconcileTrackGroups();
-    undoManager.beginNewTransaction();
+    closeUndoStep();
     refreshLoop();
     markModified(-1, ModelChange::unknown);
     sendSynchronousChangeMessage();

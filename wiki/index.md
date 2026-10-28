@@ -83,7 +83,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Track groups (bus tracks)](pages/track-groups.md) — Ctrl+G gathers tracks, buses included, under a bus track that their audio feeds; groups nest up to ten levels, a nested bus feeding the one around it; the structure is positional, its rules a pure header (model/GroupTree.h), and repaired after every reorder.
 - [Track inputs and monitoring](pages/inputs-and-monitoring.md) — Each track names its own MIDI or audio input and its own Off, Auto or In monitoring, all resolved to engine devices by applyRecordArming.
 - [Track level meters](pages/level-meters.md) — A stereo peak meter on every track card and on the main row, fed once a frame by Session::takeOutputLevels from one engine level meter behind each track's fader and the main output's own measurer, drawn on Ardour's IEC 60268-18 scale and gated on the engine's mute and solo.
-- [Transport, tempo and loop](pages/transport.md) — Play and stop, the loop that is always on, the single tempo and the time signature, and what Rhino rescales by hand when the tempo moves.
+- [Transport, tempo and loop](pages/transport.md) — Play, pause and stop (a pause returns to the arrangement's selection or the loop's start, Stop to the top of the song), the loop that is always on, the single tempo and the time signature, and what Rhino rescales by hand when the tempo moves.
 - [Tuner](pages/tuner.md) — Live 12's Tuner on the device SDK - a meter that leaves the audio bit-identical, tracking 30 Hz to 2 kHz with Rhino Tune's YIN tracker and publishing a reading and a history as atomics to a hand-built face with Classic (Target or Strobe) and Histogram views, whose switches are the device's own controls.
 
 ## Concepts

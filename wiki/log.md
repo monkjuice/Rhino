@@ -1545,3 +1545,13 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/track-groups.md (the group drag: block by `withGroupsWhole`, destination and `landed`, no-op inside the block, k single moves rather than `arrangeTrackOrder`, claim and depth checks, undo names; a drop down onto a folded group lands below it, single tracks too; the card gesture's drop line, selection and status; the "moves only the bus" limitation removed; the second `GroupNesting.inc` block)
 - updated: pages/arrangement-view.md (a bus card carries its group; the folded-group drop)
 - updated: pages/locked-executable-lnk1104.md (`.inuse` copies pile up, eight on 2026-10-27, and are safe to delete once nothing runs from them)
+
+## [2026-10-27] update | A pause returns to the selection or the loop's start; Stop goes to the top of the song (38677ca)
+- source: the main agent's brief, checked against native/src/model/SessionTransport.cpp, ArrangementSelection.cpp and MainComponent.cpp (commit `38677ca`)
+- updated: pages/transport.md (summary; the section "Stop goes back to the line" rewritten as "Pause returns to the passage, Stop to the top": the optional playback start, the loop fallback, `returnToStart` gone, `stopRecording` unchanged, the user's decisions on the note editor and on no punch range, the test; the loop span is where a pause returns; `locate` no longer sets the playback start)
+- updated: pages/arrangement-view.md (the selection is where a pause returns, set and cleared in `setTimeSelection`/`clearTimeSelection` alone)
+- updated: pages/region-editing.md (the insert point and any selection are where a pause returns)
+- updated: pages/session-model.md (`locate` moves the transport and nothing else)
+- updated: pages/app-shell.md (`StopButton` deleted; rewind and Stop both call `Session::stop`)
+- updated: pages/ableton-push.md (Play pauses; Shift+Play is Stop, the top of the song)
+- updated: index.md (the transport summary)

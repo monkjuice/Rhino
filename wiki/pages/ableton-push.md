@@ -4,7 +4,7 @@ type: component
 summary: Rhino drives the original Push itself on its User port and keeps all four of its ports from the engine; the pads are translated into a scale or a Drum Rack's bank on the MIDI thread and play like any keyboard, and the buttons and encoders become Rhino's commands, never a track's MIDI.
 tags: [rhino, midi, controller, hardware]
 sources: []
-updated: 2026-10-23
+updated: 2026-10-27
 ---
 
 # Ableton Push 1
@@ -47,7 +47,7 @@ The Push 1 turns pad pressure into velocity itself, through a threshold and a cu
 
 ## Controls
 
-- **Play** (Shift: return to start) and **Record** go through shell callbacks, so the DJ view's rules hold: there Play toggles the focused deck, and Record replies that recording belongs to the arrangement.
+- **Play** (while rolling, a pause; Shift: `Session::stop`, the top of the song, since 2026-10-27; [Transport](transport.md#pause-returns-to-the-passage-stop-to-the-top)) and **Record** go through shell callbacks, so the DJ view's rules hold: there Play toggles the focused deck, and Record replies that recording belongs to the arrangement.
 - **Other buttons.** Metronome toggles the click. Tap tempo uses the mean of the last four intervals, starts over after a 2 s pause, and makes one run of taps a single tempo gesture that closes 2.1 s after the last tap. Undo (Shift: redo). Accent.
 - **Octave up and down** move the layout between octaves -1 and 8. On a Drum Rack they move the rack's own bank by 16 through `showDrumBank`, so the rack's face follows.
 - **Scales** puts the root, the scale (`core/dsp/ScaleQuantizer.h`) and in key/chromatic on encoders 1-3, one step every 6 detents; pressing it again returns to the previous mode. The layout is kept per machine through `Session::controllerSetting` (`push.*` keys in the settings file), and never read or written under the test runners.

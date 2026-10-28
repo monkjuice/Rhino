@@ -1,7 +1,7 @@
 ---
 title: Transport, tempo and loop
 type: component
-summary: Play and stop, the loop that is always on, the single tempo and the time signature, and what Rhino rescales by hand when the tempo moves.
+summary: Play, pause and stop (a pause returns to the arrangement's selection or the loop's start, Stop to the top of the song), the loop that is always on, the single tempo and the time signature, and what Rhino rescales by hand when the tempo moves.
 tags: [rhino, transport, tempo]
 sources: []
 updated: 2026-10-27
@@ -13,13 +13,29 @@ updated: 2026-10-27
 and the loop. Tracktion's `TransportControl` does the playing; the control bar's drag fields are `ControlBarFields.*`
 and its readout is `TransportDisplay.*` ([App shell and control bar](app-shell.md)).
 
-## Stop goes back to the line, not to the top
+## Pause returns to the passage, Stop to the top
 
-`Session::stop` returns the transport to `playbackStartSeconds`, the selection line the arrangement last put down
-(`setPlaybackStart`, see [Arrangement view](arrangement-view.md)), so stopping and playing again repeats the passage
-being worked on. `returnToStart` — a double-click on Stop, or the rewind glyph — goes to zero and keeps it there until
-the next click in the arrangement. Stopping also sends a MIDI panic to every plugin list (`releasePlayingNotes`) and
-finishes a recording that was running. Pressing Play during a count-in calls the count-in off.
+The user's rules, since commit `38677ca` (2026-10-27):
+
+- **Pause** (Play while rolling, Space, the Push's Play) is `Session::togglePlayback`. It stops, then puts the
+  transport at `playbackStartSeconds` if set, else at `loopRange().getStart()`: the start of the span dragged on the
+  ruler, or 0 under the automatic loop. `playbackStartSeconds` is a `std::optional<double>`. The arrangement sets it
+  while it has a selection of any kind (a clicked clip, a swept span, the insert point a lane or ruler click puts
+  down) and clears it when it has none (Escape, a click on empty header space, a sync that drops it); see
+  [Arrangement view](arrangement-view.md#rules-worth-knowing). `newProject` and `restoreProject` reset it. Until then a
+  pause left the playhead where it stopped.
+- **Stop** (the Stop button, the rewind glyph, the Push's Shift+Play, opening the DJ view while rolling) is
+  `Session::stop`, which always goes to 0, whatever is selected or looped. Until then Stop went back to the selection
+  line, and only a double-click on Stop or the rewind glyph went to 0 (`returnToStart`, deleted with the shell's
+  `StopButton`).
+- Both send a MIDI panic to every plugin list (`releasePlayingNotes`) and finish a recording that was running. Ending a
+  take with the record button or F9 (`stopRecording`) still leaves the playhead where the take ended. Play during a
+  count-in calls the count-in off.
+- **Decided with the user:** only the arrangement's selection counts, not the note editor's, whose ruler click only
+  moves the transport. The loop span marks only where a pause returns: it is not a punch-in/out range, and recording
+  is unchanged.
+- `RegionClipboard.inc` checks stop → 0 with the selection kept, pause → the selection's start, pause with the
+  selection cleared → the loop's start (2.0 under a 2-6 loop), then 0 with the loop cleared.
 
 ## The loop is always on
 
@@ -27,7 +43,8 @@ finishes a recording that was running. Pressing Play during a count-in calls the
 loop band when there is one — `setLoopRange` refuses anything under 0.02 s, and a right-click on the band clears it —
 and otherwise everything up to the end of the last clip, or one bar in an empty document. The readout asks the same
 function as the transport, and the clip-changing paths in `Session*.cpp` call `refreshLoop` after they edit. Recording
-lifts the loop for its duration, so a take cannot wrap over itself ([Recording and the count-in](recording.md)).
+lifts the loop for its duration, so a take cannot wrap over itself ([Recording and the count-in](recording.md)). With
+nothing selected in the arrangement, a pause returns to the range's start; the range bounds nothing for recording.
 
 The dragged span lives on `Session`, not in the document: it is not saved with the project, and both `newProject` and
 (since commit `a04b407`) `restoreProject` clear it, so a span dragged in one document no longer stays in force after
@@ -79,7 +96,7 @@ engine's ([Recording and the count-in](recording.md)).
 
 ## What the views read
 
-A view or the shell never opens the engine's transport; `Session` answers (2026-10-23, [Dependency direction](dependency-direction.md#the-views-ask-session-not-the-engine)). `isPlaying()`, `playheadSeconds()` (the audible position while playing, read on every display refresh; the transport's own while standing, [Playhead rendering](playhead.md)), `locate(seconds)`, `songLengthSeconds()`, `loopRange()`, and the tempo map as `secondsToBeats()` and `beatsToSeconds()`. `locate` moves the transport, rolling or not, and makes the spot the playback start, so stop returns to it. A click on the note editor's ruler used to move the transport alone; it now sets the playback start as the arrangement's does, a small behaviour change. The shell hears the transport start and stop, and the undo history change, through the relayed `Session::transportState` and `undoHistory`, which do not wake the panels listening to the session ([Session, the model](session-model.md#reading-the-document)).
+A view or the shell never opens the engine's transport; `Session` answers (2026-10-23, [Dependency direction](dependency-direction.md#the-views-ask-session-not-the-engine)). `isPlaying()`, `playheadSeconds()` (the audible position while playing, read on every display refresh; the transport's own while standing, [Playhead rendering](playhead.md)), `locate(seconds)`, `songLengthSeconds()`, `loopRange()`, and the tempo map as `secondsToBeats()` and `beatsToSeconds()`. `locate` moves the transport, rolling or not, and nothing else: since 2026-10-27 it no longer sets where a pause returns (it did from 2026-10-23, so a click on the note editor's ruler did too), which only `setPlaybackStart` and `clearPlaybackStart` change ([above](#pause-returns-to-the-passage-stop-to-the-top)). The shell hears the transport start and stop, and the undo history change, through the relayed `Session::transportState` and `undoHistory`, which do not wake the panels listening to the session ([Session, the model](session-model.md#reading-the-document)).
 
 ## Releasing the device
 

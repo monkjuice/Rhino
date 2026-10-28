@@ -63,7 +63,7 @@ void MainComponent::layoutControlBar()
     place(signatureField, signatureWidth, fieldHeight, barControlTop, sectionGap);
     rule(x - sectionGap / 2);
 
-    for (auto* button : std::initializer_list<juce::Component*>{&rewind, &stop, &play, &record})
+    for (auto* button : std::initializer_list<juce::Component*>{&stop, &play, &record})
         place(*button, transportSize, transportSize, transportTop, barTransportGap);
     x += sectionGap - barTransportGap;
 

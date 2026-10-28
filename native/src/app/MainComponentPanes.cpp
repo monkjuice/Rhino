@@ -17,7 +17,7 @@ void MainComponent::setDjViewOpen(bool open)
     // focused deck's play key.
     if (open && session.isPlaying())
         session.stop();
-    for (auto* control : std::initializer_list<juce::Component*>{&play, &stop, &rewind, &record})
+    for (auto* control : std::initializer_list<juce::Component*>{&play, &stop, &record})
         control->setEnabled(!open);
     if (open)
         followDeck(djView.selectedDeck(), false);

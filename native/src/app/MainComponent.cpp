@@ -265,7 +265,6 @@ MainComponent::MainComponent(Session& s)
     metronomeMenu.onClick = [this] { showMetronomeMenu(); };
     play.onClick = [this] { session.togglePlayback(); };
     stop.onClick = [this] { session.stop(); };
-    rewind.onClick = [this] { session.stop(); };
     record.onClick = [this] { toggleRecording(); };
     undo.setTooltip("Undo - take back the last change to the project. The arrow dims when there is "
                     "nothing left to take back.");
@@ -273,7 +272,6 @@ MainComponent::MainComponent(Session& s)
     metronome.setTooltip("Metronome - a click on every beat while the transport is rolling.");
     metronomeMenu.setTooltip("Metronome settings - whether the first beat of a bar is emphasised, how loud "
                              "the click is, and how many bars it counts in before a recording.");
-    rewind.setTooltip("Return to the start of the song");
     stop.setTooltip("Stop and return to the start of the song");
     record.setTooltip("Record into the armed tracks  (F9)");
 
@@ -303,11 +301,6 @@ MainComponent::MainComponent(Session& s)
     {
         g.setColour(colour);
         icons::strokeFitted(g, icons::chevronDown(), area.withSizeKeepingCentre(9.0f, 5.0f), 1.3f);
-    });
-    rewind.setPainter([](juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour)
-    {
-        g.setColour(colour);
-        icons::fillFitted(g, icons::returnToStart(), area.withSizeKeepingCentre(area.getWidth() * 0.88f, area.getHeight() * 0.7f));
     });
     stop.setPainter([](juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour)
     {
@@ -341,7 +334,7 @@ MainComponent::MainComponent(Session& s)
         icons::drawCurvedArrow(g, area, false, 1.5f);
     });
     for (auto* component : std::initializer_list<juce::Component*>{
-             &infoView, &position, &play, &stop, &record, &rewind,
+             &infoView, &position, &play, &stop, &record,
              &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &noteTools, &audioClip, &arrangement, &djView,
              &djToggle, &arrangementToggle, &rack, &tempoBox, &signatureField, &undo, &redo, &metronome, &metronomeMenu,
              &patternLabel, &editorResolution, &editorZoomOut, &editorZoomIn,

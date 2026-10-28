@@ -39,14 +39,6 @@ juce::Path stop()
     return path;
 }
 
-juce::Path returnToStart()
-{
-    juce::Path path;
-    path.addRectangle(0.06f, 0.04f, 0.17f, 0.92f);
-    path.addTriangle(0.96f, 0.04f, 0.96f, 0.96f, 0.30f, 0.5f);
-    return path;
-}
-
 void drawCurvedArrow(juce::Graphics& g, juce::Rectangle<float> area, bool pointingLeft, float lineWidth)
 {
     const auto size = std::min(area.getWidth(), area.getHeight());

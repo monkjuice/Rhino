@@ -22,7 +22,6 @@ juce::Path metronome();
 // Transport. Each is drawn inside a unit square and scaled by the caller.
 juce::Path play();
 juce::Path stop();
-juce::Path returnToStart();
 
 // The two curved arrows, which are one shape and its mirror. These draw
 // rather than return a path, because an arrow is a stroked arc with a *filled*
@@ -58,7 +57,7 @@ namespace rhino
 // pixel glyph keep a thirty-four pixel target without looking like a key on a
 // keyboard. Disabled dims the glyph instead of removing it, so a bar with
 // nothing to undo still reads as a bar with an undo in it.
-// Not final: the stop button adds double-click handling on top of it.
+// Not final: the view switch's ViewToggle builds on it.
 class IconButton : public juce::Button
 {
 public:

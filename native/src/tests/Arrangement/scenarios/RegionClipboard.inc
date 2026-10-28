@@ -93,12 +93,12 @@
                 require(close(view.timeSelection.start, 4.375) && close(view.timeSelection.end, 4.75),
                         "and the region is still the span that was dragged");
 
-                // Stop returns the transport to the line rather than to the top
-                // of the song, so playing again repeats the passage being
-                // worked on rather than the whole arrangement.
+                // Stop is the top of the song, whatever is selected.
                 session.stop();
-                require(close(session.playheadSeconds(), 4.375),
-                        "Stop returns the playhead to the line the selection is on");
+                require(close(session.playheadSeconds(), 0.0),
+                        "Stop puts the playhead at the top of the song whatever the selection is on");
+                require(close(view.timeSelection.start, 4.375),
+                        "and leaves the selection it ignored where it was");
 
                 // The line only reaches the lanes while the transport is
                 // actually moving. Parked - which is what every click leaves
@@ -109,21 +109,36 @@
                 session.togglePlayback();
                 view.updatePlayhead();
                 require(view.playheadSweepsLanes, "and it sweeps the lanes once the transport rolls");
-                session.stop();
-                view.updatePlayhead();
-                require(!view.playheadSweepsLanes, "and goes back to the ruler when it stops");
 
-                // Double-clicking stop goes past that line to the top of the
-                // song, and takes the playback start with it so a later stop
-                // agrees with where the transport already is.
-                session.returnToStart();
-                require(close(session.playheadSeconds(), 0.0) && close(session.playbackStart(), 0.0),
-                        "Returning to start puts the playhead at the top of the song whatever the selection is on");
-                require(close(view.timeSelection.start, 4.375),
-                        "and leaves the selection it ignored where it was");
-                session.stop();
+                // A pause goes back to the passage being worked on, so playing
+                // again repeats it: the selection's start while there is one.
+                session.togglePlayback();
+                view.updatePlayhead();
+                require(!session.isPlaying() && close(session.playheadSeconds(), 4.375),
+                        "Pausing returns the playhead to the start of the selection");
+                require(!view.playheadSweepsLanes, "and the line goes back to the ruler when it stops");
+
+                // With nothing selected a pause goes to the start of the loop:
+                // the span dragged on the ruler, or the top of the song when
+                // there is none. The selection is cleared and put back the
+                // way Escape and a click on the region would.
+                view.clearTimeSelection();
+                session.setLoopRange(2.0, 6.0);
+                session.togglePlayback();
+                session.togglePlayback();
+                require(close(session.playheadSeconds(), 2.0),
+                        "With nothing selected, pausing returns the playhead to the start of the loop");
+                session.clearManualLoopRange();
+                session.togglePlayback();
+                session.togglePlayback();
                 require(close(session.playheadSeconds(), 0.0),
-                        "so a stop after it holds at the top rather than jumping back to the line");
+                        "and with no loop dragged, to the top of the song");
+                view.setTimeSelection(4.375, 4.75, 1, 1);
+                session.togglePlayback();
+                session.togglePlayback();
+                require(close(session.playheadSeconds(), 4.375),
+                        "and a selection made again is where the next pause returns");
+                session.stop();
 
                 // The upper row is the clip: it selects, and the line goes to
                 // the clip's own start so play begins with it.

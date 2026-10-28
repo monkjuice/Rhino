@@ -231,7 +231,7 @@ void Session::newProject()
     clipsBeforeRecording.clear();
     recordingStart = -1.0;
     recordingStarted = false;
-    playbackStartSeconds = 0.0;
+    playbackStartSeconds.reset();
     lastTouchedParameter = {};
     automationRuntime.clear();
     mirroredCurves.clear();
@@ -481,7 +481,7 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
     clipsBeforeRecording.clear();
     recordingStart = -1.0;
     recordingStarted = false;
-    playbackStartSeconds = 0.0;
+    playbackStartSeconds.reset();
     // Before the outgoing edit goes: these hold its plugins alive, and a
     // plugin must not outlive the edit it belongs to.
     mirroredCurves.clear();

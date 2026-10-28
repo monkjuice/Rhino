@@ -156,8 +156,7 @@ private:
     // they are spelt out. Nothing was dropped - see showEditMenu.
     IconButton metronome {"Metronome"}, metronomeMenu {"Metronome settings"};
     IconButton undo {"Undo"}, redo {"Redo"};
-    IconButton play {"Play"}, rewind {"Return to start"};
-    StopButton stop;
+    IconButton play {"Play"}, stop {"Stop"}, rewind {"Return to start"};
     RecordButton record;
     IconButton browserToggle {"Browser"};
     juce::TextButton editorToggle {"Clip"}, rackToggle {"Devices"};

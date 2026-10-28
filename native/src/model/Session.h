@@ -286,19 +286,17 @@ public:
     void stopNoteAudition();
     // The pitch sounding, or -1.
     int auditionedPitch() const { return auditionPitch; }
+    // Plays, or pauses: a pause puts the transport back on the playback start
+    // while there is one, and otherwise on the start of the loop, which is the
+    // top of the song unless a span is dragged on the ruler.
     void togglePlayback();
+    // Stops and puts the transport at the top of the song.
     void stop();
-    // The way back to the top of the song without first clicking there. It
-    // takes the playback start with it, so the next stop lands at zero too
-    // rather than jumping back to a selection that is no longer where the
-    // transport is.
-    void returnToStart();
-    // Where playback starts from: the line the arrangement's selection sits on.
-    // Stop returns the transport here rather than to the top of the song, so
-    // play after stop picks up where the last click put the line. The view
-    // sets it; nothing here knows how it was chosen.
+    // Where a pause returns the transport: the start of the arrangement's
+    // selection, set while it has one and cleared when it has none. The view
+    // keeps it; nothing here knows how it was chosen.
     void setPlaybackStart(double seconds);
-    double playbackStart() const { return playbackStartSeconds; }
+    void clearPlaybackStart();
     // The transport and the song's shape, read here so that no view opens the
     // engine (wiki: dependency-direction).
     bool isPlaying() const;
@@ -306,9 +304,9 @@ public:
     // latency-adjusted position, read on every display refresh, which no UI
     // clock can drift from; standing still, the transport's position.
     double playheadSeconds() const;
-    // Puts the transport at `seconds`, rolling or not, and makes it the
-    // playback start, so stop returns there. A transport already there is
-    // left alone.
+    // Puts the transport at `seconds`, rolling or not. A transport already
+    // there is left alone. Where a pause returns is the playback start's to
+    // say, not this.
     void locate(double seconds);
     double songLengthSeconds() const;
     // The tempo map, for the views that rule the timeline.
@@ -2337,9 +2335,9 @@ private:
     std::vector<std::vector<RecordingNote>> liveNotes;
     juce::int64 liveNoteRevision = 0;
     double recordingStart = -1.0;
-    // Where Stop puts the transport back to. A fresh document has never had a
-    // line placed on it, so it is the top of the song until something moves it.
-    double playbackStartSeconds = 0.0;
+    // Where a pause puts the transport back to, while the arrangement has a
+    // selection; with none, a pause goes to the start of the loop.
+    std::optional<double> playbackStartSeconds;
     // record() is asked for on the message thread and begins on the audio
     // thread, so there is a window in which a recording has been started and
     // the transport still reports that it is not recording. Without this the

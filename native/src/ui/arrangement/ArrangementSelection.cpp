@@ -28,6 +28,10 @@ void Arrangement::setTimeSelection(double start, double end, int firstTrack, int
     timeSelection.firstTrack = juce::jlimit(0, lastLane, std::min(firstTrack, lastTrack));
     timeSelection.lastTrack = juce::jlimit(timeSelection.firstTrack, lastLane, std::max(firstTrack, lastTrack));
     timeSelection.active = true;
+    // A selection of any kind - a clip, a span, the insert line - is where a
+    // pause goes back to, so the session hears every one, made by a click or
+    // by a paste, a move or a sync alike.
+    session.setPlaybackStart(timeSelection.start);
 }
 
 // A click with no drag. Paste lands here, and so does the material a duplicate
@@ -41,18 +45,19 @@ void Arrangement::clearTimeSelection()
 {
     timeSelection = {};
     regionSelecting = false;
+    // With nothing selected a pause goes back to the start of the loop.
+    session.clearPlaybackStart();
 }
 
 // Where the line is put is where playback starts from. The transport follows
 // it only while it is stopped: a click made during playback would otherwise
-// jump the song out from under whoever made it. The session is told either
-// way, because Stop returns there rather than to the top of the song.
+// jump the song out from under whoever made it, and a pause returns to the
+// line instead (setTimeSelection has already told the session).
 void Arrangement::moveTransportToSelectionStart()
 {
     if (!timeSelection.active)
         return;
     const auto seconds = std::max(0.0, timeSelection.start);
-    session.setPlaybackStart(seconds);
     if (session.isPlaying() || session.isCountingIn())
         return;
     session.locate(seconds);

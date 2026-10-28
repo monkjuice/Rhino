@@ -323,8 +323,7 @@ private:
     void setInsertPoint(double seconds, int track);
     void clearTimeSelection();
     // The line the region starts at is where playback begins, so putting it
-    // down moves the transport onto it and tells the session where Stop should
-    // return to.
+    // down moves the stopped transport onto it. A pause returns there too.
     void moveTransportToSelectionStart();
     // Widens the selection to take a clip in: Shift-click, and Ctrl-click,
     // on a clip's header.

@@ -162,6 +162,12 @@ void Session::togglePlayback()
     {
         const auto wasRecording = transport.isRecording();
         transport.stop(false, false);
+        // A pause goes back to where the passage being worked on begins, so
+        // play after it repeats that passage: the arrangement's selection
+        // while there is one, and otherwise the loop, which with no span
+        // dragged on the ruler starts at the top of the song.
+        transport.setPosition(tracktion::core::TimePosition::fromSeconds(
+            playbackStartSeconds.value_or(loopRange().getStart().inSeconds())));
         releasePlayingNotes();
         if (wasRecording) finishRecording();
     }
@@ -171,6 +177,11 @@ void Session::togglePlayback()
 void Session::setPlaybackStart(double seconds)
 {
     playbackStartSeconds = std::isfinite(seconds) ? std::max(0.0, seconds) : 0.0;
+}
+
+void Session::clearPlaybackStart()
+{
+    playbackStartSeconds.reset();
 }
 
 bool Session::isPlaying() const
@@ -200,7 +211,6 @@ double Session::playheadSeconds() const
 void Session::locate(double seconds)
 {
     seconds = std::isfinite(seconds) ? std::max(0.0, seconds) : 0.0;
-    setPlaybackStart(seconds);
     auto& transport = edit->getTransport();
     if (std::abs(transport.getPosition().inSeconds() - seconds) < 1.0e-9)
         return;
@@ -252,23 +262,11 @@ void Session::stop()
     cancelCountIn();
     const auto wasRecording = transport.isRecording();
     transport.stop(false, false);
-    // Back to the line the arrangement's selection is on rather than to zero,
-    // so stopping and playing again repeats the passage that was being worked
-    // on. A document nothing has been clicked on still starts at the top.
-    transport.setPosition(tracktion::core::TimePosition::fromSeconds(playbackStartSeconds));
+    // Stop is the top of the song, whatever is selected or looped; going back
+    // to the passage being worked on is what a pause does.
+    transport.setPosition({});
     releasePlayingNotes();
     if (wasRecording) finishRecording();
-}
-
-void Session::returnToStart()
-{
-    stop();
-    // Stop parks the transport on the line the arrangement is working from;
-    // this overrides that for good rather than for one press, so what the next
-    // stop does agrees with where the transport already is. A click in the
-    // arrangement picks a new line and takes it back.
-    playbackStartSeconds = 0.0;
-    edit->getTransport().setPosition({});
 }
 
 void Session::releasePlayingNotes()

@@ -48,7 +48,7 @@ MainComponent::MainComponent(Session& s)
         if (djViewOpen) djView.togglePlayFocused();
         else session.togglePlayback();
     };
-    push.returnToStart = [this] { if (!djViewOpen) session.returnToStart(); };
+    push.returnToStart = [this] { if (!djViewOpen) session.stop(); };
     push.record = [this]
     {
         if (djViewOpen) logStatus("Recording is the arrangement's: press Tab to return to it");
@@ -264,9 +264,8 @@ MainComponent::MainComponent(Session& s)
     metronome.onClick = [this] { session.setClickTrackEnabled(metronome.getToggleState()); };
     metronomeMenu.onClick = [this] { showMetronomeMenu(); };
     play.onClick = [this] { session.togglePlayback(); };
-    stop.onStop = [this] { session.stop(); };
-    stop.onReturnToStart = [this] { session.returnToStart(); };
-    rewind.onClick = [this] { session.returnToStart(); };
+    stop.onClick = [this] { session.stop(); };
+    rewind.onClick = [this] { session.stop(); };
     record.onClick = [this] { toggleRecording(); };
     undo.setTooltip("Undo - take back the last change to the project. The arrow dims when there is "
                     "nothing left to take back.");
@@ -275,7 +274,7 @@ MainComponent::MainComponent(Session& s)
     metronomeMenu.setTooltip("Metronome settings - whether the first beat of a bar is emphasised, how loud "
                              "the click is, and how many bars it counts in before a recording.");
     rewind.setTooltip("Return to the start of the song");
-    stop.setTooltip("Stop and return to the selected line  (double-click for the start of the song)");
+    stop.setTooltip("Stop and return to the start of the song");
     record.setTooltip("Record into the armed tracks  (F9)");
 
     // What each control on the bar draws. Kept together rather than spread
@@ -422,7 +421,8 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster*)
     // transport starts, and at fourteen pixels the two shapes are too alike
     // to tell apart at a glance in any case.
     play.setToggleState(playing, juce::dontSendNotification);
-    play.setTooltip(playing ? "Pause the transport." : "Play - start the transport from the playhead.");
+    play.setTooltip(playing ? "Pause - back to the start of the selection, or of the loop when nothing is selected."
+                            : "Play - start the transport from the playhead.");
     updateRecordButton();
     tempoBox.setValue(session.tempo());
     const auto signature = session.timeSignature();

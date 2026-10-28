@@ -4,7 +4,7 @@ type: guide
 summary: Render a Rhino panel, the whole Rhino shell or Forge's editor to a PNG without a window, then measure it instead of eyeballing it.
 tags: [both, ui, testing, snapshots]
 sources: []
-updated: 2026-10-27
+updated: 2026-10-28
 ---
 
 # Seeing the UI without taking the screen
@@ -76,9 +76,12 @@ keys the track is playing, on a looping clip, from `NotePlayingKeys.inc` in the 
 ([Note editor](note-editor.md#keys-the-track-is-playing)).
 `RHINO_CLIP_LOOP_SNAPSHOT` (commit `81a898b`) writes a looped clip's lane, zoomed to three bars at 2x, with a notch
 where each pass begins, from `ClipLoop.inc` in the same case ([Clip Loop switch](clip-loop.md)).
-`RHINO_DEVICE_SNAPSHOTS` names a *folder*, not a file (2026-10-27). `--self-test` (`native_device_correctness`) writes
-`<id>.png` there for Amp, Saturator, Redux and Erosion from `DriveDevicesTest.cpp`, and the Tuner's face in four states,
-from `Tuner target.png` to `Tuner cents.png`, from `TunerTest.cpp`, each with a `Theme` set
+`RHINO_DEVICE_SNAPSHOTS` names a *folder*, not a file (2026-10-27). Since commit `00d4336` (2026-10-28) `--device-test`
+(`native_device_conformance`) writes `<id>.png` there for every browsable built-in device, 17 that day, from
+`DeviceFacesTest.cpp`, each with a `Theme` set and lanes on its first two controls so the picture shows where an A sits
+([Device rack and device editors](device-rack.md)). `DriveDevicesTest.cpp` no longer writes Amp, Saturator, Redux and
+Erosion and keeps only its paint smoke test. `--self-test` (`native_device_correctness`) still writes the Tuner's face
+in four states, from `Tuner target.png` to `Tuner cents.png`, from `TunerTest.cpp`
 ([Built-in devices](built-in-devices.md)).
 
 A `juce::TreeView` cannot be seen this way opened: it lays out its rows asynchronously, so a snapshot shows an opened

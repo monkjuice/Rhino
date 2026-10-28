@@ -4,7 +4,7 @@ type: decision
 summary: Rhino's own devices are written on one SDK base, held to one conformance runner and given generated faces, with their presets as .rnd files; VST3 stays the format for outside instruments.
 tags: [rhino, devices, sdk, testing]
 sources: []
-updated: 2026-10-27
+updated: 2026-10-28
 ---
 
 # The native device standard
@@ -31,7 +31,8 @@ Agreed on 2026-10-05:
   - finite, bounded output at 25 random settings;
   - block-size invariance;
   - sample-accurate MIDI and all-notes-off, for an instrument;
-  - the tail, for an effect, as the time to fall 60 dB.
+  - the tail, for an effect, as the time to fall 60 dB;
+  - since 2026-10-28, after the loop, the face of every browsable built-in device, external plugins aside: built with lanes on two controls, every control on the face and clear of the others, and painted (`tests/DeviceFacesTest.cpp`; [Device rack and device editors](device-rack.md)).
 
   A device that cannot pass a check yet goes in the runner's `pending` table with the reason. A line that starts passing fails the run until it is deleted (commit `0806c97`).
 - **Presets are `.rnd` files; devices are not files.** A device stays code, kept apart from the core. A `.rnd` is a preset of one device: XML holding the device's id and its settings, so a new patch, kit or arp feel needs no code. In the browser each device is a folder of its presets, such as Rhino Arp > `Super Creative Arpeggiation.rnd`. Dragging the folder adds the device at its defaults, and dragging a preset adds it with that preset's settings. This was first written down as a "device file" and corrected the same day. Built: [Device presets (.rnd)](device-presets.md). The Drum Rack is the exception: its presets are kits and drum presets, because a `.rnd` holds parameter values only ([Drum Rack](drum-rack.md)).

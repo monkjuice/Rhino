@@ -17,8 +17,9 @@ Rhino's tests are compiled into the app and selected by flag ([Build and test Rh
   audio device). That runner also calls the checks other headers keep in files of their own, such as
   `tests/VelocityLaneTest.*` for `ui/notes/VelocityLaneGeometry.h` (2026-10-16; [Note editor velocity lane](note-velocity-lane.md)). It ends with the layer lint, `tests/LayerLintTest.*` (2026-10-23), which reads every source under `src/ui` and `src/app` and fails on a view that reaches past `Session` into the engine ([Dependency direction](dependency-direction.md#the-views-ask-session-not-the-engine)); tests under `src/tests` are not scanned and may still spell `session.edit`. DSP lives in `src/core/dsp` as a plain class driven from `--self-test` (`SelfTest.cpp`, `AutoTuneTest.cpp`,
   `EqTest.cpp`, `VocoderTest.cpp`, `FmTest.cpp`, `DrumRackTest.cpp`). Every device Rhino makes is also rendered by
-  `--device-test` (`DeviceConformance.cpp`) against [the native device standard](native-device-standard.md); a new
-  device gets those checks without writing any. A device that is silent at its defaults, as a blank
+  `--device-test` (`DeviceConformance.cpp`) against [the native device standard](native-device-standard.md), and since
+  2026-10-28 its face is built, checked and painted there too (`DeviceFacesTest.cpp`); a new device gets those checks
+  without writing any. A device that is silent at its defaults, as a blank
   [Drum Rack](drum-rack.md) is, needs a branch in that file's `prime()`, or it fails every check that listens for a
   note.
 - **Workflow scenarios**, for contracts that cross the engine, undo, rendering, persistence or real pointer events.
@@ -243,7 +244,7 @@ as with Forge's `--profile`, because the machine drifts by more than some differ
 A timed check inside a CTest case spends that case's limit. `--self-test` has 30 s (`native/CMakeLists.txt`), and the
 DJ booth's cost check (`checkBoothCost` in `tests/DjTest.cpp`, which logs its numbers and requires no allocation) renders
 10 s of silence rather than 30 for that reason: while the mixer's filters take denormals in silence, 30 s cost the case
-eight seconds and left it at 25 s of its 30 (2026-10-11; [DJ deck engine](dj-deck-engine.md)). On 2026-10-23 the case took 21 s alone and 29 s run straight after a profile, one second under its limit: run the suite on an idle machine.
+eight seconds and left it at 25 s of its 30 (2026-10-11; [DJ deck engine](dj-deck-engine.md)). On 2026-10-23 the case took 21 s alone and 29 s run straight after a profile, one second under its limit: run the suite on an idle machine. On 2026-10-28 it timed out at every run on a loaded machine, so the device-face check went to `--device-test`'s 120 s instead; put new checks that cost seconds there too ([Build and test Rhino](build-and-test-rhino.md#test)).
 
 ## Access and determinism
 

@@ -75,8 +75,9 @@ ctest --test-dir native/build -C Release -R native_arrangement_workflow --output
 (From `native/CMakeLists.txt`, checked 2026-10-25, whose comment puts the pattern run at about 36 s and the arrangement
 run, which carries every DJ scenario, at 114 s on 2026-10-11; what each case covers is in
 `native/src/tests/README.md`.) The generous limit is there to catch a render that never returns
-([Offline renders that never return](renders-that-never-return.md)). The conformance run takes about 3 s and opens no
-audio device ([The native device standard](native-device-standard.md)).
+([Offline renders that never return](renders-that-never-return.md)). The conformance run opens no audio device and took
+9-11 s on 2026-10-28, about 6 s before the device-face check joined it that day
+([The native device standard](native-device-standard.md)).
 
 - Run the cases through `ctest`. On 2026-10-05, `Start-Process RhinoDAW.exe --device-test` opened the full app on the
   user's screen instead of running the check, and the cause was not found.
@@ -95,7 +96,11 @@ audio device ([The native device standard](native-device-standard.md)).
   (`ProjectFileMedia.inc`) is the same kind: it requires the export to give up within 10 s, took 11.3 s once under
   load on 2026-10-25 and passed on the re-run.
 - `native_device_correctness` runs close to its limit: on 2026-10-23 it took 21 s alone and 29 s run straight after a
-  profile, against 30 s. Run the suite on an idle machine.
+  profile, against 30 s. Run the suite on an idle machine. On 2026-10-28 it timed out at every run from 08:40, the new
+  face check taken out included, while the user's RhinoDAW was open (started 08:26); a run before 08:19 had passed,
+  its DJ booth checks taking 6 s. Timed, it spent about 23 s on checks before `checkDjCore` begins, so a loaded machine
+  tips it over; whether there is also a hang was not established. Put a new check that builds or paints faces, or
+  otherwise costs seconds, in `--device-test` (120 s), as the face check was, not in `--self-test`.
 - `native_arrangement_workflow` took about 244 s on 2026-10-28, against its 300 s limit, with or without that
   day's undo changes. The final full run of commit `8d2d883` passed all six cases, this one in 242.9 s and the whole
   suite in 321.7 s. The table's note above puts it at 114 s on 2026-10-11, and runs logged earlier in October took

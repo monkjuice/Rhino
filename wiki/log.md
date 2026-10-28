@@ -1577,3 +1577,14 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/build-and-test-rhino.md (native_arrangement_workflow at about 244 s against its 300 s limit)
 - updated: pages/reading-a-hung-process.md (a linker map names Release offsets; Related)
 - updated: index.md (Components: Undo and the history; Guides: Naming a Release stack with a linker map; Gotchas: the re-sort page; Mixer's summary)
+
+## [2026-10-28] update | Device faces aligned, the A only on automated controls, every face checked by --device-test (a925614, 00d4336)
+- source: the main agent's brief, checked against native/src/ui/rack/DeviceEditorPanel.h/.cpp, DeviceEditorPanelGenerated.cpp, DeviceEditorPanelArp.cpp, DeviceEditorPanelDisplay.cpp, tests/DeviceFacesTest.cpp and tests/DeviceConformance.cpp; 7a83b07 is a comment fix only
+- updated: pages/device-rack.md (summary; `placeKnob` and `placeAutomationBadge`, the A only on an automated control; the generated face's face-wide rows, one knob size, choosers on the knobs' line, columns as wide as their captions; framed traces over a quarter grid; `checkDeviceFaces` under Tests)
+- updated: pages/rhino-arp.md (the Sequence display a card like the others: widths 160, 92, 204, 150, every gap 6; Root 54 px, Scale the rest)
+- updated: pages/headless-ui-snapshots.md (`RHINO_DEVICE_SNAPSHOTS` pictures every browsable built-in device from --device-test; DriveDevicesTest writes none; the Tuner's four still from --self-test)
+- updated: pages/native-device-standard.md (the conformance runner's face check)
+- updated: pages/build-and-test-rhino.md (conformance 9-11 s; native_device_correctness timing out on a loaded machine, about 23 s before checkDjCore, a hang not ruled out; costly checks go in --device-test)
+- updated: pages/writing-rhino-tests.md (a new device's face is checked by --device-test; why the face check is not in --self-test)
+- updated: pages/automation.md (a control with no lane shows no A)
+- updated: index.md (Device rack's summary)

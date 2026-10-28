@@ -1,10 +1,10 @@
 ---
 title: Mixer
 type: component
-summary: One mixer, drawn in the arrangement's track cards, with a VolumeAndPanPlugin, a level meter behind it and post-fader sends to the return tracks in each track's channel strip, a fader and pan automated from a right-click, mute and solo that silence only a track's output and what it sends, and the master volume for Main; a DJ deck takes its track ahead of the channel strip, and a fader drag cannot be undone yet.
-tags: [rhino, mixer, tracks, returns, automation]
+summary: One mixer, drawn in the arrangement's track cards, with a VolumeAndPanPlugin, a level meter behind it and post-fader sends to the return tracks in each track's channel strip, a fader and pan automated from a right-click, mute and solo that silence only a track's output and what it sends, and the master volume for Main; a DJ deck takes its track ahead of the channel strip, and every fader, pan or send move, dragged or set, is one named undo step that Ctrl+Z moves back.
+tags: [rhino, mixer, tracks, returns, automation, undo]
 sources: []
-updated: 2026-10-27
+updated: 2026-10-28
 ---
 
 # Mixer
@@ -26,7 +26,7 @@ Rhino has one mixer. `native/src/model/SessionMixer.cpp` reads and writes it, an
 ## Rules
 
 - **`UtilityDevice` is not the fader.** It is a device in the chain, like Live's Utility. Two bottom-bar gain sliders once drove Utility devices; they read as a second, contradictory mixer and were replaced by the main output level.
-- **A fader drag is one gesture and one announcement, but cannot be undone.** `beginTrackVolumeGesture`/`endTrackVolumeGesture`, the pan and main equivalents, and the send gestures each open a named transaction and bracket the parameter's change gesture, so the engine records one automation move. Inside the gesture, `setTrackVolumeDb` and its siblings announce nothing, the dragged control drawing its own value, and the gesture's end announces once (commit `e7c9554`; [What a change costs the interface](ui-cost-of-a-change.md)). The transaction records nothing undoable, though ([Open issues](#open-issues)); until 2026-10-25 this page said a drag was one undo step.
+- **A fader drag is one gesture, one announcement and one undo step.** `beginTrackVolumeGesture`/`endTrackVolumeGesture`, the pan and main equivalents, and the send gestures each open a named transaction ("Track volume", "Track pan", "Main volume", "Main pan", "Send to <return>") and bracket the parameter's change gesture, so the engine records one automation move. Inside the gesture, `setTrackVolumeDb` and its siblings announce nothing, the dragged control drawing its own value, and the gesture's end announces once (commit `e7c9554`; [What a change costs the interface](ui-cost-of-a-change.md)). Set with no drag around it, by a double-click reset or a Push encoder, the same setters open a named loose step of their own (2026-10-28; [Undo and the history](undo-history.md#how-a-command-writes)).
 - **Mute and solo silence only what reaches the song** (since 2026-10-12). `RhinoEngineBehaviour::shouldProcessMutedTracks()` returns true (`SessionInternal.h`), so a muted or solo-excluded track still runs its devices and the engine's muting node after them clears its output; the engine used to skip the whole chain. A DJ deck takes its track from inside the chain, so the song's mute and solo leave the deck playing, which `DjLiveChain.inc` hears through Tracktion's real graph ([Tracktion's hosted device is silent until its start is dispatched](hosted-device-silent-until-dispatched.md)). The price is the CPU a muted track's devices take, and a meter in the chain that goes on measuring, so the card meters gate on the engine's `shouldBePlayed()` ([Track level meters](level-meters.md)). It also left every send running, so since `b7bd73c` Rhino overrides `shouldProcessAuxSendWhenTrackIsMuted`, and a muted or solo-excluded track sends nothing to the returns either ([A send ignores mute while muted tracks are processed](send-ignores-mute-when-muted-tracks-process.md)).
 - **A track's fader and pan can be automated** (commit `fd03386`, 2026-10-27). A right-click on either card bar opens the device knob's automation menu for a lane on the track's own `VolumeAndPanPlugin`, found by `Session::trackMixerTarget`. The lane is an ordinary device lane named "Mixer". It stores the engine's fader position (0 to 1, -inf to +6 dB on Tracktion's fader law), not the card's dB. Any hand move of an automated bar takes it off its lane until *Re-enable automation*: a drag, a double-click reset, a Push encoder (`takeMixerFromLane` in the gestures and in `setTrackVolumeDb`/`setTrackPan`). While a lane drives it, the bar follows on the arrangement's frame clock without notifying. The main row and the sends are not automatable yet ([Track automation](automation.md#the-cards-fader-and-pan)).
 - **Colour carries meaning.** Volume bars are cyan and pan bars red on every card and on the main row; mute darkens its key and solo brightens it, so the two differ by value rather than hue.
@@ -36,12 +36,15 @@ Rhino has one mixer. `native/src/model/SessionMixer.cpp` reads and writes it, an
 
 `appendTrack` creates a track without the engine's default plugins, so every caller that makes a lane must also run `ensureTrackMixers` (and `ensureSceneSlots` and `reconcileTrackGroups`). The drag and paste paths once did not ([Hazards found while seeding the wiki](known-hazards.md)). A lane that skipped it would also lack the DJ ends, and no deck could play it: `bindDjTrack` logs that the track "has no way in for a DJ deck" and leaves the deck unbound.
 
-## Open issues
+## Undo
 
-**Undoing a fader drag does not restore the fader** (found by a probe run on 2026-10-25). Tracktion's `AutomatableParameter::setParameter` writes the parameter's attached `CachedValue` with a null undo manager (`AttachedFloatValue::handleAsyncUpdate`). A state change made by undo is also deliberately not pushed back into the parameter's base value (`AutomatableParameter::valueTreePropertyChanged`). Both are in `tracktion_AutomatableParameter.cpp` at the pinned commit `4536d8a`. So the "Track volume" and "Send to ..." transactions record nothing undoable. Pan and the main row go through the same engine call and presumably behave the same way. Device knobs probably do too, but that was not tested.
+**Fixed on 2026-10-28: Ctrl+Z now moves a fader, pan, send or the main row back, and redo moves it again.** A probe run on 2026-10-25 had found that undoing a fader drag did not restore the fader. Tracktion deliberately does not push a value restored by undo back into a parameter attached to a `CachedValue` (`AutomatableParameter::valueTreePropertyChanged`, `tracktion_AutomatableParameter.cpp` at the pinned commit `4536d8a`). After every undo and redo, `Session::followRestoredParameters` now moves each parameter that is not on a curve to its restored value, the master fader included ([Undo and the history](undo-history.md#after-an-undo-or-a-redo)).
+
+This section said otherwise from 2026-10-25 to 2026-10-28, and part of what it said was wrong. It claimed that `setParameter` writes the attached value with a null undo manager, so the transactions recorded nothing. The 2026-10-28 probe showed that the step does record the stored value: only the push back into the parameter was missing. The suspicion that device knobs behaved the same way was right for the engine's own devices and Rhino EQ, and wrong for Rhino's SDK devices. `UndoSteps.inc` moves a fader and the engine's Compressor back and forth.
 
 ## Related
 
+- [Undo and the history](undo-history.md)
 - [Return tracks and sends](return-tracks.md)
 - [A send ignores mute while muted tracks are processed](send-ignores-mute-when-muted-tracks-process.md)
 - [Track automation](automation.md)

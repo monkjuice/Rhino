@@ -4,7 +4,7 @@ type: guide
 summary: Choose between a unit check and a workflow scenario, follow the rules that keep scenarios sharing one Session honest, and time the interface with --profile-ui and --profile-stress.
 tags: [rhino, testing, conventions]
 sources: []
-updated: 2026-10-27
+updated: 2026-10-28
 ---
 
 # Writing Rhino tests
@@ -215,6 +215,16 @@ every scenario of `DjLiveChain.inc`).
     runner's function, so a local with the same name as one declared further out hides it and raises warning C4456.
     `ClipLoop.inc` and `NotePlayingKeys.inc` did this when they were added in `4a6a17b`, and `640d90c` renamed their
     locals.
+25. **Pump the message loop only before any other document exists.** The runners never dispatch messages, so
+    anything JUCE or Tracktion posts for later never runs under them. That includes the engine's re-sorts through the
+    undo manager, its 350 ms undo timer, and a cell's follow actions made as the graph is built. A check on those must
+    pump the queue itself. `UndoSteps.inc` does this with a `settle` lambda, a `PeekMessage`/`DispatchMessage` loop for
+    a given time that compiles only on Windows ([Undo and the history](undo-history.md#tests)). On 2026-10-28 the
+    scenario first ran after `GroupUndo.inc`. There, its pump delivered what earlier scenarios had posted for documents
+    long destroyed: one full CTest run crashed with 0xC0000005 inside `RhinoDAW.exe`, at a fault offset the linker map
+    named as `te::ExternalControllerManager::detachFromEdit`, while two runs before it passed. Whether it crashes
+    depends on what happens to be queued. Such a scenario therefore runs first in its runner, before `Session session;`,
+    on documents of its own, and nothing after it pumps.
 
 ## Timing, not checking
 
@@ -268,5 +278,6 @@ checked at the boundary the shell wires, and whatever it needs is put in the vie
 - [JUCE's rasteriser is not clip-invariant](juce-rasteriser-not-clip-invariant.md)
 - [A JUCE component listening to itself hears its own clicks twice](juce-self-listener-hears-clicks-twice.md)
 - [Tracktion's hosted device is silent until its start is dispatched](hosted-device-silent-until-dispatched.md)
+- [Undo and the history](undo-history.md)
 - [The 120-track stress audit](stress-audit-2026-10.md)
 - [Dependency direction](dependency-direction.md)

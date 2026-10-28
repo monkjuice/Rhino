@@ -4,7 +4,7 @@ type: guide
 summary: Tell a hang from a crash, find every RhinoDAW including a frozen one with no visible window, read its live threads' stacks with dbghelp from Python, naming unloaded modules and unsymbolled classes by hand, and reproduce a shutdown hang through UI Automation without taking the pointer.
 tags: [rhino, debugging, windows, tooling]
 sources: []
-updated: 2026-10-26
+updated: 2026-10-28
 ---
 
 # Reading a hung RhinoDAW's stacks without a debugger
@@ -45,7 +45,7 @@ The traps:
 - **`SizeOfStruct` must be 88.** That is the size of `SYMBOL_INFOW` with a one-character `Name`, however large the buffer behind it. With any other value, `SymFromAddrW` fails silently.
 - **Declare 64-bit `argtypes` for every handle.** ctypes otherwise passes a process or thread handle as a 32-bit int.
 - **A module being unloaded has already left the module list**, so frames inside it come back unnamed. `VirtualQueryEx` on the address followed by `GetMappedFileNameW` still names the file. That is how `Rhino Forge.vst3` was found in the middle of its `FreeLibrary`.
-- **The Release `RhinoDAW.exe` is built without a PDB**, so a frame in Rhino's own code (JUCE and Tracktion are linked into it) reads only as an offset inside `RhinoDAW.exe`.
+- **The Release `RhinoDAW.exe` is built without a PDB**, so a frame in Rhino's own code (JUCE and Tracktion are linked into it) reads only as an offset inside `RhinoDAW.exe`. A linker map from a `/MAP` relink names such offsets ([Naming a Release stack with a linker map](naming-a-release-stack-with-a-linker-map.md)).
 
 ## 4. Name a class without matching symbols
 
@@ -75,6 +75,7 @@ It was never built, because two running RhinoDAW instances held the exe. Treat i
 
 ## Related
 
+- [Naming a Release stack with a linker map](naming-a-release-stack-with-a-linker-map.md)
 - [A plugin's static Direct2D images deadlock NVIDIA's driver at unload](plugin-static-images-deadlock-on-unload.md)
 - [A JUCE plugin's DLL is freed at the host's next PeekMessage](plugin-dll-freed-at-next-peekmessage.md)
 - [Driving Forge's standalone on Windows](driving-the-forge-standalone.md)

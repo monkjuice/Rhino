@@ -4,7 +4,7 @@ type: component
 summary: Eight-band EQ whose drawn curve comes from the same coefficients as the audio, over a spectrum computed off the audio thread.
 tags: [rhino, devices, dsp, eq]
 sources: []
-updated: 2026-10-27
+updated: 2026-10-28
 ---
 
 # Rhino EQ
@@ -30,6 +30,8 @@ A fresh EQ has bands 1 to 4 on, all at 0 dB, with band 4 selected (`bandDefaults
 
 A band that is off is not drawn on the display, as in EQ Eight (Live 12 manual p. 577), so it cannot be clicked, dragged or double-clicked; until 2026-10-27 it was a hollow ring and a double-click toggled it. It stays in the band column on the right, where its LED switches it back on, as do its right-click menu and the TYPE chooser (choosing a type switches an off band on). A press and a double-click share one hit test, `eqHandleAt`, which skips bands that are off and takes the nearest handle within reach, not the first in band order. The wheel still sets the selected band's Q while that band is off.
 
+A double-click's second press begins the band's frequency and gain gestures, as any press on a handle does. Until 2026-10-28 the double-click handler cleared `eqDragging` without ending them, and the release that followed found nothing held. The two gestures then stayed open for good, which silenced every later knob announcement and would have held the undo timer off. The handler now ends them. Since the same date, Ctrl+Z moves the EQ's knobs and sound back, not only their stored values ([Undo and the history](undo-history.md#after-an-undo-or-a-redo)).
+
 ## Tests
 
 `native/src/tests/EqTest.cpp` sweeps a sine through `EqEngine` and compares the measured level with `responseDbAt`: two independent routes to the same coefficients, so agreement is evidence rather than something built in. Its click check (no two consecutive samples more than 0.2 apart) failed on its first run, which is why type changes crossfade ([Measure sound, don't read the DSP](measure-sound-dont-read-dsp.md)). It also checks that a face setting undoes on its own, leaving the edit before it, and that undo passes a band selection by. `checkDevice` holds the fresh defaults: exactly bands 1 to 4 on, band 1 a Low Cut 48 at 20 Hz, and 0 dB at 50 Hz, 1 kHz and 10 kHz. `checkEditorFace` puts off band 6 at 3 kHz +12 dB and computes its handle's spot from the face's geometry (the display left of the band column under the 24 px name bar, 10 Hz to 22 kHz logarithmic, ±18 dB linear); a click there must not select it and a double-click must not switch it on, and once the band is switched on the same click must take it, which proves the spot.
@@ -45,3 +47,4 @@ Not yet matched to EQ Eight: stereo, L/R and M/S modes, adaptive Q, oversampling
 - [Measure sound, don't read the DSP](measure-sound-dont-read-dsp.md)
 - [Starting a running juce::Timer restarts its count](juce-timer-restart-resets-countdown.md)
 - [No backward compatibility for .rhinoedit](no-rhinoedit-back-compat.md)
+- [Undo and the history](undo-history.md)

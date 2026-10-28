@@ -4,7 +4,7 @@ type: component
 summary: Live's return tracks - an ordinary track fed by an engine aux bus, kept with the other returns at the foot of the stack and drawn pinned between the scrolling lanes and the main row - and one post-fader send per return at the end of every other track's chain, set from -inf to 0 dB on a knob in a column between the card's meter and its buttons; a new document has A Delay and B Reverb, wholly wet, fed nothing.
 tags: [rhino, mixer, returns, sends, tracks, arrangement]
 sources: []
-updated: 2026-10-26
+updated: 2026-10-28
 ---
 
 # Return tracks and sends
@@ -20,7 +20,7 @@ Added in commit `b7bd73c` (2026-10-25), modelled on Ableton Live. The model side
 
 ## Rules
 
-- **Levels.** `trackSendDb`/`setTrackSendDb` clamp between `minimumSendDb` (-100, which the engine's fader law maps to position 0, true silence) and `maximumSendDb` (0 dB): the track's own level and no further, as Live's knob. A drag is bracketed by `beginTrackSendGesture`/`endTrackSendGesture` and announced once at its end, as a fader's is, and like a fader's it cannot be undone yet ([Mixer](mixer.md#open-issues)).
+- **Levels.** `trackSendDb`/`setTrackSendDb` clamp between `minimumSendDb` (-100, which the engine's fader law maps to position 0, true silence) and `maximumSendDb` (0 dB): the track's own level and no further, as Live's knob. A drag is bracketed by `beginTrackSendGesture`/`endTrackSendGesture` and announced once at its end, as a fader's is. Like a fader's, it is one undo step, "Send to <return>", and since 2026-10-28 Ctrl+Z moves the send back. A send set with no drag around it opens a named loose step ([Mixer](mixer.md#undo), [Undo and the history](undo-history.md)).
 - **Starter returns.** `buildStarterEdit` calls `addStarterReturns`, which puts A "Delay" (`te::DelayPlugin`, mix 1.0, 375 ms, a dotted eighth at the starter tempo) and B "Reverb" (`te::ReverbPlugin`, dry 0, room size 0.6) under the four starter tracks. Both are wholly wet, because a return is added to the dry track. Every send starts at nothing. Older documents get no returns ([No backward compatibility for .rhinoedit](no-rhinoedit-back-compat.md)).
 - **Adding and deleting.** `addReturnTrack` (the `+` menu's *Return Track*, or Ctrl+Alt+T in `app/MainComponentCommands.cpp`) adds a return named "Return" at the foot of the returns as one undo step, and every track gains a send to it at nothing. A song has at most 12 (A-L, Live's limit) and may have none. Deleting a return (`removeAudioTrack`, `removeTracks`) removes every send to it in the same step, and undo restores them at their levels. "Keep at least one track" counts only tracks that are not returns.
 - **The foot of the stack.** In the model, the returns stay together under every other track and over the main row; the arrangement pins them ([below](#in-the-arrangement)). Each is lettered by its place among them (`returnTracks()`). `firstReturnTrack()` is the first return, or `trackCount()` when there is none, so the newest playing track is `firstReturnTrack() - 1`, not `trackCount() - 1`. `appendTrack` inserts above the returns. `addTrack` and `pasteTracks` asked to land below a return land at the foot, above the returns. `moveTrack` keeps a track above the returns and moves a return only among the returns. As a safety net, `reconcileTrackGroups` carries any return it finds above another track back down.
@@ -72,7 +72,6 @@ The controls-column checks in `TrackManagement.inc`, `Recording.inc`, `VocoderCa
 ## Open
 
 - The Delay's time is `te::DelayPlugin::lengthMs`, a `CachedValue` rather than a parameter. The rack cannot change it, and it does not follow the tempo: it stays at 375 ms.
-- Send drags, like fader drags, cannot be undone ([Mixer](mixer.md#open-issues)).
 
 ## Related
 

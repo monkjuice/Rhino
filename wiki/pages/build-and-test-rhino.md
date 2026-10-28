@@ -4,7 +4,7 @@ type: guide
 summary: Fetch the pinned engine, build with Visual Studio 2022 from the shell or from VS Code's CMake Tools, and run the six CTest cases without being fooled by a stale or locked build.
 tags: [rhino, build, testing, windows, vscode]
 sources: []
-updated: 2026-10-25
+updated: 2026-10-28
 ---
 
 # Build and test Rhino
@@ -96,6 +96,10 @@ audio device ([The native device standard](native-device-standard.md)).
   load on 2026-10-25 and passed on the re-run.
 - `native_device_correctness` runs close to its limit: on 2026-10-23 it took 21 s alone and 29 s run straight after a
   profile, against 30 s. Run the suite on an idle machine.
+- `native_arrangement_workflow` took about 244 s on 2026-10-28, against its 300 s limit, with or without that
+  day's undo changes. The final full run of commit `8d2d883` passed all six cases, this one in 242.9 s and the whole
+  suite in 321.7 s. The table's note above puts it at 114 s on 2026-10-11, and runs logged earlier in October took
+  80-114 s. The cause was not looked for.
 - `native_arrangement_geometry` also runs the layer lint (`tests/LayerLintTest.cpp`, 2026-10-23): it reads every
   source under `native/src/ui` and `native/src/app` and fails, naming file and line, on a line that reaches past
   `Session` into the engine ([Dependency direction](dependency-direction.md#the-views-ask-session-not-the-engine)).

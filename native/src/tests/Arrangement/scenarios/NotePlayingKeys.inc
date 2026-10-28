@@ -100,8 +100,8 @@
             editor.updateSoundingKeys();
             require(editor.soundingKeys.none(), "A render plays the song behind the loading screen and lights nothing");
 
-            auto* other = headOf(2);
-            require(other != nullptr && stack.trackType(2) == Session::TrackType::midi, "Another MIDI track");
+            auto* other = headOf(1);
+            require(other != nullptr && stack.trackType(1) == Session::TrackType::midi, "Another MIDI track");
             other->baseClassInitialise({{}, 48000.0, 512});
             play(*other, {on(white)});
             editor.updateSoundingKeys();

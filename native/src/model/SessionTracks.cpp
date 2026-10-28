@@ -160,7 +160,6 @@ juce::Result Session::removeAudioTrack(int track)
 namespace
 {
 const juce::Identifier laneHeightID {"rhinoLaneHeight"};
-const juce::Identifier trackFoldedID {"rhinoTrackFolded"};
 }
 
 // Zero is "not chosen yet" rather than a height of nothing, which is what lets

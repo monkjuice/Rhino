@@ -1,39 +1,40 @@
         {
             Session parameterSession;
             // Two starter lanes, because a device is not welcome on both: the
-            // second is the audio lane, which takes audio FX, and the third is
-            // the MIDI lane, which is the only kind that takes an instrument
-            // or a MIDI effect.
-            auto* parameterTrack = te::getAudioTracks(*parameterSession.edit)[2];
-            require(parameterSession.trackType(1) == Session::TrackType::audio
-                    && parameterSession.trackType(2) == Session::TrackType::midi,
+            // third is an audio lane, which takes audio FX, and the second is
+            // a MIDI lane, which is the only kind that takes an instrument or
+            // a MIDI effect.
+            constexpr int audioLane = 2, midiLane = 1;
+            auto* parameterTrack = te::getAudioTracks(*parameterSession.edit)[midiLane];
+            require(parameterSession.trackType(audioLane) == Session::TrackType::audio
+                    && parameterSession.trackType(midiLane) == Session::TrackType::midi,
                     "The starter stack puts an audio lane and a MIDI lane where these checks expect them");
-            require(parameterSession.addAudioEffect(Session::AudioEffect::Reverb, 1).wasOk(), "Audio FX browser action inserts Reverb");
-            const auto reverbDevices = parameterSession.deviceSlots(1);
+            require(parameterSession.addAudioEffect(Session::AudioEffect::Reverb, audioLane).wasOk(), "Audio FX browser action inserts Reverb");
+            const auto reverbDevices = parameterSession.deviceSlots(audioLane);
             const auto reverbSlot = reverbDevices.empty() ? -1 : reverbDevices.back().pluginIndex;
-            auto reverbParameters = parameterSession.deviceParameters(1, reverbSlot);
+            auto reverbParameters = parameterSession.deviceParameters(audioLane,reverbSlot);
             require(!reverbParameters.empty(), "Inserted Reverb exposes editable parameters");
             const auto oldReverbValue = reverbParameters.front().value;
             const auto newReverbValue = oldReverbValue == reverbParameters.front().minimum
                 ? reverbParameters.front().maximum : reverbParameters.front().minimum;
-            require(parameterSession.beginDeviceParameterGesture(1, reverbSlot, 0).wasOk(), "Device View starts parameter gestures");
-            require(parameterSession.setDeviceParameter(1, reverbSlot, 0, newReverbValue).wasOk(), "Device View edits effect parameters");
-            require(parameterSession.endDeviceParameterGesture(1, reverbSlot, 0).wasOk(), "Device View ends parameter gestures");
-            reverbParameters = parameterSession.deviceParameters(1, reverbSlot);
+            require(parameterSession.beginDeviceParameterGesture(audioLane,reverbSlot, 0).wasOk(), "Device View starts parameter gestures");
+            require(parameterSession.setDeviceParameter(audioLane,reverbSlot, 0, newReverbValue).wasOk(), "Device View edits effect parameters");
+            require(parameterSession.endDeviceParameterGesture(audioLane,reverbSlot, 0).wasOk(), "Device View ends parameter gestures");
+            reverbParameters = parameterSession.deviceParameters(audioLane,reverbSlot);
             require(std::abs(reverbParameters.front().value - newReverbValue) < 0.0001f, "Edited effect parameter value is reflected in Device View");
-            require(parameterSession.addAudioEffect(Session::AudioEffect::RhinoSpace, 1).wasOk(), "Audio FX browser action inserts Rhino Space");
-            const auto rhinoDevices = parameterSession.deviceSlots(1);
+            require(parameterSession.addAudioEffect(Session::AudioEffect::RhinoSpace, audioLane).wasOk(), "Audio FX browser action inserts Rhino Space");
+            const auto rhinoDevices = parameterSession.deviceSlots(audioLane);
             const auto rhinoSlot = rhinoDevices.empty() ? -1 : rhinoDevices.back().pluginIndex;
-            auto rhinoParameters = parameterSession.deviceParameters(1, rhinoSlot);
+            auto rhinoParameters = parameterSession.deviceParameters(audioLane,rhinoSlot);
             require(rhinoParameters.size() >= 6, "Rhino Space exposes its macro controls");
-            require(parameterSession.setDeviceParameter(1, rhinoSlot, 0, rhinoParameters.front().maximum).wasOk(),
+            require(parameterSession.setDeviceParameter(audioLane,rhinoSlot, 0, rhinoParameters.front().maximum).wasOk(),
                     "Rhino Space macro controls are editable");
-            require(parameterSession.addInstrument(Session::Instrument::FourOsc, 1).failed(),
+            require(parameterSession.addInstrument(Session::Instrument::FourOsc, audioLane).failed(),
                     "An audio track refuses an instrument, because a track's kind is fixed when it is made");
-            require(parameterSession.addMidiEffect(Session::MidiEffect::RhinoArp, 1).failed(),
+            require(parameterSession.addMidiEffect(Session::MidiEffect::RhinoArp, audioLane).failed(),
                     "and refuses a MIDI effect, which would have nothing to act on");
-            require(parameterSession.addInstrument(Session::Instrument::FourOsc, 2).wasOk(), "A MIDI track hosts a synth instrument");
-            require(parameterSession.addMidiEffect(Session::MidiEffect::RhinoArp, 2).wasOk(), "MIDI FX browser action inserts Rhino Arp");
+            require(parameterSession.addInstrument(Session::Instrument::FourOsc, midiLane).wasOk(), "A MIDI track hosts a synth instrument");
+            require(parameterSession.addMidiEffect(Session::MidiEffect::RhinoArp, midiLane).wasOk(), "MIDI FX browser action inserts Rhino Arp");
             int arpSlot = -1, synthSlot = -1;
             for (int i = 0; i < parameterTrack->pluginList.size(); ++i)
             {
@@ -44,7 +45,7 @@
             }
             require(arpSlot >= 0 && synthSlot >= 0 && arpSlot < synthSlot,
                     "Rhino Arp is inserted before the target instrument");
-            auto arpParameters = parameterSession.deviceParameters(2, arpSlot);
+            auto arpParameters = parameterSession.deviceParameters(midiLane,arpSlot);
             require(arpParameters.size() == RhinoArpDevice::parameterCount
                     && arpParameters[RhinoArpDevice::styleParameter].name == "Style"
                     && arpParameters[RhinoArpDevice::styleParameter].valueText == "Up"
@@ -67,9 +68,9 @@
                 require(parameterSession.isForgeAvailable(), "Rhino discovers the development Forge VST3 bundle");
             if (parameterSession.isForgeAvailable())
             {
-                require(parameterSession.addInstrument(Session::Instrument::RhinoForge, 2).wasOk(),
+                require(parameterSession.addInstrument(Session::Instrument::RhinoForge, midiLane).wasOk(),
                         "An arrangement drop can put the independent Rhino Forge VST3 on a track");
-                require(parameterSession.createClip(2, 0.0).wasOk(),
+                require(parameterSession.createClip(midiLane, 0.0).wasOk(),
                         "A clip can then be created on the track routed to Forge");
                 int forgeSlot = -1;
                 for (int i = 0; i < parameterTrack->pluginList.size(); ++i)
@@ -96,7 +97,7 @@
                         "Tracktion exposes Forge VST3 parameters to Rhino");
                 // The rack shows a chosen few of them, not the list: see
                 // MappedParameters.inc for what the list does.
-                const auto forgeParameters = parameterSession.deviceParameters(2, forgeSlot);
+                const auto forgeParameters = parameterSession.deviceParameters(midiLane,forgeSlot);
                 require(forgeParameters.size() == 9,
                         "and the rack shows the nine Forge is played by, not every one");
                 require(parameterSession.addInstrument(Session::Instrument::RhinoForge, 0).wasOk(),
@@ -117,24 +118,24 @@
                 require(parameterSession.isExternalAvailable("RhinoDuck"), "Rhino discovers the development Duck VST3 bundle");
             if (parameterSession.isExternalAvailable("RhinoDuck"))
             {
-                require(parameterSession.addDevice("RhinoDuck", 1).wasOk(),
+                require(parameterSession.addDevice("RhinoDuck", audioLane).wasOk(),
                         "The Audio FX row puts the independent Rhino Duck VST3 on the audio lane");
-                const auto duckSlots = parameterSession.deviceSlots(1);
+                const auto duckSlots = parameterSession.deviceSlots(audioLane);
                 require(!duckSlots.empty() && duckSlots.back().deviceId == "RhinoDuck"
                             && duckSlots.back().kind == Session::DeviceKind::AudioEffect,
                         "and the rack lists it last, as an audio effect under its catalog id");
                 const auto duckSlot = duckSlots.back().pluginIndex;
-                auto* duck = parameterSession.devicePlugin(1, duckSlot);
+                auto* duck = parameterSession.devicePlugin(audioLane, duckSlot);
                 require(duck != nullptr && duck->getPluginType() == te::ExternalPlugin::xmlTypeName
                             && duck->getWrappedAudioProcessor() != nullptr
                             && duck->getWrappedAudioProcessor()->getName() == "Rhino Duck",
                         "Duck is Tracktion's external-plugin wrapper round the VST3");
-                const auto duckParameters = parameterSession.deviceParameters(1, duckSlot);
+                const auto duckParameters = parameterSession.deviceParameters(audioLane,duckSlot);
                 require(duckParameters.size() == 9 && duckParameters.front().name == "Mix"
                             && duckParameters.back().name == "Band solo",
                         "and its rack shows the nine controls the catalog names, Mix first");
-                require(parameterSession.addDevice("RhinoDuck", 2).wasOk(), "Duck goes on a MIDI lane too, as any audio effect does");
-                require(parameterSession.addDevice("RhinoDuck", 2).wasOk(), "and a second one is another device, not a refusal");
-                require(parameterSession.deviceSlots(2).size() >= 2, "so the MIDI lane now runs two of them");
+                require(parameterSession.addDevice("RhinoDuck", midiLane).wasOk(), "Duck goes on a MIDI lane too, as any audio effect does");
+                require(parameterSession.addDevice("RhinoDuck", midiLane).wasOk(), "and a second one is another device, not a refusal");
+                require(parameterSession.deviceSlots(midiLane).size() >= 2, "so the MIDI lane now runs two of them");
             }
         }

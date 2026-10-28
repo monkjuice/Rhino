@@ -71,9 +71,11 @@
         view.sync();
         require(view.clips.empty(), "Fresh startup hides the internal empty Pattern 1 placeholder");
         // A new document is four empty tracks, two returns and the main row,
-        // nothing else: MIDI and audio alternating, so there is somewhere to
-        // play and somewhere to drop a file without building the stack first,
-        // and a delay and a reverb at the foot for any of them to send to.
+        // nothing else: somewhere to play and somewhere to drop a file without
+        // building the stack first, and a delay and a reverb at the foot for
+        // any of them to send to. This run's document has had its tracks put
+        // MIDI and audio alternating (WorkflowTest.cpp); a new document's own
+        // order, two MIDI over two audio, is checked in NewProject.inc.
         require(session.firstReturnTrack() == 4, "A new document opens with four tracks");
         require(session.trackCount() == 6 && session.isReturnTrack(4) && session.isReturnTrack(5)
                     && session.trackName(4) == "Delay" && session.trackName(5) == "Reverb",

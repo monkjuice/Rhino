@@ -87,12 +87,12 @@
                 // tempo.
                 auto document = std::make_unique<Session>();
                 auto& song = *document;
-                require(song.trackType(0) == Session::TrackType::midi && song.trackType(2) == Session::TrackType::midi
-                            && !song.trackHasInstrument(0) && !song.trackHasInstrument(2),
+                require(song.trackType(0) == Session::TrackType::midi && song.trackType(1) == Session::TrackType::midi
+                            && !song.trackHasInstrument(0) && !song.trackHasInstrument(1),
                         "The starter stack's two MIDI tracks, bare");
-                require(song.createSlotClip(0, 0).wasOk() && song.createSlotClip(2, 0).wasOk(), "a cell on each");
+                require(song.createSlotClip(0, 0).wasOk() && song.createSlotClip(1, 0).wasOk(), "a cell on each");
                 require(song.addDjDeck().wasOk() && song.addDjDeck().wasOk(), "Two decks");
-                require(song.loadDjDeckSlot(0, 0, 0).wasOk() && song.loadDjDeckSlot(1, 2, 0).wasOk()
+                require(song.loadDjDeckSlot(0, 0, 0).wasOk() && song.loadDjDeckSlot(1, 1, 0).wasOk()
                             && song.djDeckInfo(0).loaded && song.djDeckInfo(1).loaded,
                         "take a cell each, silent on the song's grid");
                 song.setDjQuantise(Session::DjQuantise::off);

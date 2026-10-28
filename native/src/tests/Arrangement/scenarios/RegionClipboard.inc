@@ -609,7 +609,8 @@
         // ever showed it. A document of its own.
         {
             Session mirrored;
-            require(mirrored.importAudioAt(source.getFile(), 1, 0.0).wasOk(), "A one-second clip to copy part of");
+            constexpr int audioLane = 2;
+            require(mirrored.importAudioAt(source.getFile(), audioLane, 0.0).wasOk(), "A one-second clip to copy part of");
             const auto offsetOf = [&mirrored](te::EditItemID id)
             {
                 auto* clip = mirrored.findClip(id);
@@ -618,7 +619,8 @@
             const auto copyAndPaste = [&](double from, double to)
             {
                 std::vector<te::EditItemID> pasted;
-                require(mirrored.pasteClipRegion(mirrored.copyClipRegion(from, from + 0.3, 1, 1), to, 1, pasted).wasOk()
+                require(mirrored.pasteClipRegion(mirrored.copyClipRegion(from, from + 0.3, audioLane, audioLane), to,
+                                                 audioLane, pasted).wasOk()
                             && pasted.size() == 1,
                         "A trimmed clip copies and pastes");
                 return pasted.front();

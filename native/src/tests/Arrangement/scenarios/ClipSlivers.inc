@@ -24,7 +24,8 @@
                 require(writer->writeFromAudioSampleBuffer(audio, 0, audio.getNumSamples()),
                         "Write the beat-and-a-sample fixture");
             }
-            const auto lane = 1;
+            // The first audio lane of a new document.
+            const auto lane = 2;
             const auto spans = [&slivers, lane]
             {
                 std::vector<std::pair<double, double>> found;

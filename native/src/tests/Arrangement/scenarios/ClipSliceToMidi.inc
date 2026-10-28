@@ -49,7 +49,8 @@
             slicing.projectFile = sliceScratch.getChildFile("slices.rhinoedit");
             slicing.setTempo(120.0);
             require(slicing.importAudio(sliceFixture).wasOk(), "The fixture imports");
-            const auto lane = 1;
+            // The first free audio lane, which is where an untargeted import lands.
+            const auto lane = 2;
             const auto clipID = te::getAudioTracks(*slicing.edit)[lane]->getClips().getFirst()->itemID;
             const auto clipName = slicing.findClip(clipID)->getName();
             const auto slicesOnDisk = [&slicing]
@@ -188,7 +189,7 @@
             grouped.projectFile = sliceScratch.getChildFile("grouped.rhinoedit");
             grouped.setTempo(120.0);
             require(grouped.importAudio(sliceFixture).wasOk(), "The fixture imports for the group case");
-            require(grouped.groupTracks({1}, "Bus").wasOk(), "and its track is given a bus");
+            require(grouped.groupTracks({2}, "Bus").wasOk(), "and its track is given a bus");
             const auto group = grouped.trackGroups().front();
             auto* lane = te::getAudioTracks(*grouped.edit)[group.firstTrack];
             auto* bus = te::getAudioTracks(*grouped.edit)[group.busTrack];

@@ -291,8 +291,13 @@
                         if (!close(a[i].first, b[i].first) || !close(a[i].second, b[i].second)) return false;
                     return true;
                 };
+                // [MIDI, MIDI, Audio, Audio]: the second and third lanes are
+                // the one pair with MIDI over audio, so a span over them
+                // carried past the last lane needs a new lane of each kind.
+                constexpr int midiLane = 1, audioLane = 2;
                 te::EditItemID midi;
-                require(doc.createClip(0, 0.0, &midi).wasOk() && doc.importAudioAt(source.getFile(), 1, 0.0).wasOk(),
+                require(doc.createClip(midiLane, 0.0, &midi).wasOk()
+                            && doc.importAudioAt(source.getFile(), audioLane, 0.0).wasOk(),
                         "A MIDI clip and an audio clip to carry");
                 const auto stack = doc.trackCount();
                 const auto lanes = doc.firstReturnTrack();
@@ -300,7 +305,7 @@
                 // kinds they want, in the same undo step as the move, above
                 // the returns, which are past the last lane too.
                 std::vector<te::EditItemID> moved;
-                require(doc.moveClipRegion(0.0, 1.0, 0, 1, 10.0, lanes, &moved).wasOk(),
+                require(doc.moveClipRegion(0.0, 1.0, midiLane, audioLane, 10.0, lanes, &moved).wasOk(),
                         "A span carried past the last lane moves");
                 require(doc.trackCount() == stack + 2 && doc.trackType(lanes) == Session::TrackType::midi
                             && doc.trackType(lanes + 1) == Session::TrackType::audio,
@@ -308,31 +313,38 @@
                 require(moved.size() == 2 && sameSpans(visibleClips(lanes), {{10.0, 11.0}})
                             && sameSpans(visibleClips(lanes + 1), {{10.0, 11.0}}),
                         "The part inside the span lands on each new lane");
-                require(sameSpans(visibleClips(0), {{1.0, 2.0}}) && visibleClips(1).empty(),
+                require(sameSpans(visibleClips(midiLane), {{1.0, 2.0}}) && visibleClips(audioLane).empty(),
                         "and what was outside the span stays behind");
                 doc.undo();
-                require(doc.trackCount() == stack && sameSpans(visibleClips(0), {{0.0, 2.0}})
-                            && sameSpans(visibleClips(1), {{0.0, 1.0}}),
+                require(doc.trackCount() == stack && sameSpans(visibleClips(midiLane), {{0.0, 2.0}})
+                            && sameSpans(visibleClips(audioLane), {{0.0, 1.0}}),
                         "One undo takes the lanes and the move back together");
-                // A row that may not land refuses the whole move before anything is cut.
-                require(doc.moveClipRegion(0.0, 1.0, 0, 1, 0.0, 1).failed()
-                            && sameSpans(visibleClips(0), {{0.0, 2.0}}) && sameSpans(visibleClips(1), {{0.0, 1.0}}),
+                // A row that may not land refuses the whole move before anything
+                // is cut: one row down, the MIDI row would land on an audio lane.
+                require(doc.moveClipRegion(0.0, 1.0, midiLane, audioLane, 0.0, audioLane).failed()
+                            && sameSpans(visibleClips(midiLane), {{0.0, 2.0}})
+                            && sameSpans(visibleClips(audioLane), {{0.0, 1.0}}),
                         "A row whose material may not land refuses the move, and nothing is cut");
                 // A move by less than its own width overlaps its source: the
                 // piece lands, what it covers gives way, and nothing overlaps.
-                require(doc.moveClipRegion(0.25, 0.75, 1, 1, 0.5, 1).wasOk()
-                            && sameSpans(visibleClips(1), {{0.0, 0.25}, {0.5, 1.0}}),
+                require(doc.moveClipRegion(0.25, 0.75, audioLane, audioLane, 0.5, audioLane).wasOk()
+                            && sameSpans(visibleClips(audioLane), {{0.0, 0.25}, {0.5, 1.0}}),
                         "A span moved by less than its width replaces what it covers and leaves the rest");
-                for (auto* piece : te::getAudioTracks(*doc.edit)[1]->getClips())
+                for (auto* piece : te::getAudioTracks(*doc.edit)[audioLane]->getClips())
                     if (close(piece->getPosition().time.getStart().inSeconds(), 0.5))
                         require(close(piece->getPosition().offset.inSeconds(), 0.25), "and the piece keeps its place in the source");
                 doc.undo();
-                // An empty row inside the span empties the lane it lands on, as a paste does.
-                te::EditItemID later;
-                require(doc.createClip(2, 10.0, &later).wasOk() && sameSpans(visibleClips(2), {{10.0, 12.0}}),
+                // An empty row inside the span empties the lane it lands on, as a
+                // paste does. The lane under the audio one is audio too, so the
+                // clip in the way is a sample, half a second in, which the
+                // empty row trims rather than takes whole.
+                constexpr int emptyLane = audioLane + 1;
+                require(doc.importAudioAt(source.getFile(), emptyLane, 10.5).wasOk()
+                            && sameSpans(visibleClips(emptyLane), {{10.5, 11.5}}),
                         "A clip where an empty row will land");
-                require(doc.moveClipRegion(0.0, 1.0, 1, 2, 10.0, 1).wasOk() && sameSpans(visibleClips(1), {{10.0, 11.0}})
-                            && sameSpans(visibleClips(2), {{11.0, 12.0}}),
+                require(doc.moveClipRegion(0.0, 1.0, audioLane, emptyLane, 10.0, audioLane).wasOk()
+                            && sameSpans(visibleClips(audioLane), {{10.0, 11.0}})
+                            && sameSpans(visibleClips(emptyLane), {{11.0, 11.5}}),
                         "An empty row inside a carried span empties the lane it lands on, as a paste does");
                 // A span with nothing in it moves nothing and succeeds.
                 require(doc.moveClipRegion(20.0, 21.0, 0, 3, 30.0, 0).wasOk() && doc.trackCount() == stack,

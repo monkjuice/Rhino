@@ -81,6 +81,19 @@ int runArrangementTest()
         scenario("undo steps: one Ctrl+Z, one thing done, all of it, left to redo");
        #include "scenarios/UndoSteps.inc"
         Session session;
+        // The scenarios that share this document were written against a stack
+        // of MIDI, audio, MIDI, audio with both returns open, and they lean on
+        // which lane sits under which and on the rows' heights. A new document
+        // is two MIDI tracks over two audio tracks with its returns folded
+        // (NewProject.inc and ReturnTracks.inc check that), so this one is put
+        // in the older shape before any of them runs, outside the history.
+        require(session.moveTrack(2, 1).wasOk()
+                    && session.setTrackFolded(session.firstReturnTrack(), false).wasOk()
+                    && session.setTrackFolded(session.firstReturnTrack() + 1, false).wasOk()
+                    && session.trackType(1) == Session::TrackType::audio
+                    && session.trackType(2) == Session::TrackType::midi,
+                "The shared document is MIDI, audio, MIDI, audio, its returns open");
+        session.edit->getUndoManager().clearUndoHistory();
         scenario("transport readout");
        #include "scenarios/TransportReadout.inc"
         scenario("control bar fields");

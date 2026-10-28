@@ -16,10 +16,10 @@
             };
 
             scenario("nested groups: a group goes inside a new one whole");
-            // [MIDI, Audio, MIDI, Audio] grouped at the top: [Inner, M, A, M, A].
+            // [MIDI, MIDI, Audio, Audio] grouped at the top: [Inner, M, M, A, A].
             require(nest.groupTracks({0, 1}, "Inner").wasOk(), "A group to nest");
             const auto inner = nest.trackGroupBusId(0);
-            // Its bus and the loose track under it: [Outer, Inner, M, A, M, A].
+            // Its bus and the loose track under it: [Outer, Inner, M, M, A, A].
             require(nest.groupTracks({0, 3}, "Outer").wasOk(), "A group's bus and a loose track group together");
             const auto outer = nest.trackGroupBusId(0);
             auto groups = nest.trackGroups();
@@ -220,7 +220,7 @@
             const auto feedOf = [&rowAt](int track) { return rowAt(track)->getOutput().getDestinationTrack(); };
 
             scenario("nested groups: dragging a bus carries its group");
-            // [MIDI, Audio, MIDI, Audio] grouped at the top: [Band, M, A, M, A].
+            // [MIDI, MIDI, Audio, Audio] grouped at the top: [Band, M, M, A, A].
             require(dragged.groupTracks({0, 1}, "Band").wasOk(), "A group to drag");
             const auto band = dragged.trackGroupBusId(0);
             int landed = -1;
@@ -247,7 +247,7 @@
             require(dragged.setTrackGroupCollapsed(band, false).wasOk(), "The group opens again");
 
             scenario("nested groups: dragging a bus into a group nests its group there");
-            // [Band, M, A, Two, M, A]
+            // [Band, M, M, Two, A, A]
             require(dragged.groupTracks({3, 4}, "Two").wasOk(), "A second group below the first");
             const auto two = dragged.trackGroupBusId(3);
             require(dragged.moveTrack(3, 2, &landed).wasOk() && landed == 2,

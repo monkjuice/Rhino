@@ -36,8 +36,8 @@
             Session mono;
             require(mono.importAudio(monoSource.getFile()).wasOk(), "A mono file imports");
             // An untargeted import fills the first free audio lane, which in a
-            // new document is the second track.
-            auto* monoTrack = te::getAudioTracks(*mono.edit)[1];
+            // new document is the third track.
+            auto* monoTrack = te::getAudioTracks(*mono.edit)[2];
             require(monoTrack != nullptr && !monoTrack->getClips().isEmpty(), "and lands on a track");
             juce::TemporaryFile rendered(".wav");
             te::Renderer::Parameters parameters(*mono.edit);
@@ -103,10 +103,13 @@
             {
                 Session drawn;
                 require(drawn.importAudio(file).wasOk(), "The fixture imports for drawing");
-                const auto drawnTrack = 1;
+                const auto drawnTrack = 2;
                 require(drawn.setTrackLaneHeight(drawnTrack, 150.0f).wasOk(), "Its row is given room for two lanes");
                 Arrangement drawnView(drawn);
-                drawnView.setSize(1200, 508);
+                // The row sits under two lanes of 96 px, so it ends 402 px
+                // down; the lanes run to 432, 30 px to spare, over the two
+                // folded returns (64 px), the main row and the foot.
+                drawnView.setSize(1200, 560);
                 drawnView.sync();
                 drawnView.resized();
                 // The thumbnail is filled in on a worker, so the picture is

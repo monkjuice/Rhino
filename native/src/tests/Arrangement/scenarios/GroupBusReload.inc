@@ -61,11 +61,11 @@
             // pattern track an instrument whenever it could not find one,
             // which is every track that plays audio rather than notes.
             session.newProject();
-            // The stack a new document opens with leads with a MIDI track, and
-            // what this needs is a document whose first track plays audio -
-            // so the MIDI lane above it goes, and the audio lane moves up into
-            // the position the pattern track is looked up by.
-            require(session.removeAudioTrack(0).wasOk(), "A starter MIDI lane can be taken off the top");
+            // The stack a new document opens with leads with two MIDI tracks,
+            // and what this needs is a document whose first track plays audio -
+            // so the first audio lane moves up over them, into the position the
+            // pattern track is looked up by.
+            require(session.moveTrack(2, 0).wasOk(), "A starter audio lane can be carried to the top");
             require(session.trackType(0) == Session::TrackType::audio,
                     "leaving a document that opens with an audio track");
             require(session.importAudioAt(source.getFile(), 0, 0.0).wasOk(),

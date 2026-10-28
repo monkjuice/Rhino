@@ -1,7 +1,7 @@
         require(session.importAudio(output.getFile()).wasOk(), "Import rendered audio");
         // An import with no target fills the first free audio lane, which is
-        // the second track of the starter stack.
-        const auto importedTrack = 1;
+        // the third track of the starter stack.
+        const auto importedTrack = 2;
         auto* audioTrack = te::getAudioTracks(*session.edit)[importedTrack];
         require(audioTrack->getClips().size() == 1, "Import creates an audio clip");
         require(audioTrack->getClips()[0]->getPosition().time.getStart().inSeconds() == 0.0, "First audio import starts at zero");
@@ -24,9 +24,9 @@
                     return &utility->gain();
             return nullptr;
         };
-        require(utilityGainOf(1) != nullptr, "The audio lane carries a Utility");
-        utilityGainOf(1)->getCurve().addPoint(tracktion::core::TimePosition::fromSeconds(0.0), -60.0f, 0.0f, nullptr);
-        utilityGainOf(1)->getCurve().addPoint(tracktion::core::TimePosition::fromSeconds(1.0), 0.0f, 0.0f, nullptr);
+        require(utilityGainOf(importedTrack) != nullptr, "The audio lane carries a Utility");
+        utilityGainOf(importedTrack)->getCurve().addPoint(tracktion::core::TimePosition::fromSeconds(0.0), -60.0f, 0.0f, nullptr);
+        utilityGainOf(importedTrack)->getCurve().addPoint(tracktion::core::TimePosition::fromSeconds(1.0), 0.0f, 0.0f, nullptr);
 
         juce::TemporaryFile project(".rhinoedit");
         const auto snapshot = session.projectSnapshot();
@@ -65,7 +65,7 @@
             for (auto* parameter : te::getAudioTracks(*session.edit)[0]->pluginList[1]->getAutomatableParameters())
                 laneCurveBack = laneCurveBack || parameter->getCurve().getNumPoints() == 2;
             require(laneCurveBack, "A restored lane is played by the engine again");
-            require(utilityGainOf(1) != nullptr && utilityGainOf(1)->getCurve().getNumPoints() == 0,
+            require(utilityGainOf(importedTrack) != nullptr && utilityGainOf(importedTrack)->getCurve().getNumPoints() == 0,
                     "A curve saved with no lane to own it is not played after reopening");
         }
         require(!session.hasUnsavedChanges(), "Opened project is clean");

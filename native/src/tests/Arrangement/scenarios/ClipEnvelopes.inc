@@ -49,10 +49,10 @@
         });
 
         Session enveloped;
-        require(enveloped.importAudioAt(toneFile, 1, 1.0).wasOk(), "The tone lands one second in");
+        require(enveloped.importAudioAt(toneFile, 2, 1.0).wasOk(), "The tone lands one second in");
         const auto clipStartingAt = [&enveloped, &require](double seconds)
         {
-            auto* lane = te::getAudioTracks(*enveloped.edit)[1];
+            auto* lane = te::getAudioTracks(*enveloped.edit)[2];
             require(lane != nullptr, "The envelope fixture's lane is there");
             for (auto* clip : lane->getClips())
                 if (std::abs(clip->getPosition().time.getStart().inSeconds() - seconds) < 0.001)
@@ -232,7 +232,7 @@
 
         // Pitch. The hits have to land where the plain clip's do, begin and
         // end cleanly, and move by what the envelope says when it says it.
-        require(enveloped.importAudioAt(hitsFile, 1, 8.0).wasOk(), "The hits land at eight seconds");
+        require(enveloped.importAudioAt(hitsFile, 2, 8.0).wasOk(), "The hits land at eight seconds");
         auto hits = clipStartingAt(8.0);
         const auto onsets = [](const juce::AudioBuffer<float>& audio)
         {

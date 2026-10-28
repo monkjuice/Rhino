@@ -172,13 +172,13 @@ void Session::buildStarterEdit()
     edit->clickTrackEmphasiseBars = true;
     edit->clickTrackGain = juce::Decibels::decibelsToGain(-6.0f);
     edit->tempoSequence.getTempo(0)->setBpm(120.0);
-    // Four empty tracks, MIDI and audio alternating, which is the stack most
+    // Four empty tracks, two MIDI over two audio, which is the stack most
     // songs start from: somewhere to play and somewhere to drop a file, twice
     // over, without anyone having to build it first. Each one says what it is
     // at creation, so a MIDI lane takes a clip straight away and an audio lane
     // refuses one, exactly as a track added later does.
-    static constexpr TrackType starterTypes[] {TrackType::midi, TrackType::audio,
-                                               TrackType::midi, TrackType::audio};
+    static constexpr TrackType starterTypes[] {TrackType::midi, TrackType::midi,
+                                               TrackType::audio, TrackType::audio};
     static constexpr int starterTrackCount = 4;
     edit->ensureNumberOfAudioTracks(starterTrackCount);
     const auto starterTracks = audioTracks();

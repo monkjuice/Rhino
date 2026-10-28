@@ -53,25 +53,26 @@
             settle(50);
             require(steps() == 0, "A new document has nothing to undo once the engine has sorted it");
 
-            // [MIDI, Audio, MIDI, Audio]. Clips and tracks: the engine's sort
+            // [MIDI, MIDI, Audio, Audio]. Clips and tracks: the engine's sort
             // of the lane or the stack lands inside the command's own step.
+            constexpr int audioLane = 2;
             te::EditItemID made;
             require(stack.createClip(0, 4.0, &made).wasOk(), "A clip on the first lane");
             settle(30);
             require(steps() == 1 && history.getUndoDescription() == "Add clip",
                     "Adding a clip is one step, the engine's sort of its lane inside it");
-            require(stack.importAudioAt(source.getFile(), 1, 0.0).wasOk(), "Audio on the second lane");
+            require(stack.importAudioAt(source.getFile(), audioLane, 0.0).wasOk(), "Audio on the third lane");
             settle(30);
             require(steps() == 2, "Importing audio is one step");
-            require(stack.splitClip(clipsOn(1).front(), 0.5).wasOk() && clipsOn(1).size() == 2, "The audio split");
+            require(stack.splitClip(clipsOn(audioLane).front(), 0.5).wasOk() && clipsOn(audioLane).size() == 2, "The audio split");
             settle(30);
             require(steps() == 3, "Splitting is one step");
             stack.undo();
-            require(clipsOn(1).size() == 1 && steps() == 2 && stack.canRedo(),
+            require(clipsOn(audioLane).size() == 1 && steps() == 2 && stack.canRedo(),
                     "One Ctrl+Z takes the split back whole and leaves it to redo");
             stack.redo();
-            require(clipsOn(1).size() == 2 && steps() == 3, "and redo cuts it again");
-            require(stack.duplicateTracks({1}).wasOk(), "The audio lane duplicated");
+            require(clipsOn(audioLane).size() == 2 && steps() == 3, "and redo cuts it again");
+            require(stack.duplicateTracks({audioLane}).wasOk(), "The audio lane duplicated");
             settle(30);
             require(steps() == 4 && history.getUndoDescription() == "Duplicate track",
                     "Duplicating a track is one step, the engine's sort of the stack inside it");
@@ -79,7 +80,7 @@
             settle(60);
             require(steps() == 5 && history.getNumActionsInCurrentTransaction() == 0,
                     "A clip in a cell is one step, its follow actions made inside it");
-            require(stack.addClipDevice("Saturator", clipsOn(1).front()).wasOk(), "A device on an audio clip");
+            require(stack.addClipDevice("Saturator", clipsOn(audioLane).front()).wasOk(), "A device on an audio clip");
             settle(30);
             require(steps() == 6 && history.getUndoDescription() == "Add Saturator to clip",
                     "A clip's device is one step, what making it wrote inside it");
@@ -90,46 +91,46 @@
             // Parameters: one Ctrl+Z puts the engine's parameter back, not only
             // its stored value, and leaves the drag to redo - from a value the
             // knob had never left too, which the engine wrote back as a step.
-            require(stack.addDevice("Compressor", 1).wasOk(), "The engine's Compressor on the audio lane");
-            const auto compressor = slotOf(1, "Compressor");
-            const auto threshold = valueOf(1, compressor, 0);
-            const auto range = stack.deviceParameter(1, compressor, 0);
+            require(stack.addDevice("Compressor", audioLane).wasOk(), "The engine's Compressor on the audio lane");
+            const auto compressor = slotOf(audioLane, "Compressor");
+            const auto threshold = valueOf(audioLane, compressor, 0);
+            const auto range = stack.deviceParameter(audioLane, compressor, 0);
             require(range.has_value(), "The Compressor has a first control");
             const auto dragged = range->minimum + (range->maximum - range->minimum) * 0.8f;
-            require(stack.beginDeviceParameterGesture(1, compressor, 0).wasOk(), "Taking hold of the Compressor's knob");
-            stack.setDeviceParameter(1, compressor, 0, range->minimum + (range->maximum - range->minimum) * 0.3f);
-            stack.setDeviceParameter(1, compressor, 0, dragged);
-            stack.endDeviceParameterGesture(1, compressor, 0);
+            require(stack.beginDeviceParameterGesture(audioLane, compressor, 0).wasOk(), "Taking hold of the Compressor's knob");
+            stack.setDeviceParameter(audioLane, compressor, 0, range->minimum + (range->maximum - range->minimum) * 0.3f);
+            stack.setDeviceParameter(audioLane, compressor, 0, dragged);
+            stack.endDeviceParameterGesture(audioLane, compressor, 0);
             require(history.getUndoDescription().startsWith("Change "), "A knob drag is a named step");
             stack.undo();
-            require(close(valueOf(1, compressor, 0), threshold) && stack.canRedo()
+            require(close(valueOf(audioLane, compressor, 0), threshold) && stack.canRedo()
                         && history.getRedoDescription().startsWith("Change "),
                     "Ctrl+Z moves the engine's own Compressor back, and leaves the drag to redo");
             stack.redo();
-            require(close(valueOf(1, compressor, 0), dragged), "and redo moves it again");
+            require(close(valueOf(audioLane, compressor, 0), dragged), "and redo moves it again");
 
-            const auto volumeBefore = stack.trackMixer(1).volumeDb;
-            stack.beginTrackVolumeGesture(1);
-            stack.setTrackVolumeDb(1, -12.0f);
-            stack.endTrackVolumeGesture(1);
+            const auto volumeBefore = stack.trackMixer(audioLane).volumeDb;
+            stack.beginTrackVolumeGesture(audioLane);
+            stack.setTrackVolumeDb(audioLane, -12.0f);
+            stack.endTrackVolumeGesture(audioLane);
             stack.undo();
-            require(std::abs(stack.trackMixer(1).volumeDb - volumeBefore) < 0.01f && stack.canRedo(),
+            require(std::abs(stack.trackMixer(audioLane).volumeDb - volumeBefore) < 0.01f && stack.canRedo(),
                     "Ctrl+Z moves a fader back");
             stack.redo();
-            require(std::abs(stack.trackMixer(1).volumeDb + 12.0f) < 0.01f, "and redo moves it again");
+            require(std::abs(stack.trackMixer(audioLane).volumeDb + 12.0f) < 0.01f, "and redo moves it again");
 
             // A knob set with no drag around it - a double-click, a wheel - is a
             // step of its own: the drag after it does not fold it in.
-            const auto attack = stack.deviceParameter(1, compressor, 1);
-            const auto ratio = stack.deviceParameter(1, compressor, 2);
+            const auto attack = stack.deviceParameter(audioLane, compressor, 1);
+            const auto ratio = stack.deviceParameter(audioLane, compressor, 2);
             require(attack.has_value() && ratio.has_value(), "The Compressor has more controls");
             const auto loose = attack->minimum + (attack->maximum - attack->minimum) * 0.7f;
-            stack.setDeviceParameter(1, compressor, 1, loose);
-            require(stack.beginDeviceParameterGesture(1, compressor, 2).wasOk(), "Taking hold of another knob");
-            stack.setDeviceParameter(1, compressor, 2, ratio->minimum + (ratio->maximum - ratio->minimum) * 0.6f);
-            stack.endDeviceParameterGesture(1, compressor, 2);
+            stack.setDeviceParameter(audioLane, compressor, 1, loose);
+            require(stack.beginDeviceParameterGesture(audioLane, compressor, 2).wasOk(), "Taking hold of another knob");
+            stack.setDeviceParameter(audioLane, compressor, 2, ratio->minimum + (ratio->maximum - ratio->minimum) * 0.6f);
+            stack.endDeviceParameterGesture(audioLane, compressor, 2);
             stack.undo();
-            require(close(valueOf(1, compressor, 1), loose) && close(valueOf(1, compressor, 2), ratio->value),
+            require(close(valueOf(audioLane, compressor, 1), loose) && close(valueOf(audioLane, compressor, 2), ratio->value),
                     "Ctrl+Z after a knob set and a drag on another takes back the drag alone");
             stack.redo();
 
@@ -184,8 +185,8 @@
         {
             auto document = std::make_unique<Session>();
             auto& stack = *document;
-            // [MIDI, Audio, MIDI, Audio]: the second MIDI track is empty.
-            require(stack.moveTrack(2, 0).wasOk(), "The empty MIDI track carried to the top");
+            // [MIDI, MIDI, Audio, Audio]: the second MIDI track is empty.
+            require(stack.moveTrack(1, 0).wasOk(), "The empty MIDI track carried to the top");
             te::EditItemID made;
             require(stack.createClip(0, 0.0, &made).wasOk() && stack.selectPatternClip(made).wasOk(),
                     "A clip on it, open in the note editor");

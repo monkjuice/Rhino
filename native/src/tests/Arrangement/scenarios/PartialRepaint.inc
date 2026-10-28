@@ -28,8 +28,15 @@
                     areas.push_back({x, 0, 3, panel.getHeight()});
                 for (int y = 0; y < panel.getHeight(); y += 17)
                     areas.push_back({0, y, panel.getWidth(), 2});
-                juce::Image everything(juce::Image::ARGB, panel.getWidth(), panel.getHeight(), true);
-                juce::Image culled(juce::Image::ARGB, panel.getWidth(), panel.getHeight(), true);
+                // Software images, not the Direct2D bitmaps a plain juce::Image
+                // is on Windows: Direct2D draws a path a shade differently after
+                // drawing others like it, so a card's disclosure arrow drawn
+                // after three more in the full paint came out a shade off the
+                // same arrow drawn alone in the culled one.
+                juce::Image everything(juce::Image::ARGB, panel.getWidth(), panel.getHeight(), true,
+                                       juce::SoftwareImageType());
+                juce::Image culled(juce::Image::ARGB, panel.getWidth(), panel.getHeight(), true,
+                                   juce::SoftwareImageType());
                 for (const auto& area : areas)
                 {
                     panel.cullRepaints = false;
@@ -52,17 +59,18 @@
                 }
             };
 
-            // [MIDI, Audio, Bus, MIDI, Audio]: clips with held and short notes
+            // [MIDI, Bus, MIDI, Audio, Audio]: clips with held and short notes
             // on both MIDI lanes, audio on the first audio lane, a group, an
-            // automation lane of its own and a loop.
-            require(stack.groupTracks({2, 3}, "Band").wasOk(), "Two tracks group under a bus");
+            // automation lane of its own, a loop, and the returns folded as a
+            // new document opens them.
+            require(stack.groupTracks({1, 2}, "Band").wasOk(), "Two tracks group under a bus");
             te::EditItemID opened;
             require(stack.createClip(0, 0.0, &opened).wasOk(), "A clip on the first lane");
             require(stack.selectPatternClip(opened).wasOk() && stack.ensurePatternLengthSteps(64),
                     "opens, four bars long");
             require(stack.createClip(0, 8.0).wasOk() && stack.createClip(0, 12.0).wasOk(), "Two more after it");
-            require(stack.createClip(3, 1.0).wasOk(), "A clip on the grouped MIDI lane");
-            require(stack.importAudioAt(source.getFile(), 1, 3.0).wasOk(), "Audio on the first audio lane");
+            require(stack.createClip(2, 1.0).wasOk(), "A clip on the grouped MIDI lane");
+            require(stack.importAudioAt(source.getFile(), 3, 3.0).wasOk(), "Audio on the first audio lane");
             require(stack.selectPatternClip(opened).wasOk(), "The first clip is the one being edited");
             juce::ValueTree held;
             for (int note = 0; note < 24; ++note)
@@ -82,7 +90,7 @@
             paintedView.setSize(1100, 628);
             paintedView.sync();
             paintedView.resized();
-            paintedView.selectedTrack = 3;
+            paintedView.selectedTrack = 2;
             paintedView.playhead = paintedView.xFor(2.4);
             // The audio clip's waveform arrives from a worker. Compare only
             // once two paints in a row agree, so the picture is not still

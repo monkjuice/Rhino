@@ -58,7 +58,8 @@
                 require(rendered.wasOk(), ("The song renders as Export WAV renders it: " + rendered.getErrorMessage()).toRawUTF8());
                 return writtenLevel(file);
             };
-            const auto lane = 1;
+            // The first audio lane of a new document.
+            const auto lane = 2;
             const auto original = songs.getChildFile("Set.rhinoedit");
             const auto copy = media.getChildFile("Elsewhere").getChildFile("Deeper").getChildFile("Set copy.rhinoedit");
             require(copy.getParentDirectory().createDirectory().wasOk(), "and a folder for a copy, at another depth");

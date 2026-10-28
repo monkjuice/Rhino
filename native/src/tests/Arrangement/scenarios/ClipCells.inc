@@ -14,7 +14,7 @@
             for (int track = 0; track < cells.trackCount(); ++track)
                 require((cells.clipSlotAt(track, cells.sceneCount() - 1) != nullptr) != cells.isReturnTrack(track),
                         "Every track that plays has a cell for every scene");
-            // The starter stack holds both kinds: MIDI, Audio, MIDI, Audio.
+            // The starter stack holds both kinds: MIDI, MIDI, Audio, Audio.
             auto midiTrack = -1, audioTrack = -1, otherMidiTrack = -1;
             for (int track = 0; track < cells.trackCount(); ++track)
             {

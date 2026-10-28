@@ -246,10 +246,13 @@ juce::Result Session::addReturnTrack(int* added)
 // delay on A and a reverb on B, each wholly wet, since what comes back from a
 // return is added to the dry track rather than replacing it. The delay's time
 // is not a control the rack shows, so it starts on a dotted eighth at the
-// starter tempo rather than the engine's 150 ms slapback.
+// starter tempo rather than the engine's 150 ms slapback. Both open folded to
+// their one line, leaving the room to the tracks; the arrow opens either.
 void Session::addStarterReturns()
 {
     if (auto* delayReturn = makeReturnTrack("Delay"))
+    {
+        delayReturn->state.setProperty(trackFoldedID, true, nullptr);
         if (auto plugin = edit->getPluginCache().createNewPlugin(te::DelayPlugin::xmlTypeName, {}))
         {
             delayReturn->pluginList.insertPlugin(plugin, chainHeadEnd(*delayReturn), nullptr);
@@ -259,7 +262,10 @@ void Session::addStarterReturns()
                 delay->lengthMs = juce::roundToInt(60000.0 / tempo() * 0.75);
             }
         }
+    }
     if (auto* reverbReturn = makeReturnTrack("Reverb"))
+    {
+        reverbReturn->state.setProperty(trackFoldedID, true, nullptr);
         if (auto plugin = edit->getPluginCache().createNewPlugin(te::ReverbPlugin::xmlTypeName, {}))
         {
             reverbReturn->pluginList.insertPlugin(plugin, chainHeadEnd(*reverbReturn), nullptr);
@@ -269,6 +275,7 @@ void Session::addStarterReturns()
                 setPluginParameter(reverb->roomSizeParam, 0.6f);
             }
         }
+    }
 }
 
 te::AuxSendPlugin* Session::sendPlugin(int track, int returnTrack) const

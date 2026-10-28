@@ -15,6 +15,7 @@ const juce::Identifier deviceKeyID {"rhinoDeviceKey"};
 const juce::Identifier automationOwnLaneID {"ownLane"};
 const juce::Identifier automationTimeID {"time"};
 const juce::Identifier automationValueID {"value"};
+const juce::Identifier trackFoldedID {"rhinoTrackFolded"};
 const juce::Identifier trackAutomationFoldedID {"rhinoAutomationFolded"};
 const juce::Identifier trackShownAutomationID {"rhinoShownAutomation"};
 // A group is a track: its bus carries the id, and each member carries the same

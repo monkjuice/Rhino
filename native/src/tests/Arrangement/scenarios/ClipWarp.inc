@@ -26,7 +26,7 @@
 
     Session warp;
     require(warp.importAudio(warpSource.getFile()).wasOk(), "A two second tone imports");
-    auto* warpTrack = te::getAudioTracks(*warp.edit)[1];
+    auto* warpTrack = te::getAudioTracks(*warp.edit)[2];
     require(warpTrack != nullptr && !warpTrack->getClips().isEmpty(), "and lands on the first free audio lane");
     const auto warpClip = warpTrack->getClips().getLast()->itemID;
     const auto clipLength = [&warp, warpClip]
@@ -162,7 +162,7 @@
     // halving the tempo doubles its seconds exactly as it doubles those of the
     // clip after it, so the two still meet rather than overlap.
     {
-        require(warp.importAudioAt(warpSource.getFile(), 1, 2.0).wasOk(), "A second tone lands right after the first");
+        require(warp.importAudioAt(warpSource.getFile(), 2, 2.0).wasOk(), "A second tone lands right after the first");
         const auto next = warpTrack->getClips().getLast()->itemID;
         require(warp.setClipWarpMode(warpClip, Session::WarpMode::repitch).wasOk(), "The first is set to Repitch");
         warp.setTempo(60.0);
@@ -249,7 +249,7 @@
         juce::TemporaryFile saved(".rhinoedit");
         const auto snapshot = warp.projectSnapshot();
         require(warp.restoreProject(snapshot, saved.getFile()).wasOk(), "The project reloads");
-        auto* reloadedTrack = te::getAudioTracks(*warp.edit)[1];
+        auto* reloadedTrack = te::getAudioTracks(*warp.edit)[2];
         require(reloadedTrack != nullptr && !reloadedTrack->getClips().isEmpty(), "with its audio clip");
         const auto after = warp.clipWarp(reloadedTrack->getClips().getLast()->itemID);
         require(after.followsTempo == before.followsTempo, "still warped");
@@ -274,7 +274,7 @@
         scenario("clip warp: the panel");
         // Reloading the project above replaced the document, so the clip is
         // fetched again rather than assumed to be the one from before it.
-        auto* panelTrack = te::getAudioTracks(*warp.edit)[1];
+        auto* panelTrack = te::getAudioTracks(*warp.edit)[2];
         require(panelTrack != nullptr && !panelTrack->getClips().isEmpty(), "The reloaded clip is there");
         const auto panelClip = panelTrack->getClips().getLast()->itemID;
         require(warp.setClipWarpMode(panelClip, Session::WarpMode::tones).wasOk(), "A stretching mode");

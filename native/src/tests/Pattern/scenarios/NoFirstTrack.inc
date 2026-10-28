@@ -19,7 +19,10 @@
 
             // Deleting the first track takes the editor's clip with it. The
             // editor moves to the next MIDI track rather than planting a MIDI
-            // clip on the audio track that is now first.
+            // clip on the audio track that is now first. The starter stack is
+            // two MIDI over two audio, so an audio track is put second first.
+            require(stack.moveTrack(2, 1).wasOk() && stack.trackType(1) == Session::TrackType::audio,
+                    "An audio track moves up under the first");
             require(stack.removeAudioTrack(0).wasOk(), "The first track can be removed");
             require(stack.trackType(0) == Session::TrackType::audio, "An audio track is now first");
             require(midiClipsOnAudioTracks() == 0, "Removing the first track puts no MIDI clip on an audio track");

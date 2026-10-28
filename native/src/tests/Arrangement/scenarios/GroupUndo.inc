@@ -12,7 +12,7 @@
             };
             const auto trackAt = [&stack](int track) { return te::getAudioTracks(*stack.edit)[track]; };
 
-            // [MIDI, Audio, MIDI, Audio] grouped at the top: [Bus, M, A, M, A].
+            // [MIDI, MIDI, Audio, Audio] grouped at the top: [Bus, M, M, A, A].
             require(stack.groupTracks({0, 1}, "Band").wasOk(), "Two tracks group under a bus");
             const auto band = stack.trackGroupId(1);
             require(stack.isGroupBusTrack(0) && band != 0 && stack.trackGroupId(2) == band,

@@ -42,8 +42,8 @@
 
             // A move one clip of which may not make is refused whole.
             const std::vector<Session::ClipMove> mixed {
-                {a, {0.0, barSeconds, 0.0}, 2},   // a MIDI lane: fine on its own
-                {b, {0.0, barSeconds, 0.0}, 1}};  // an audio lane: refused
+                {a, {0.0, barSeconds, 0.0}, 1},   // a MIDI lane: fine on its own
+                {b, {0.0, barSeconds, 0.0}, 2}};  // an audio lane: refused
             require(stack.moveClips(mixed).failed(), "A drag that would put a MIDI clip on an audio lane is refused");
             require(stack.findClip(a)->getClipTrack() == te::getAudioTracks(*stack.edit)[0],
                     "and the clip that could have moved stays where it was");
@@ -56,8 +56,8 @@
                     "and one undo brings every clip of it back");
 
             // A copy of an audio clip keeps the clip's own mix and warp.
-            require(stack.importAudioAt(source.getFile(), 1, 0.0).wasOk(), "An audio clip to copy");
-            const auto original = te::getAudioTracks(*stack.edit)[1]->getClips().getFirst()->itemID;
+            require(stack.importAudioAt(source.getFile(), 2, 0.0).wasOk(), "An audio clip to copy");
+            const auto original = te::getAudioTracks(*stack.edit)[2]->getClips().getFirst()->itemID;
             require(stack.setAudioClipGainDb(original, -6.0f).wasOk() && stack.setAudioClipPan(original, 0.4f).wasOk()
                         && stack.setAudioClipPitch(original, 3.0f).wasOk()
                         && stack.setAudioClipFadeIn(original, 0.1).wasOk()
@@ -72,7 +72,7 @@
             const auto warpBefore = stack.clipWarp(original);
             require(stack.duplicateClip(original).wasOk(), "The clip duplicates");
             te::EditItemID copy;
-            for (auto* clip : te::getAudioTracks(*stack.edit)[1]->getClips())
+            for (auto* clip : te::getAudioTracks(*stack.edit)[2]->getClips())
                 if (clip->itemID != original) copy = clip->itemID;
             const auto after = stack.audioClipMix(copy);
             const auto warpAfter = stack.clipWarp(copy);
@@ -102,10 +102,10 @@
             // A clip from a lane that plays nothing leaves the destination's
             // instrument alone.
             te::EditItemID bare;
-            require(stack.createClip(2, 8.0 * barSeconds, &bare).wasOk() && !stack.trackHasInstrument(2),
+            require(stack.createClip(1, 8.0 * barSeconds, &bare).wasOk() && !stack.trackHasInstrument(1),
                     "A clip on a lane with no instrument");
             std::vector<te::EditItemID> pasted;
-            require(stack.pasteClipRegion(stack.copyClipRegion(8.0 * barSeconds, 9.0 * barSeconds, 2, 2),
+            require(stack.pasteClipRegion(stack.copyClipRegion(8.0 * barSeconds, 9.0 * barSeconds, 1, 1),
                                           12.0 * barSeconds, 0, pasted).wasOk(),
                     "pastes onto the drum lane");
             require(stack.patternInstrumentForTrack(0) != nullptr
@@ -122,7 +122,7 @@
 
             // A group bus takes no clips, pasted or not.
             require(stack.groupTracks({3}, "Bus").wasOk() && stack.isGroupBusTrack(3), "A bus to paste onto");
-            require(stack.pasteClipRegion(stack.copyClipRegion(0.0, barSeconds, 1, 1), 20.0, 3, pasted).failed(),
+            require(stack.pasteClipRegion(stack.copyClipRegion(0.0, barSeconds, 2, 2), 20.0, 3, pasted).failed(),
                     "A paste onto a bus is refused");
 
             // Pasting notes past the end of the open clip grows it, and the
@@ -132,7 +132,7 @@
             require(!overlapping(0), "and no clip on its lane overlaps another");
 
             // A cell is no way round a track's kind.
-            require(stack.createSlotClip(1, 0).failed(),
+            require(stack.createSlotClip(2, 0).failed(),
                     "An audio lane's cell makes no MIDI clip");
             require(stack.insertAudioFileInSlot(source.getFile(), 0, 0).failed(),
                     "A MIDI lane's cell refuses audio");
@@ -144,7 +144,7 @@
                                          .getChildFile("Rhino").getChildFile("Built-in audio").getChildFile("Rhino Whistle.wav");
                 whistle.getParentDirectory().createDirectory();
                 require(whistle.replaceWithText("RIFF stub"), "A stub where the whistle should be");
-                require(stack.importBuiltInSample(Session::BuiltInSample::Whistle, 1, 30.0).wasOk(),
+                require(stack.importBuiltInSample(Session::BuiltInSample::Whistle, 2, 30.0).wasOk(),
                         "The whistle imports over a stub left by an interrupted write");
                 juce::AudioFormatManager formats;
                 formats.registerBasicFormats();

@@ -42,11 +42,11 @@
 
         {
             Session repeatedDrums;
-            // The third starter lane, because a pattern is notes and an
-            // instrument and the second lane is there to hold audio.
-            require(repeatedDrums.insertPatternPreset(Session::PatternPreset::BreakKit, 2, 2.0).wasOk(),
+            // The second starter lane, the other MIDI one, because a pattern is
+            // notes and an instrument and the audio lanes are there to hold audio.
+            require(repeatedDrums.insertPatternPreset(Session::PatternPreset::BreakKit, 1, 2.0).wasOk(),
                     "Repeated drum regression creates the first clip after silence");
-            auto* drumTrack = te::getAudioTracks(*repeatedDrums.edit)[2];
+            auto* drumTrack = te::getAudioTracks(*repeatedDrums.edit)[1];
             auto* first = drumTrack->getClips().getLast();
             require(first != nullptr, "Repeated drum regression finds its first clip");
             for (int i = 0; i < 3; ++i)
@@ -132,7 +132,7 @@
             Session fxSession;
             require(fxSession.importAudio(output.getFile()).wasOk(), "Rhino Space test imports rendered audio");
             // An untargeted import fills the first free audio lane.
-            const auto fxIndex = 1;
+            const auto fxIndex = 2;
             require(fxSession.addAudioEffect(Session::AudioEffect::RhinoSpace, fxIndex).wasOk(), "Rhino Space can be inserted for render stability");
             auto* fxTrack = te::getAudioTracks(*fxSession.edit)[fxIndex];
             const auto fxDevices = fxSession.deviceSlots(fxIndex);
@@ -204,7 +204,7 @@
             auto laneDocument = std::make_unique<Session>();
             auto& laneSession = *laneDocument;
             require(laneSession.importAudio(tone.getFile()).wasOk(), "The tone imports onto the first free audio lane");
-            const auto laneTrack = 1;
+            const auto laneTrack = 2;
             auto* toneTrack = te::getAudioTracks(*laneSession.edit)[laneTrack];
             int utilitySlot = -1;
             for (int slot = 0; slot < toneTrack->pluginList.size(); ++slot)

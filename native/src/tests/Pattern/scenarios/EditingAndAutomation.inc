@@ -88,9 +88,9 @@
         const auto drumDuplicateID = drumDuplicate->itemID;
         const auto duplicateLength = drumDuplicate->getPosition().time.getLength().inSeconds();
         require(session.editClip(drumDuplicateID, {2.0, 2.0 + duplicateLength, drumDuplicate->getPosition().offset.inSeconds()},
-                                 ClipGesture::move, 2).wasOk(),
+                                 ClipGesture::move, 1).wasOk(),
                 "Can move a duplicated drum MIDI clip to another track");
-        const auto movedDrumSlots = session.deviceSlots(2);
+        const auto movedDrumSlots = session.deviceSlots(1);
         auto movedDrumsEnabled = false, movedSynthDisabled = true;
         for (const auto& slot : movedDrumSlots)
         {

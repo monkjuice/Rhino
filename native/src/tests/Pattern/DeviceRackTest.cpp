@@ -34,12 +34,15 @@ void runPatternDeviceRackTest()
     require(hasUtility(0), "Session creates the Utility device on the starter track");
     require(session.firstReturnTrack() == 4 && !session.trackHasInstrument(0),
             "A new document opens with four empty tracks and nothing else");
+    // The starter stack is two MIDI tracks over two audio tracks; these
+    // checks use the second of the MIDI ones and the first of the audio ones.
+    constexpr int midiLane = 1, audioLane = 2;
     require(session.trackType(0) == Session::TrackType::midi
-            && session.trackType(1) == Session::TrackType::audio
-            && session.trackType(2) == Session::TrackType::midi
+            && session.trackType(midiLane) == Session::TrackType::midi
+            && session.trackType(audioLane) == Session::TrackType::audio
             && session.trackType(3) == Session::TrackType::audio,
-            "The starter stack alternates MIDI and audio");
-    require(hasUtility(1), "The starter audio track brings its own Utility device");
+            "The starter stack is two MIDI tracks over two audio tracks");
+    require(hasUtility(audioLane), "The starter audio track brings its own Utility device");
     require(session.patternInstrument() == nullptr,
             "The starter track runs no instrument until one is dropped on it");
     require(session.addInstrument(Session::Instrument::FourOsc, 0).wasOk(),
@@ -57,12 +60,12 @@ void runPatternDeviceRackTest()
     require(session.patternInstrument() != nullptr
             && session.patternInstrumentKind() == Session::Instrument::FourOsc,
             "The pattern track carries one instrument, 4OSC");
-    auto* effectTrack = te::getAudioTracks(*session.edit)[1];
+    auto* effectTrack = te::getAudioTracks(*session.edit)[audioLane];
     const auto initialAudioPluginCount = effectTrack->pluginList.size();
     const auto patternDevices = session.deviceSlots(0);
     require(patternDevices.size() == 1 && patternDevices.front().kind == Session::DeviceKind::Instrument,
             "Device View shows the active pattern instrument, not dormant alternatives");
-    require(session.deviceSlots(1).empty(), "Device View hides permanent audio-track channel infrastructure");
+    require(session.deviceSlots(audioLane).empty(), "Device View hides permanent audio-track channel infrastructure");
     require(session.addAudioEffect(Session::AudioEffect::Compressor, 0).wasOk()
             && session.addMidiEffect(Session::MidiEffect::RhinoArp, 0).wasOk(),
             "Pattern track accepts MIDI and audio processors around its instrument");
@@ -74,11 +77,11 @@ void runPatternDeviceRackTest()
             "Device View follows MIDI effect to instrument to audio effect signal order");
     // A MIDI effect added to a track with no instrument yet goes where it will
     // still be in front of one: an instrument added afterwards lands behind it.
-    require(!session.trackHasInstrument(2)
-                && session.addMidiEffect(Session::MidiEffect::RhinoArp, 2).wasOk()
-                && session.addInstrument(Session::Instrument::FourOsc, 2).wasOk(),
+    require(!session.trackHasInstrument(midiLane)
+                && session.addMidiEffect(Session::MidiEffect::RhinoArp, midiLane).wasOk()
+                && session.addInstrument(Session::Instrument::FourOsc, midiLane).wasOk(),
             "A MIDI effect, then an instrument, on an empty MIDI track");
-    const auto laterChain = session.deviceSlots(2);
+    const auto laterChain = session.deviceSlots(midiLane);
     require(laterChain.size() == 2 && laterChain[0].kind == Session::DeviceKind::MidiEffect
                 && laterChain[1].kind == Session::DeviceKind::Instrument,
             "The MIDI effect added first still runs before the instrument added after it");
@@ -100,20 +103,20 @@ void runPatternDeviceRackTest()
     deviceView.setSize(900, 120);
     require(deviceView.devicePanels.getFirst()->getHeight() == DeviceEditorPanel::standardHeight,
             "Shrinking Device View does not compress device controls");
-    require(session.addAudioEffect(Session::AudioEffect::Equaliser, 1).wasOk(), "Audio FX browser action inserts EQ");
+    require(session.addAudioEffect(Session::AudioEffect::Equaliser, audioLane).wasOk(), "Audio FX browser action inserts EQ");
     require(effectTrack->pluginList.size() == initialAudioPluginCount + 1, "Audio FX insert grows the audio track chain");
-    auto audioDevices = session.deviceSlots(1);
+    auto audioDevices = session.deviceSlots(audioLane);
     require(audioDevices.size() == 1 && audioDevices.front().kind == Session::DeviceKind::AudioEffect,
             "Device View exposes the inserted audio effect without channel-strip nodes");
     require(audioDevices.back().removable && juce::isPositiveAndBelow(audioDevices.back().pluginIndex, effectTrack->pluginList.size())
             && effectTrack->pluginList[audioDevices.back().pluginIndex]->getPluginType() == audioDevices.back().type,
             "Visible devices retain their real processing-graph positions");
     const auto effectPluginIndex = audioDevices.back().pluginIndex;
-    require(session.toggleDeviceEnabled(1, effectPluginIndex).wasOk(), "Device View bypasses selected effect");
+    require(session.toggleDeviceEnabled(audioLane,effectPluginIndex).wasOk(), "Device View bypasses selected effect");
     require(!effectTrack->pluginList[effectPluginIndex]->isEnabled(), "Bypass disables the effect plugin");
     session.undo();
     require(effectTrack->pluginList[effectPluginIndex]->isEnabled(), "Undo restores effect enabled state");
-    require(session.deleteDevice(1, effectPluginIndex).wasOk(), "Device View deletes inserted effect");
+    require(session.deleteDevice(audioLane,effectPluginIndex).wasOk(), "Device View deletes inserted effect");
     require(effectTrack->pluginList.size() == initialAudioPluginCount, "Delete removes inserted audio effect");
     session.undo();
     require(effectTrack->pluginList.size() == initialAudioPluginCount + 1, "Undo restores deleted audio effect");
@@ -368,11 +371,11 @@ void runPatternDeviceRackTest()
         juce::String said;
         const auto savedStatus = compressorPanel->status;
         compressorPanel->status = [&said](juce::String text) { said = std::move(text); };
-        require(compressorPanel->chooseSidechainSource(1).wasOk()
-                    && session.deviceSidechainSource(0, compressorSlot) == 1
+        require(compressorPanel->chooseSidechainSource(audioLane).wasOk()
+                    && session.deviceSidechainSource(0, compressorSlot) == audioLane
                     && compressor->useSidechainTrigger.get(),
                 "Picking a track on the strip routes it, and tells the compressor to listen to it");
-        require(said.contains(session.trackName(1)), "and the status line names the track");
+        require(said.contains(session.trackName(audioLane)), "and the status line names the track");
         Theme sidechainTheme;
         compressorPanel->setLookAndFeel(&sidechainTheme);
         const auto routed = compressorPanel->createComponentSnapshot(compressorPanel->getLocalBounds());
@@ -388,7 +391,7 @@ void runPatternDeviceRackTest()
             else
                 require(false, "Sidechain snapshot path is writable");
         }
-        require(compressorPanel->chooseSidechainSource(0).failed() && session.deviceSidechainSource(0, compressorSlot) == 1,
+        require(compressorPanel->chooseSidechainSource(0).failed() && session.deviceSidechainSource(0, compressorSlot) == audioLane,
                 "Its own track is refused, and the routing it had is kept");
         require(said.isNotEmpty() && !said.contains("driven by"), "with the refusal in the status line");
         require(compressorPanel->chooseSidechainSource(-1).wasOk()
@@ -400,12 +403,12 @@ void runPatternDeviceRackTest()
 
     // A face may put a control on the same row as the device's name, and the
     // name bar being the handle a chain is dragged by must not swallow it.
-    require(session.addDevice("RhinoTune", 1).wasOk(), "An audio track takes Rhino Tune");
-    chainView.selectTrack(1);
+    require(session.addDevice("RhinoTune", audioLane).wasOk(), "An audio track takes Rhino Tune");
+    chainView.selectTrack(audioLane);
     chainView.setSize(1400, 280);
-    const auto tuneSlots = session.deviceSlots(1);
+    const auto tuneSlots = session.deviceSlots(audioLane);
     require(tuneSlots.size() == 1 && chainView.devicePanels.size() == 1, "The audio track shows Rhino Tune alone");
-    auto* tune = dynamic_cast<AutoTuneDevice*>(session.devicePlugin(1, tuneSlots.front().pluginIndex));
+    auto* tune = dynamic_cast<AutoTuneDevice*>(session.devicePlugin(audioLane, tuneSlots.front().pluginIndex));
     require(tune != nullptr, "Rhino Tune is the device the rack is showing");
     auto* tunePanel = chainView.devicePanels.getFirst();
     const auto press = [](juce::Component& target, juce::Point<float> point)
@@ -447,8 +450,8 @@ void runPatternDeviceRackTest()
     // audio track is the only time anything goes through it. A clock part-way
     // through its count is stood in for by one at a rate no face picks, which
     // a follow that restarts it puts back to 24 Hz.
-    require(session.addDevice("Equaliser", 1).wasOk(), "An audio track takes Rhino EQ");
-    chainView.selectTrack(1);
+    require(session.addDevice("Equaliser", audioLane).wasOk(), "An audio track takes Rhino EQ");
+    chainView.selectTrack(audioLane);
     DeviceEditorPanel* eqPanel = nullptr;
     for (auto* panel : chainView.devicePanels)
         if (panel->deviceId == "Equaliser")
@@ -456,7 +459,7 @@ void runPatternDeviceRackTest()
     require(eqPanel != nullptr && eqPanel->isTimerRunning(), "The EQ's face runs a clock for its spectrum");
     const auto eqSlot = eqPanel->devicePluginIndex();
     const auto bandFourFrequency = RhinoEqDevice::frequencyParameter(3);
-    require(session.setTrackAutomationPoints({1, eqSlot, bandFourFrequency}, {{0.0, 200.0f}, {2.0, 2000.0f}}).wasOk()
+    require(session.setTrackAutomationPoints({audioLane, eqSlot, bandFourFrequency}, {{0.0, 200.0f}, {2.0, 2000.0f}}).wasOk()
                 && eqPanel->followsAutomation(),
             "A lane on band 4's frequency is one the EQ's face follows");
     eqPanel->startTimer(1000);
@@ -464,15 +467,15 @@ void runPatternDeviceRackTest()
         chainView.followAutomation();
     require(eqPanel->getTimerInterval() == 1000,
             "Following a lane leaves the face's running clock alone, so its frames still come due");
-    require(session.clearTrackAutomationPoints({1, eqSlot, bandFourFrequency}).wasOk()
-                && session.deleteDevice(1, eqSlot).wasOk(),
+    require(session.clearTrackAutomationPoints({audioLane, eqSlot, bandFourFrequency}).wasOk()
+                && session.deleteDevice(audioLane,eqSlot).wasOk(),
             "The EQ and its lane go again");
 
     // A device on the SDK without a face of its own gets one generated from
     // what its controls declare: sections, a chooser for a choice, a switch
     // for a toggle, and knobs that step and reset the way they declare.
-    require(session.addDevice("RhinoFM", 2).wasOk(), "A MIDI track takes Rhino FM");
-    chainView.selectTrack(2);
+    require(session.addDevice("RhinoFM", midiLane).wasOk(), "A MIDI track takes Rhino FM");
+    chainView.selectTrack(midiLane);
     chainView.setSize(2400, 280);
     DeviceEditorPanel* fmPanel = nullptr;
     for (auto* panel : chainView.devicePanels)
@@ -560,10 +563,10 @@ void runPatternDeviceRackTest()
             require(fmPanel->parameterLabels[i]->getText() == "Ratio",
                     "A caption leaves out the section it already sits under");
 
-    const auto fmSlot = session.deviceSlots(2).back().pluginIndex;
+    const auto fmSlot = session.deviceSlots(midiLane).back().pluginIndex;
     const auto fmValue = [&session, fmSlot](int parameter)
     {
-        return session.deviceParameters(2, fmSlot)[static_cast<size_t>(parameter)].valueText;
+        return session.deviceParameters(midiLane, fmSlot)[static_cast<size_t>(parameter)].valueText;
     };
     algorithm->setSelectedId(1, juce::sendNotificationSync);
     require(fmValue(0) == "4>3>2>1", "A generated chooser writes its parameter");
@@ -613,16 +616,16 @@ void runPatternDeviceRackTest()
     // What the face costs while a knob is dragged: every frame the device
     // draws a new picture and the panel is laid out and painted again.
     {
-        const auto fmSlotState = session.deviceSlots(2).back();
+        const auto fmSlotState = session.deviceSlots(midiLane).back();
         const auto levelIndex = 9;   // Op 1 Level
         std::vector<double> targets, paints;
         juce::Image canvas(juce::Image::ARGB, fmPanel->getWidth(), fmPanel->getHeight(), true, juce::SoftwareImageType());
         for (int frame = 0; frame < 60; ++frame)
         {
-            require(session.setDeviceParameter(2, fmSlotState.pluginIndex, levelIndex, 0.3f + 0.01f * static_cast<float>(frame)).wasOk(),
+            require(session.setDeviceParameter(midiLane, fmSlotState.pluginIndex, levelIndex, 0.3f + 0.01f * static_cast<float>(frame)).wasOk(),
                     "Op 1 Level can be set");
             auto start = juce::Time::getHighResolutionTicks();
-            fmPanel->setTarget(2, fmSlotState, false);
+            fmPanel->setTarget(midiLane, fmSlotState, false);
             targets.push_back(juce::Time::highResolutionTicksToSeconds(juce::Time::getHighResolutionTicks() - start));
             juce::Graphics g(canvas);
             start = juce::Time::getHighResolutionTicks();
@@ -641,7 +644,7 @@ void runPatternDeviceRackTest()
     // The open tab belongs to the device, not to the panel, which the rack
     // builds again whenever the track changes.
     chainView.selectTrack(0);
-    chainView.selectTrack(2);
+    chainView.selectTrack(midiLane);
     fmPanel = nullptr;
     for (auto* panel : chainView.devicePanels)
         if (panel->deviceId == "RhinoFM")
@@ -652,10 +655,10 @@ void runPatternDeviceRackTest()
     // than adding a second one.
     {
         const auto bells = ContentLibrary::file("Presets/RhinoFM/Glass Bells.rnd");
-        const auto devicesBefore = session.deviceSlots(2).size();
+        const auto devicesBefore = session.deviceSlots(midiLane).size();
         const auto at = chainView.getLocalPoint(&chainView.chainContent, fmPanel->getBounds().getCentre());
         chainView.itemDropped({"rhino-browser:device-preset:" + bells.getFullPathName(), nullptr, at});
-        require(session.deviceSlots(2).size() == devicesBefore && fmValue(14) == "x3.5",
+        require(session.deviceSlots(midiLane).size() == devicesBefore && fmValue(14) == "x3.5",
                 "Glass Bells dropped on Rhino FM loads into it: operator 2 at x3.5");
         session.undo();
         require(fmValue(14) == "x1", "and undoing it puts the patch back");
@@ -664,7 +667,7 @@ void runPatternDeviceRackTest()
     // Rhino Space, with six controls and no sections, keeps a single row of
     // larger knobs and no titles. Adding it rebuilds every panel, so nothing
     // above may be used past this point.
-    require(session.addDevice("RhinoSpace", 2).wasOk(), "Rhino Space follows the synth");
+    require(session.addDevice("RhinoSpace", midiLane).wasOk(), "Rhino Space follows the synth");
     DeviceEditorPanel* spacePanel = nullptr;
     for (auto* panel : chainView.devicePanels)
         if (panel->deviceId == "RhinoSpace")
@@ -691,7 +694,7 @@ void runPatternDeviceRackTest()
     // may be used past this point.
     if (session.isForgeAvailable())
     {
-        require(session.addDevice("RhinoForge", 2).wasOk(), "The MIDI track takes Rhino Forge in place of Rhino FM");
+        require(session.addDevice("RhinoForge", midiLane).wasOk(), "The MIDI track takes Rhino Forge in place of Rhino FM");
         DeviceEditorPanel* forgePanel = nullptr;
         for (auto* panel : chainView.devicePanels)
             if (panel->deviceId == "RhinoForge")
@@ -725,13 +728,13 @@ void runPatternDeviceRackTest()
         auto opened = 0;
         forgePanel->openEditor = [&opened] { ++opened; };
         forgePanel->mouseDown(press(*forgePanel, mapButton.getCentre().toFloat()));
-        require(opened == 1 && session.isMappingParameters(2, forgeSlot) && forgePanel->mapping,
+        require(opened == 1 && session.isMappingParameters(midiLane,forgeSlot) && forgePanel->mapping,
                 "A click on MAP opens the window and starts mapping");
         forgePanel->mouseDown(press(*forgePanel, mapButton.getCentre().toFloat()));
-        require(opened == 1 && !session.isMappingParameters(2, forgeSlot) && !forgePanel->mapping,
+        require(opened == 1 && !session.isMappingParameters(midiLane,forgeSlot) && !forgePanel->mapping,
                 "A second click stops it, leaving the window");
         // A knob mapped onto the face widens it, and the rack makes room.
-        auto* forgeProcessor = session.devicePlugin(2, forgeSlot)->getWrappedAudioProcessor();
+        auto* forgeProcessor = session.devicePlugin(midiLane, forgeSlot)->getWrappedAudioProcessor();
         const auto forgeParameter = [forgeProcessor] (const juce::String& name)
         {
             const auto& parameters = forgeProcessor->getParameters();
@@ -740,9 +743,9 @@ void runPatternDeviceRackTest()
                     return i;
             return -1;
         };
-        require(session.mapDeviceParameter(2, forgeSlot, forgeParameter("LFO 1 Rate")).wasOk(), "LFO 1 Rate is mapped");
+        require(session.mapDeviceParameter(midiLane,forgeSlot, forgeParameter("LFO 1 Rate")).wasOk(), "LFO 1 Rate is mapped");
         require(forgePanel->getWidth() == 46 + 5 * 66 && forgeKnobs().size() == 10, "Ten knobs still stand five across");
-        require(session.mapDeviceParameter(2, forgeSlot, forgeParameter("LFO 2 Rate")).wasOk(), "LFO 2 Rate is mapped");
+        require(session.mapDeviceParameter(midiLane,forgeSlot, forgeParameter("LFO 2 Rate")).wasOk(), "LFO 2 Rate is mapped");
         require(forgePanel->getWidth() == 46 + 6 * 66 && forgeKnobs().size() == 11
                     && forgeKnobs()[10]->getTooltip().startsWith("LFO 2 Rate:"),
                 "Eleven stand six across, and the rack has laid the wider face out");

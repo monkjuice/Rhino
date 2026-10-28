@@ -837,7 +837,7 @@ DrumRackDevice* rackOn(Session& session, int track, int* slot = nullptr)
 void checkThroughSession()
 {
     Session stack;
-    constexpr int midi = 0, audio = 1, otherMidi = 2;
+    constexpr int midi = 0, otherMidi = 1, audio = 2;
     const auto eightOhEight = ContentLibrary::file("Drums/Kits/808 Kit.rdk");
     require(stack.addDrumKit(eightOhEight, audio).failed(), "an audio track refuses a kit");
     require(stack.addDrumKit(eightOhEight, midi).wasOk(), "a MIDI track takes one");

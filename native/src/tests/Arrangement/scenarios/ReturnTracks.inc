@@ -270,7 +270,8 @@
                                                                                       * 1000.0 / 48000.0)));
                 require(writer->writeFromAudioSampleBuffer(audio, 0, audio.getNumSamples()), "Write the burst");
             }
-            require(song.importAudioAt(burst.getFile(), 1, 0.0).wasOk(), "The burst on the starter audio track");
+            constexpr int audioLane = 2;
+            require(song.importAudioAt(burst.getFile(), audioLane, 0.0).wasOk(), "The burst on the starter audio track");
             const auto render = [&song, &wav, &require]
             {
                 juce::TemporaryFile rendered(".wav");
@@ -317,22 +318,22 @@
             const auto dry = render();
             require(level(dry, 0.0, 0.04) > 0.1f && level(dry, 0.05, 1.0) < 1.0e-4f,
                     "Sending nothing, the song is the burst and nothing after it");
-            require(song.setTrackSendDb(1, delayReturn, 0.0f).wasOk(), "The track's send to the delay turned up");
+            require(song.setTrackSendDb(audioLane, delayReturn, 0.0f).wasOk(), "The track's send to the delay turned up");
             const auto sent = render();
             const auto added = difference(sent, dry);
             require(level(added, 0.0, echo - 0.01) < 1.0e-4f,
                     "What the return adds is silent until the delay's time: none of the dry sound comes back");
             require(level(added, echo, echo + 0.04) > 0.05f, "and then the echo");
 
-            song.setTrackMuted(1, true);
+            song.setTrackMuted(audioLane, true);
             require(level(render(), 0.0, 1.0) < 1.0e-5f, "A muted track sends nothing either");
-            song.setTrackMuted(1, false);
+            song.setTrackMuted(audioLane, false);
 
-            song.setTrackSoloed(1, true);
+            song.setTrackSoloed(audioLane, true);
             const auto soloed = render();
             require(level(soloed, 0.0, 0.04) > 0.1f && level(soloed, echo, echo + 0.04) > 0.05f,
                     "A soloed track is heard with its echo: the returns play on under a solo");
-            song.setTrackSoloed(1, false);
+            song.setTrackSoloed(audioLane, false);
             song.setTrackSoloed(0, true);
             require(level(render(), 0.0, 1.0) < 1.0e-5f, "and a track left out by a solo sends nothing");
             song.setTrackSoloed(0, false);
@@ -358,6 +359,29 @@
             cards.sync();
             cards.resized();
             const auto first = song.firstReturnTrack();
+            // A new document's returns open folded to their one line, leaving
+            // the room to the tracks, and the arrow before a return's name
+            // opens it to a return's own height. Opened, they are what the
+            // checks after this were written for.
+            for (const auto track : {first, first + 1})
+                require(song.isTrackFolded(track)
+                            && std::abs(cards.lane(track).getHeight() - Arrangement::minimumLaneHeight) < 0.001f,
+                        "A new document's returns open folded, at their one line");
+            for (const auto track : {first + 1, first})
+            {
+                const auto at = cards.disclosureBounds(track).getCentre();
+                const juce::MouseEvent click(juce::Desktop::getInstance().getMainMouseSource(), at,
+                                             juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier), 1.0f, 0, 0, 0, 0,
+                                             &cards, &cards, juce::Time::getCurrentTime(), at,
+                                             juce::Time::getCurrentTime(), 1, false);
+                cards.mouseDown(click);
+                cards.mouseUp(click);
+                cards.sync();
+                cards.resized();
+                require(!song.isTrackFolded(track)
+                            && std::abs(cards.lane(track).getHeight() - Arrangement::defaultReturnLaneHeight) < 0.001f,
+                        "and its arrow opens a return to a return's own height");
+            }
             require(cards.sends.size() == static_cast<size_t>(song.trackCount()), "Every card has its row of sends");
             for (int track = 0; track < song.trackCount(); ++track)
             {

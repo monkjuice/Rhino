@@ -42,10 +42,10 @@
         }
 
         Session pitched;
-        require(pitched.importAudioAt(pitchSource, 1, 1.0).wasOk(), "The fixture lands one second in");
+        require(pitched.importAudioAt(pitchSource, 2, 1.0).wasOk(), "The fixture lands one second in");
         const auto clipStartingAt = [&pitched, &require](double seconds)
         {
-            auto* lane = te::getAudioTracks(*pitched.edit)[1];
+            auto* lane = te::getAudioTracks(*pitched.edit)[2];
             require(lane != nullptr, "The pitch fixture's lane is there");
             for (auto* clip : lane->getClips())
                 if (std::abs(clip->getPosition().time.getStart().inSeconds() - seconds) < 0.001)

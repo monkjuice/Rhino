@@ -73,7 +73,7 @@
             const auto trackAt = [&stack](int track) { return te::getAudioTracks(*stack.edit)[track]; };
             const auto destinationOf = [&trackAt](int track) { return trackAt(track)->getOutput().getDestinationTrack(); };
 
-            // [MIDI, Audio, MIDI, Audio] grouped at the top: [Bus, M, A, M, A].
+            // [MIDI, MIDI, Audio, Audio] grouped at the top: [Bus, M, M, A, A].
             require(stack.groupTracks({0, 1}, "Band").wasOk(), "A group to copy");
             const auto band = stack.trackGroupBusId(0);
             std::vector<int> made;
@@ -87,12 +87,12 @@
             require(destinationOf(4) == trackAt(3) && destinationOf(5) == trackAt(3) && destinationOf(1) == trackAt(0),
                     "whose members feed its own bus, while the first group's still feed theirs");
 
-            // [Bus, M, A, Bus, M, A, M, A]
+            // [Bus, M, M, Bus, M, M, A, A]
             require(stack.duplicateTracks({1}, &made).wasOk() && made == std::vector<int> {2}
                         && stack.trackGroupId(2) == band && destinationOf(2) == trackAt(0),
                     "A member duplicated alone lands under itself, inside its group");
 
-            // [Bus, M, M, A, Bus, M, A, M, A], and a copy of the first group
+            // [Bus, M, M, M, Bus, M, M, A, A], and a copy of the first group
             // pasted under its own first member: it nests there.
             const auto whole = stack.copyTracks({0});
             require(whole.tracks.size() == 4, "Copying a bus copies its members");
@@ -221,12 +221,14 @@
                 return found;
             };
 
-            // [MIDI, Audio, MIDI, Audio]: a bar on the first track from beat 4,
-            // the sample on the second from the same beat, and on the second
-            // two vocoders, one played by the first track and one by the third.
+            // [MIDI, MIDI, Audio, Audio]: a bar on the first track from beat 4,
+            // the sample on the third from the same beat, and on the third two
+            // vocoders, one played by the first track and one by the second.
+            // The first and the third are copied, the second left between them.
+            constexpr int audioLane = 2;
             require(doc.createClip(0, 2.0).wasOk(), "A clip on the MIDI track at beat 4");
-            require(doc.importAudioAt(loop, 1, 2.0).wasOk(), "the sample on the audio track at the same beat");
-            auto* sample = te::getAudioTracks(*doc.edit)[1]->getClips().getFirst();
+            require(doc.importAudioAt(loop, audioLane, 2.0).wasOk(), "the sample on the audio track at the same beat");
+            auto* sample = te::getAudioTracks(*doc.edit)[audioLane]->getClips().getFirst();
             require(sample != nullptr && !juce::File::isAbsolutePath(sample->state[te::IDs::source].toString()),
                     "named relative to the document");
             require(doc.addAudioEffect(Session::AudioEffect::Reverb, 0).wasOk(), "A reverb on the MIDI track");
@@ -238,14 +240,14 @@
             require(reverb > 0 && doc.showTrackAutomation(lane, false).wasOk()
                         && doc.setTrackAutomationPoints(lane, {{2.0, 0.0f}, {4.0, 1.0f}}).wasOk(),
                     "with a lane rising from beat 4 to beat 8");
-            require(doc.addDevice("RhinoVocoder", 1).wasOk() && doc.addDevice("RhinoVocoder", 1).wasOk()
-                        && vocoderSlots(1).size() == 2,
+            require(doc.addDevice("RhinoVocoder", audioLane).wasOk() && doc.addDevice("RhinoVocoder", audioLane).wasOk()
+                        && vocoderSlots(audioLane).size() == 2,
                     "Two vocoders on the audio track");
-            require(doc.setDeviceSidechainSource(1, vocoderSlots(1)[0], 0).wasOk()
-                        && doc.setDeviceSidechainSource(1, vocoderSlots(1)[1], 2).wasOk(),
+            require(doc.setDeviceSidechainSource(audioLane, vocoderSlots(audioLane)[0], 0).wasOk()
+                        && doc.setDeviceSidechainSource(audioLane, vocoderSlots(audioLane)[1], 1).wasOk(),
                     "played by the MIDI track that is copied and by one that is not");
-            const auto copied = doc.copyTracks({0, 1});
-            require(copied.tracks.size() == 2, "The first two tracks are copied");
+            const auto copied = doc.copyTracks({0, audioLane});
+            require(copied.tracks.size() == 2, "The first track and the third are copied");
 
             require(openFrom(doc, slower, second.getChildFile("Second.rhinoedit")) && doc.tempo() == 90.0,
                     "and the second document opens in its place, at 90 BPM");

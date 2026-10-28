@@ -3,8 +3,8 @@
         // checked here was true of the restored project and must not survive.
         require(session.projectFile != juce::File{}, "A restored project has a file behind it");
         require(session.isPatternDrums(), "The restored project runs the drum instrument");
-        require(te::getAudioTracks(*session.edit)[1]->getClips().size() == 1,
-                "The restored project has audio on its second lane");
+        require(te::getAudioTracks(*session.edit)[2]->getClips().size() == 1,
+                "The restored project has audio on its third lane");
         session.newProject();
         require(session.projectFile == juce::File{}, "A new project is untitled");
         require(!session.hasUnsavedChanges(), "A new project is clean");
@@ -12,14 +12,17 @@
         // A track is named for what it is and nothing else: the card prints the
         // row's one-based position beside the name itself, so a number in the
         // name was the same figure twice on every card.
-        require(session.trackName(0) == "MIDI" && session.trackName(1) == "Audio"
-                && session.trackName(2) == "MIDI" && session.trackName(3) == "Audio",
-                "A new project's tracks are named for what they are, MIDI and audio alternating");
+        require(session.trackName(0) == "MIDI" && session.trackName(1) == "MIDI"
+                && session.trackName(2) == "Audio" && session.trackName(3) == "Audio",
+                "A new project's tracks are named for what they are, two MIDI over two audio");
         require(session.trackType(0) == Session::TrackType::midi
-                && session.trackType(1) == Session::TrackType::audio
-                && session.trackType(2) == Session::TrackType::midi
+                && session.trackType(1) == Session::TrackType::midi
+                && session.trackType(2) == Session::TrackType::audio
                 && session.trackType(3) == Session::TrackType::audio,
-                "A new project alternates MIDI and audio");
+                "A new project has two MIDI tracks over two audio tracks");
+        require(session.isTrackFolded(session.firstReturnTrack()) && session.isTrackFolded(session.firstReturnTrack() + 1)
+                    && !session.isTrackFolded(0),
+                "and its two returns open folded to their one line, the tracks open");
         {
             // A stack nobody has coloured yet still has to read as four
             // separate tracks, and the clips drawn on it take these colours.
@@ -33,7 +36,7 @@
             require(starterColours.size() == session.trackCount(),
                     "and no two of them are the same colour");
         }
-        require(te::getAudioTracks(*session.edit)[1]->getClips().isEmpty(),
+        require(te::getAudioTracks(*session.edit)[2]->getClips().isEmpty(),
                 "A new project does not inherit the audio the last one held");
         require(!session.isPatternDrums(), "A new project does not inherit the drum instrument");
         for (int track = 0; track < session.trackCount(); ++track)
@@ -51,8 +54,8 @@
         // The type a starter track was created as is the type it behaves as,
         // with nothing dropped on it yet: the MIDI lanes are playable at once
         // and the audio lanes send anyone drawing a clip to one that is.
-        require(session.createClip(2, 0.0).wasOk(), "A starter MIDI track takes a clip straight away");
-        require(session.createClip(3, 0.0).failed(), "A starter audio track refuses one");
+        require(session.createClip(1, 0.0).wasOk(), "A starter MIDI track takes a clip straight away");
+        require(session.createClip(2, 0.0).failed(), "A starter audio track refuses one");
         session.undo();
         // The starter Pattern 1 is a placeholder: empty, and hidden from the
         // arrangement until it is told where it goes. Double-clicking the first

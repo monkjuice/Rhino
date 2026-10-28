@@ -194,7 +194,7 @@
             {
                 const auto region = song.copyClipRegion(0.0, 2.0 * bar, lane, lane);
                 std::vector<te::EditItemID> pasted;
-                require(song.pasteClipRegion(region, 0.0, 2, pasted).wasOk() && pasted.size() == 1,
+                require(song.pasteClipRegion(region, 0.0, 1, pasted).wasOk() && pasted.size() == 1,
                         "The looped clip pastes onto the other MIDI track");
                 auto* copy = dynamic_cast<te::MidiClip*>(song.findClip(pasted.front()));
                 require(copy != nullptr && copy->isLooping() && close(copy->getLoopLengthBeats().inBeats(), 4.0),

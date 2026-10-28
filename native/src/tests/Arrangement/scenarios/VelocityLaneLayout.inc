@@ -310,10 +310,11 @@
         }
         {
             // No MIDI track, so no clip: the lane is there, empty, and nothing
-            // done to it reaches the document.
+            // done to it reaches the document. [MIDI, MIDI, Audio, Audio], so
+            // the two at the top go, the lower first.
             auto document = std::make_unique<Session>();
             auto& stack = *document;
-            require(stack.removeAudioTrack(2).wasOk() && stack.removeAudioTrack(0).wasOk() && !stack.hasPatternClip(),
+            require(stack.removeAudioTrack(1).wasOk() && stack.removeAudioTrack(0).wasOk() && !stack.hasPatternClip(),
                     "A document with no MIDI track has no clip to edit");
             auto owned = std::make_unique<StepGrid>(stack);
             auto& grid = *owned;

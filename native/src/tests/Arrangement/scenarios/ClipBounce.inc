@@ -29,7 +29,8 @@
             Session bounce;
             bounce.projectFile = bounceScratch.getChildFile("clips.rhinoedit");
             require(bounce.importAudio(source.getFile()).wasOk(), "A file imports for the bounce fixture");
-            const auto lane = 1;
+            // The first free audio lane, which is where an untargeted import lands.
+            const auto lane = 2;
             auto* track = te::getAudioTracks(*bounce.edit)[lane];
             const auto firstID = track->getClips().getFirst()->itemID;
             require(bounce.importAudioAt(source.getFile(), lane, 2.0).wasOk(), "A second clip a second after the first");
@@ -112,7 +113,7 @@
             Session grouped;
             grouped.projectFile = bounceScratch.getChildFile("groups.rhinoedit");
             require(grouped.importAudio(source.getFile()).wasOk(), "A file imports for the group fixture");
-            require(grouped.groupTracks({1}, "Bus").wasOk(), "The track is given a bus");
+            require(grouped.groupTracks({2}, "Bus").wasOk(), "The track is given a bus");
             const auto group = grouped.trackGroups().front();
             const auto member = group.firstTrack;
             auto* bus = te::getAudioTracks(*grouped.edit)[group.busTrack];
@@ -180,7 +181,7 @@
             Session keyed;
             keyed.projectFile = bounceScratch.getChildFile("keyed.rhinoedit");
             require(keyed.importAudio(source.getFile()).wasOk(), "A file imports for the shortcut fixture");
-            const auto clipID = te::getAudioTracks(*keyed.edit)[1]->getClips().getFirst()->itemID;
+            const auto clipID = te::getAudioTracks(*keyed.edit)[2]->getClips().getFirst()->itemID;
             Arrangement keyedView(keyed);
             keyedView.setSize(1200, 508);
             keyedView.sync();
@@ -211,10 +212,10 @@
                     "A muted clip is drawn grey, so what a bounce muted can be seen");
             require(stripColour(bouncedID).getSaturation() > 0.3f, "while the clip that plays keeps its colour");
             // The bounced track is the one holding a clip that plays.
-            keyedView.selectTrack(2);
+            keyedView.selectTrack(3);
             keyedView.focus = Arrangement::Focus::track;
             keyedView.keyPressed(ctrlB);
-            require(keyed.firstReturnTrack() == 6 && keyed.trackMixer(2).muted && keyedView.selectedTrack == 3,
+            require(keyed.firstReturnTrack() == 6 && keyed.trackMixer(3).muted && keyedView.selectedTrack == 4,
                     "With a card selected it bounces the track, and the new card is selected");
         }
 
@@ -225,7 +226,7 @@
             Session spanned;
             spanned.projectFile = bounceScratch.getChildFile("span.rhinoedit");
             require(spanned.importAudio(source.getFile()).wasOk(), "A file imports for the span fixture");
-            const auto lane = 1;
+            const auto lane = 2;
             const auto sourceID = te::getAudioTracks(*spanned.edit)[lane]->getClips().getFirst()->itemID;
             // Every clip on the lane, in time order.
             struct LanePiece
@@ -250,7 +251,7 @@
             require(spanned.bounceRegionToNewTracks(0.25, 0.75, 0, lane, &made).wasOk(),
                     "A selection across part of a clip bounces");
             require(spanned.firstReturnTrack() == 5 && made.tracks == std::vector<int>({lane + 1}),
-                    "to one new track under the lane that had a clip in it, the empty lane passed over");
+                    "to one new track under the lane that had a clip in it, the empty lanes passed over");
             require(made.clips.size() == 1, "as one clip");
             const auto span = spanned.audioClipMix(made.clips.front());
             require(close(span.startSeconds, 0.25) && close(span.endSeconds, 0.75) && close(span.offsetSeconds, 0.0),
@@ -300,7 +301,7 @@
             Session stepped;
             stepped.projectFile = bounceScratch.getChildFile("stepped.rhinoedit");
             require(stepped.importAudio(source.getFile()).wasOk(), "A file imports for the stepped fixture");
-            const auto lane = 1;
+            const auto lane = 2;
             const auto bounces = [&stepped]
             {
                 return stepped.mergedAudioDirectory().findChildFiles(juce::File::findFiles, false, "*Bounce*.wav").size();

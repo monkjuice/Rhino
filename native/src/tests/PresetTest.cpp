@@ -119,10 +119,10 @@ DevicePreset presetAt(const juce::File& file)
 
 void checkThroughSession(Session& session)
 {
-    constexpr int midiTrack = 2, audioTrack = 3;
+    constexpr int midiTrack = 1, audioTrack = 3;
     require(session.trackType(midiTrack) == Session::TrackType::midi
                 && session.trackType(audioTrack) == Session::TrackType::audio,
-            "the starter stack has a MIDI third track and an audio fourth");
+            "the starter stack has a MIDI second track and an audio fourth");
     const auto bellsFile = ContentLibrary::file("Presets/RhinoFM/Glass Bells.rnd");
     const auto bells = presetAt(bellsFile);
 

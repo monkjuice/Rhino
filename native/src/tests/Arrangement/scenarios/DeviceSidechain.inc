@@ -22,7 +22,7 @@
             {
                 auto document = std::make_unique<Session>();
                 auto& song = *document;
-                // MIDI, Audio, MIDI, Audio, then A Delay and B Reverb.
+                // MIDI, MIDI, Audio, Audio, then A Delay and B Reverb.
                 require(song.addDevice("Compressor", 3).wasOk(), "A compressor on the second audio track");
                 auto [track, slot] = findDevice(song, "Compressor");
                 require(track == 3 && song.deviceTakesSidechain(track, slot),
@@ -42,26 +42,26 @@
                 require(song.setDeviceSidechainSource(track, slot, delay).failed(),
                         "and the model refuses one all the same");
 
-                require(song.setDeviceSidechainSource(track, slot, 1).wasOk()
-                            && song.deviceSidechainSource(track, slot) == 1 && compressor->useSidechainTrigger.get(),
+                require(song.setDeviceSidechainSource(track, slot, 2).wasOk()
+                            && song.deviceSidechainSource(track, slot) == 2 && compressor->useSidechainTrigger.get(),
                         "Choosing the first audio track routes it and tells the compressor to listen to it");
                 song.undo();
                 require(song.deviceSidechainSource(track, slot) == -1 && !compressor->useSidechainTrigger.get(),
                         "One undo takes back the routing and the compressor's switch together");
-                require(song.setDeviceSidechainSource(track, slot, 1).wasOk(), "Routed again");
+                require(song.setDeviceSidechainSource(track, slot, 2).wasOk(), "Routed again");
 
                 // A loop through another device's sidechain: the first audio
                 // track's own compressor may not take the track it drives.
-                require(song.addDevice("Compressor", 1).wasOk(), "A second compressor, on the track that drives the first");
+                require(song.addDevice("Compressor", 2).wasOk(), "A second compressor, on the track that drives the first");
                 auto secondSlot = -1;
-                for (const auto& device : song.deviceSlots(1))
+                for (const auto& device : song.deviceSlots(2))
                     if (device.deviceId == "Compressor")
                         secondSlot = device.pluginIndex;
-                require(secondSlot >= 0 && !offers(song.deviceSidechainSources(1, secondSlot), track),
+                require(secondSlot >= 0 && !offers(song.deviceSidechainSources(2, secondSlot), track),
                         "It is not offered the track it already feeds");
-                require(song.setDeviceSidechainSource(1, secondSlot, track).failed(),
+                require(song.setDeviceSidechainSource(2, secondSlot, track).failed(),
                         "and taking it is refused, which would be a loop through two sidechains");
-                require(offers(song.deviceSidechainSources(1, secondSlot), 0), "Any other track still is");
+                require(offers(song.deviceSidechainSources(2, secondSlot), 0), "Any other track still is");
 
                 // A group's bus carries its members, so a member cannot take
                 // it. Grouping a track whose device already takes the bus
@@ -127,9 +127,9 @@
             });
             const auto prepare = [&](Session& song)
             {
-                require(song.importAudioAt(kick.getFile(), 1, 0.0).wasOk(), "The burst on the first audio track");
+                require(song.importAudioAt(kick.getFile(), 2, 0.0).wasOk(), "The burst on the first audio track");
                 require(song.importAudioAt(tone.getFile(), 3, 0.0).wasOk(), "and the tone on the second");
-                song.setTrackMuted(1, true);
+                song.setTrackMuted(2, true);
             };
             const auto render = [&wav, &require](Session& song)
             {
@@ -197,7 +197,7 @@
                 const auto own = render(song);
                 require(std::abs(dipDb(own, 0.30, 0.40, 0.70, 0.95)) < 1.0,
                         "With no source it hears only the tone, and squeezes it evenly throughout");
-                require(song.setDeviceSidechainSource(track, slot, 1).wasOk(), "The burst's track is its source");
+                require(song.setDeviceSidechainSource(track, slot, 2).wasOk(), "The burst's track is its source");
                 const auto driven = render(song);
                 require(dipDb(driven, 0.30, 0.40, 0.70, 0.95) < -12.0,
                         "and the tone drops under the burst, which is heard from a muted track");
@@ -228,7 +228,7 @@
                 const auto unrouted = render(song);
                 require(std::abs(dipDb(unrouted, 0.270, 0.278, 0.10, 0.20)) < 1.0,
                         "In Audio mode with no source its sidechain hears silence and nothing is ducked");
-                require(song.setDeviceSidechainSource(track, slot, 1).wasOk(), "The burst's track is its source");
+                require(song.setDeviceSidechainSource(track, slot, 2).wasOk(), "The burst's track is its source");
                 const auto routed = render(song);
                 require(dipDb(routed, 0.270, 0.278, 0.10, 0.20) < -20.0,
                         "and the burst's onset ducks the tone");

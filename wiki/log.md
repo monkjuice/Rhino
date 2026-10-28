@@ -1555,3 +1555,8 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/app-shell.md (`StopButton` deleted; rewind and Stop both call `Session::stop`)
 - updated: pages/ableton-push.md (Play pauses; Shift+Play is Stop, the top of the song)
 - updated: index.md (the transport summary)
+
+## [2026-10-27] update | The control bar's rewind glyph removed; it did what Stop does after 38677ca (31748de)
+- source: the main agent's addendum (MainComponent.h/.cpp, MainComponentControlBar.cpp, MainComponentPanes.cpp, ControlBarIcons.h/.cpp; commit `31748de`)
+- updated: pages/app-shell.md (the bar's layout without rewind; the "Transport buttons" bullet: Stop alone, `icons::returnToStart` gone; the DJ view dims stop, play and record; edited by the main agent, checked against the schema)
+- updated: pages/transport.md (the Stop bullet: rewind removed, commit `38677ca` named; `Session::returnToStart` told apart from the Push's `PushController::returnToStart` callback, which still calls `Session::stop`)

@@ -24,10 +24,11 @@ The user's rules, since commit `38677ca` (2026-10-27):
   down) and clears it when it has none (Escape, a click on empty header space, a sync that drops it); see
   [Arrangement view](arrangement-view.md#rules-worth-knowing). `newProject` and `restoreProject` reset it. Until then a
   pause left the playhead where it stopped.
-- **Stop** (the Stop button, the rewind glyph, the Push's Shift+Play, opening the DJ view while rolling) is
-  `Session::stop`, which always goes to 0, whatever is selected or looped. Until then Stop went back to the selection
-  line, and only a double-click on Stop or the rewind glyph went to 0 (`returnToStart`, deleted with the shell's
-  `StopButton`).
+- **Stop** (the Stop button, the Push's Shift+Play, opening the DJ view while rolling) is `Session::stop`, which
+  always goes to 0, whatever is selected or looped. Until then Stop went back to the selection line, and only a
+  double-click on Stop or the rewind glyph went to 0 (`Session::returnToStart`, deleted with the shell's
+  `StopButton`). The rewind glyph then did exactly what Stop does, and the user had it removed the same day. The
+  Push's callback is still named `PushController::returnToStart`; it calls `Session::stop`.
 - Both send a MIDI panic to every plugin list (`releasePlayingNotes`) and finish a recording that was running. Ending a
   take with the record button or F9 (`stopRecording`) still leaves the playhead where the take ended. Play during a
   count-in calls the count-in off.

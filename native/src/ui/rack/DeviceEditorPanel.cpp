@@ -27,16 +27,49 @@ void styleAutomationButton(juce::TextButton& button, const Session::DeviceParame
         : parameter.automationOverridden ? "Manual override. Click to follow automation"
         : "Following automation. Click to hold manual value");
 }
+}
 
 // A generated face groups controls under their section's title, so a caption
 // need not repeat it: "Op 1 Ratio" under "OP 1" reads "Ratio". The full name
 // stays on the tooltip and on the automation lane, which are read alone.
-juce::String captionFor(const Session::DeviceParameter& parameter)
+juce::String DeviceEditorPanel::captionFor(const Session::DeviceParameter& parameter)
 {
     const auto prefix = parameter.section + " ";
     return parameter.section.isNotEmpty() && parameter.name.startsWith(prefix)
         ? parameter.name.substring(prefix.length()) : parameter.name;
 }
+
+juce::Font DeviceEditorPanel::captionFont()
+{
+    return uiFont(9.5f);
+}
+
+void DeviceEditorPanel::placeKnob(int i, juce::Rectangle<int> cell, int knobSize)
+{
+    auto unit = cell.withSizeKeepingCentre(cell.getWidth(),
+                                           std::min(cell.getHeight(), captionHeight + knobSize + readingHeight));
+    parameterLabels[i]->setBounds(unit.removeFromTop(captionHeight));
+    parameterValues[i]->setBounds(unit.removeFromBottom(readingHeight));
+    const auto size = std::min({ knobSize, unit.getWidth(), unit.getHeight() });
+    const auto knob = unit.withSizeKeepingCentre(size, size);
+    parameterSliders[i]->setBounds(knob);
+    placeAutomationBadge(i, knob);
+}
+
+// On the corner rather than beside the control, so a control is as wide with
+// a lane as without one, and a chooser keeps its column's width. A knob is
+// square and round, so its A stands off the ring at its shoulder; a chooser
+// or a switch carries it on its own top right corner, clear of the arrow.
+void DeviceEditorPanel::placeAutomationBadge(int i, juce::Rectangle<int> control)
+{
+    auto* badge = parameterAutomation[i];
+    if (control.getWidth() == control.getHeight())
+        badge->setBounds(control.getRight() - 6, control.getY() - 2, 14, 11);
+    else
+        badge->setBounds(control.getRight() - 14, control.getY() - 5, 14, 11);
+    // The face's choosers and switches are made after the knobs' chrome, and
+    // would otherwise be drawn over it.
+    badge->toFront(false);
 }
 
 DeviceEditorPanel::DeviceEditorPanel(Session& s) : session(s)
@@ -489,10 +522,12 @@ void DeviceEditorPanel::ensureControls()
         auto* value = parameterValues.add(new juce::Label());
         auto* slider = parameterSliders.add(new juce::Slider());
         auto* automation = parameterAutomation.add(new juce::TextButton());
-        name->setFont(uiFont(9.5f));
+        name->setFont(captionFont());
         name->setJustificationType(juce::Justification::centred);
+        name->setBorderSize({});
         value->setFont(uiFont(8.5f));
         value->setJustificationType(juce::Justification::centred);
+        value->setBorderSize({});
         slider->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
         slider->setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
         slider->onDragStart = [this, index]
@@ -560,7 +595,9 @@ void DeviceEditorPanel::styleControls()
             && i == RhinoArpDevice::repeatsParameter;
         parameterValues[i]->setVisible((genericChromeVisible && knob) || arpRepeatReadout);
         parameterSliders[i]->setVisible(visible && knob);
-        parameterAutomation[i]->setVisible(genericChromeVisible);
+        // The A is there to take a control back from its lane, so a control
+        // with none shows no A at all.
+        parameterAutomation[i]->setVisible(genericChromeVisible && parameters[static_cast<size_t>(i)].automated);
         // Offset reads left to right, as a place in the pattern does, but is
         // dragged up and down like everything else on the face. It does not
         // snap to the pointer: on a bar that fills across, the height a press
@@ -758,16 +795,14 @@ void DeviceEditorPanel::layoutGeneric()
     const auto rows = count > 0 ? (count + columns - 1) / columns : 1;
     const auto cellWidth = contentArea.getWidth() / columns;
     const auto cellHeight = contentArea.getHeight() / rows;
+    // One size for every knob on the face, whatever its caption.
+    const auto knobSize = juce::jlimit(28, 56, std::min(cellWidth - 14, cellHeight - captionHeight - readingHeight - 4));
     for (int i = 0; i < count; ++i)
     {
         const juce::Rectangle<int> cell(contentArea.getX() + (i % columns) * cellWidth,
                                         contentArea.getY() + (i / columns) * cellHeight,
                                         cellWidth, cellHeight);
-        const auto knobSize = std::min({64, std::max(34, cell.getWidth() - 28), std::max(34, cell.getHeight() - 36)});
-        parameterLabels[i]->setBounds(cell.getX() + 4, cell.getY(), cell.getWidth() - 8, 18);
-        parameterSliders[i]->setBounds(cell.withSizeKeepingCentre(knobSize, knobSize).translated(0, 4));
-        parameterValues[i]->setBounds(cell.getX() + 4, cell.getBottom() - 20, cell.getWidth() - 8, 18);
-        parameterAutomation[i]->setBounds(parameterSliders[i]->getRight() - 10, parameterSliders[i]->getY() - 2, 20, 18);
+        placeKnob(i, cell.reduced(2, 0), knobSize);
     }
 }
 

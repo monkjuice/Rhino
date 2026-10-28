@@ -37,22 +37,30 @@ struct ArpLayout
 };
 
 // The two cards that shape the sequence come first, then the display of it,
-// then the two that retrigger and transpose it.
+// then the two that retrigger and transpose it. The display is a card like
+// the others, edge to edge in its area with the same gutter either side, so
+// all five tops and bottoms line up.
+constexpr int cardGap = 6;
+
 ArpLayout arpLayout(juce::Rectangle<int> bounds)
 {
     ArpLayout layout;
     layout.pattern = bounds.removeFromLeft(160);
-    bounds.removeFromLeft(6);
+    bounds.removeFromLeft(cardGap);
     layout.rate = bounds.removeFromLeft(92);
-    // The display paints itself five pixels inside its area, so these three
-    // leave it an eight-pixel gutter on either side.
-    bounds.removeFromLeft(3);
-    layout.visual = bounds.removeFromLeft(210);
-    bounds.removeFromLeft(3);
+    bounds.removeFromLeft(cardGap);
+    layout.visual = bounds.removeFromLeft(204);
+    bounds.removeFromLeft(cardGap);
     layout.timing = bounds.removeFromLeft(150);
-    bounds.removeFromLeft(6);
+    bounds.removeFromLeft(cardGap);
     layout.harmony = bounds;
     return layout;
+}
+
+// A card's title, in the same place and the same ink on every card.
+juce::Rectangle<int> cardTitleArea(juce::Rectangle<int> card)
+{
+    return card.reduced(7, 3).withHeight(12);
 }
 
 void drawCaption(juce::Graphics& g, const juce::String& text, juce::Rectangle<int> control)
@@ -247,17 +255,6 @@ void DeviceEditorPanel::layoutArp()
         if (auto* control = arpChoiceFor(parameter))
             control->setBounds(bounds);
     };
-    const auto twoColumns = [] (juce::Rectangle<int> bounds, int row)
-    {
-        constexpr int inset = 7, gap = 5, rowHeight = 22;
-        const auto width = (bounds.getWidth() - inset * 2 - gap) / 2;
-        const auto y = bounds.getY() + (row == 0 ? 31 : 87);
-        return std::array<juce::Rectangle<int>, 2> {
-            juce::Rectangle<int>(bounds.getX() + inset, y, width, rowHeight),
-            juce::Rectangle<int>(bounds.getX() + inset + width + gap, y, width, rowHeight)
-        };
-    };
-
     constexpr int patternInset = 7, patternGap = 5, wideControl = 88;
     const auto narrowControl = layout.pattern.getWidth() - patternInset * 2 - patternGap - wideControl;
     const auto patternTopY = layout.pattern.getY() + 31;
@@ -297,9 +294,15 @@ void DeviceEditorPanel::layoutArp()
             parameterSliders[RhinoArpDevice::repeatsParameter]->getBounds());
     }
 
-    const auto harmonyTop = twoColumns(layout.harmony, 0);
-    choice(RhinoArpDevice::rootParameter, harmonyTop[0]);
-    choice(RhinoArpDevice::scaleParameter, harmonyTop[1]);
+    // A root is a note name, two characters at most, so the scale takes the
+    // rest of the row: split evenly, "Chromatic" did not fit.
+    constexpr int harmonyInset = 7, harmonyGap = 5, rootWidth = 54;
+    const auto harmonyRowY = layout.harmony.getY() + 31;
+    choice(RhinoArpDevice::rootParameter,
+           {layout.harmony.getX() + harmonyInset, harmonyRowY, rootWidth, 22});
+    choice(RhinoArpDevice::scaleParameter,
+           {layout.harmony.getX() + harmonyInset + rootWidth + harmonyGap, harmonyRowY,
+            layout.harmony.getWidth() - harmonyInset * 2 - rootWidth - harmonyGap, 22});
 
     // Steps, Distance and Gate share the lower row in equal thirds, Steps
     // first because Distance means nothing without it.
@@ -323,18 +326,20 @@ void DeviceEditorPanel::paintArp(juce::Graphics& g)
         return;
 
     const auto layout = arpLayout(contentArea);
-    const auto panel = visualArea.toFloat().reduced(5.0f);
+    // The cards' frame, on the display's own darker ground.
+    const auto panel = visualArea.toFloat().reduced(0.5f);
     g.setColour(palette::displayInset);
-    g.fillRoundedRectangle(panel, 4.0f);
+    g.fillRoundedRectangle(panel, 3.0f);
     g.setColour(palette::border);
-    g.drawRoundedRectangle(panel, 4.0f, 1.0f);
+    g.drawRoundedRectangle(panel, 3.0f, 1.0f);
 
-    g.setColour(palette::textDim);
-    g.setFont(uiFontBold(8.0f));
-    drawSnappedText(g, "SEQUENCE", visualArea.reduced(10, 4).withHeight(14),
-                    juce::Justification::centredLeft);
+    g.setColour(palette::midiEffect.withAlpha(0.88f));
+    g.setFont(uiFontBold(7.5f));
+    drawSnappedText(g, "SEQUENCE", cardTitleArea(visualArea), juce::Justification::centredLeft);
 
-    auto graph = visualArea.reduced(13, 8).withTrimmedTop(18).withTrimmedBottom(18).toFloat();
+    // Clear of the title above and the summary below by the half of a note
+    // that stands outside the line it sits on.
+    auto graph = visualArea.reduced(12, 0).withTrimmedTop(22).withTrimmedBottom(22).toFloat();
     const auto style = juce::jlimit(0, 4, juce::roundToInt(parameterValue(
         parameters, RhinoArpDevice::styleParameter, 0.0f)));
     const auto distance = juce::roundToInt(parameterValue(
@@ -394,7 +399,7 @@ void DeviceEditorPanel::paintArp(juce::Graphics& g)
     const auto summary = parameterText(RhinoArpDevice::styleParameter).toUpperCase()
         + "  \xc2\xb7  " + parameterText(freeRate ? RhinoArpDevice::freeRateParameter
                                                    : RhinoArpDevice::rateParameter);
-    drawSnappedText(g, summary, visualArea.reduced(10, 4).withTrimmedTop(visualArea.getHeight() - 19),
+    drawSnappedText(g, summary, visualArea.reduced(7, 3).withTrimmedTop(visualArea.getHeight() - 15),
                     juce::Justification::centredLeft);
 
     const auto paintGroup = [&g] (juce::Rectangle<int> bounds, const juce::String& name)
@@ -406,7 +411,7 @@ void DeviceEditorPanel::paintArp(juce::Graphics& g)
         g.drawRoundedRectangle(card, 3.0f, 1.0f);
         g.setColour(palette::midiEffect.withAlpha(0.88f));
         g.setFont(uiFontBold(7.5f));
-        drawSnappedText(g, name, bounds.reduced(7, 3).withHeight(12), juce::Justification::centredLeft);
+        drawSnappedText(g, name, cardTitleArea(bounds), juce::Justification::centredLeft);
     };
     paintGroup(layout.pattern, "PATTERN");
     paintGroup(layout.rate, "RATE");

@@ -82,6 +82,14 @@ public:
     // A preset was saved, so a list of them is out of date.
     std::function<void()> presetsChanged;
 
+    // A knob's caption and its reading under it, the same on every face that
+    // lays its knobs out with placeKnob.
+    static constexpr int captionHeight = 13, readingHeight = 12;
+    static juce::Font captionFont();
+    // A generated face's caption for a control: its name less the section's,
+    // since the section's title stands over it.
+    static juce::String captionFor(const Session::DeviceParameter&);
+
 private:
     friend void runPatternDeviceRackTest();
     friend void runDrumRackFaceTest();
@@ -90,6 +98,14 @@ private:
     void ensureControls();
     void styleControls();
     void layoutGeneric();
+    // A knob's caption, the knob and its reading stand together as one unit
+    // centred in `cell`, so a tall cell does not strand the caption at its top
+    // and the reading at its foot; every face that lays knobs in a grid places
+    // them this way.
+    void placeKnob(int parameter, juce::Rectangle<int> cell, int knobSize);
+    // The A button shows only on a control with automation, on the top right
+    // corner of the control it belongs to.
+    void placeAutomationBadge(int parameter, juce::Rectangle<int> control);
     // How many knobs stand in a row of the plain grid.
     int genericColumns() const;
     // A native device without a face of its own gets one generated from what

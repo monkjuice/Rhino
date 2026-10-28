@@ -281,6 +281,17 @@ void DeviceEditorPanel::paintDisplay(juce::Graphics& g)
         const auto plot = traceArea.toFloat();
         g.setColour(palette::displayInset);
         g.fillRoundedRectangle(plot, 3.0f);
+        // A faint quarter grid under the centre line, as the Arp's sequence
+        // has, so where a trace turns can be read against something. On whole
+        // pixels, as the traces were laid out on the same inner rectangle.
+        const auto inner = traceArea.reduced(4, 6);
+        g.setColour(palette::border.withAlpha(0.4f));
+        for (int line = 1; line < 4; ++line)
+        {
+            g.fillRect(inner.getX() + inner.getWidth() * line / 4, traceArea.getY() + 3, 1, traceArea.getHeight() - 6);
+            if (line != 2)
+                g.fillRect(traceArea.getX() + 3, inner.getY() + inner.getHeight() * line / 4, traceArea.getWidth() - 6, 1);
+        }
         g.setColour(palette::border);
         g.fillRect(juce::Rectangle<float>(plot.getX() + 4.0f, plot.reduced(0.0f, 6.0f).getCentreY() - 0.5f,
                                           plot.getWidth() - 8.0f, 1.0f));
@@ -290,6 +301,8 @@ void DeviceEditorPanel::paintDisplay(juce::Graphics& g)
             g.setColour(t == 0 ? accent : palette::textDim.withAlpha(0.55f));
             g.fillPath(displayTraces[t]);
         }
+        g.setColour(palette::border);
+        g.drawRoundedRectangle(plot.reduced(0.5f), 3.0f, 1.0f);
         // Named in the title row, each in its own colour.
         g.setFont(uiFontBold(7.5f));
         auto names = captionArea.withLeft(traceArea.getX());

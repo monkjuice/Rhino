@@ -14,7 +14,12 @@
 //   and goes back to its default on a double-click. A choice is a chooser, and
 //   a toggle is a switch.
 // - A group fills columns two controls tall when the face has several places
-//   or a long group. Otherwise its controls stand in one row of larger knobs.
+//   or a long group, and then every group does, so the face has one knob size
+//   and two caption lines across it. Otherwise its controls stand in one row
+//   of larger knobs.
+// - A knob's caption, the knob and its reading stand together, and a chooser
+//   or a switch takes the caption line of the knobs beside it and stands on
+//   their centre line.
 // - Whatever the device describes beside its controls -- a diagram, traces --
 //   stands after the first group (DeviceEditorPanelDisplay.cpp).
 //
@@ -83,11 +88,25 @@ int rowsFor(const Group& group, size_t blockCount)
     return controls > 6 || (blockCount > 1 && controls > 3) ? 2 : 1;
 }
 
+// A face that needs two rows anywhere has two everywhere: a group of three
+// beside a group of six once stood its knobs half as large again as theirs.
+int rowsOf(const std::vector<Block>& blocks)
+{
+    for (const auto& block : blocks)
+        for (const auto& section : block.sections)
+            if (rowsFor(section, blocks.size()) > 1)
+                return 2;
+    return 1;
+}
+
+// Never narrower than its caption, which a label would otherwise squeeze.
 int widthOf(const Session::DeviceParameter& parameter, int rows)
 {
-    if (!parameter.choices.isEmpty() && !parameter.toggle)
-        return choiceWidth;
-    return rows > 1 ? compactWidth : roomyWidth;
+    const auto base = !parameter.choices.isEmpty() && !parameter.toggle ? choiceWidth
+                    : rows > 1 ? compactWidth : roomyWidth;
+    const auto caption = juce::GlyphArrangement::getStringWidthInt(DeviceEditorPanel::captionFont(),
+                                                                   DeviceEditorPanel::captionFor(parameter));
+    return std::max(base, caption + 8);
 }
 
 // Controls fill a group's columns top to bottom, and each column is as wide as
@@ -117,13 +136,13 @@ int tabWidth(const juce::String& section)
 
 // As wide as its widest section, so changing tabs never moves the rest of the
 // face, and never narrower than its row of tabs.
-int blockWidth(const Block& block, size_t blockCount, const std::vector<Session::DeviceParameter>& parameters)
+int blockWidth(const Block& block, int rows, const std::vector<Session::DeviceParameter>& parameters)
 {
     auto width = 0, tabs = 0;
     for (const auto& section : block.sections)
     {
         auto columns = 0;
-        for (const auto column : columnWidths(section, rowsFor(section, blockCount), parameters))
+        for (const auto column : columnWidths(section, rows, parameters))
             columns += column;
         width = std::max(width, columns);
         tabs += tabWidth(section.title);
@@ -202,10 +221,11 @@ bool DeviceEditorPanel::onHiddenTab(int parameter) const
 int DeviceEditorPanel::generatedWidth() const
 {
     const auto blocks = blocksOf(parameters, visibleParameterCount());
+    const auto rows = rowsOf(blocks);
     auto width = padding * 2;
     for (size_t g = 0; g < blocks.size(); ++g)
     {
-        width += blockWidth(blocks[g], blocks.size(), parameters);
+        width += blockWidth(blocks[g], rows, parameters);
         if (g > 0)
             width += sectionGap;
     }
@@ -308,6 +328,13 @@ void DeviceEditorPanel::layoutGenerated()
     auto x = contentArea.getX() + padding;
     const auto top = contentArea.getY() + (titled ? titleHeight : 0);
     const auto height = contentArea.getBottom() - top;
+    const auto rows = rowsOf(blocks);
+    const auto cellHeight = height / rows;
+    // One size for every knob on the face: what the narrowest knob column and
+    // the row leave, with a pixel either side between a reading and the
+    // caption under it.
+    const auto knobSize = juce::jlimit(26, 54, std::min((rows > 1 ? compactWidth : roomyWidth) - 12,
+                                                        cellHeight - captionHeight - readingHeight - 2));
     const auto placeDisplay = [this, &x]
     {
         const auto width = displayWidth();
@@ -325,10 +352,8 @@ void DeviceEditorPanel::layoutGenerated()
         const auto shown = std::find_if(block.sections.begin(), block.sections.end(),
                                         [&chosen] (const Group& section) { return section.title == chosen; });
         const auto& group = shown != block.sections.end() ? *shown : block.sections.front();
-        const auto rows = rowsFor(group, blocks.size());
         const auto widths = columnWidths(group, rows, parameters);
-        const auto cellHeight = height / rows;
-        const auto width = blockWidth(block, blocks.size(), parameters);
+        const auto width = blockWidth(block, rows, parameters);
         GeneratedSection placed { group.title, { x, contentArea.getY(), width, contentArea.getHeight() }, {}, {} };
         if (block.tabbed())
         {
@@ -352,26 +377,24 @@ void DeviceEditorPanel::layoutGenerated()
                 columnX += widths[column - 1];
             const auto i = group.controls[k];
             const juce::Rectangle<int> cell(columnX, top + row * cellHeight, widths[column], cellHeight);
-            auto inner = cell.reduced(2, 0);
-            parameterLabels[i]->setBounds(inner.removeFromTop(14));
+            const auto inner = cell.reduced(2, 0);
             if (isKnob(i))
             {
-                parameterValues[i]->setBounds(inner.removeFromBottom(13));
-                const auto size = juce::jlimit(26, 54, std::min(inner.getWidth() - 12, inner.getHeight() - 2));
-                parameterSliders[i]->setBounds(inner.withSizeKeepingCentre(size, size));
-                parameterAutomation[i]->setBounds(parameterSliders[i]->getRight() - 8, parameterSliders[i]->getY() - 2, 16, 14);
+                placeKnob(i, inner, knobSize);
+                continue;
             }
-            else
-            {
-                // The A button stands beside a chooser or a switch rather
-                // than over its caption, which a short cell has no room for.
-                auto* control = parameters[static_cast<size_t>(i)].toggle
-                    ? static_cast<juce::Component*>(generatedToggles[i]) : generatedChoices[i];
-                auto line = inner.withSizeKeepingCentre(inner.getWidth(), 22);
-                parameterAutomation[i]->setBounds(line.removeFromRight(16).withSizeKeepingCentre(16, 14));
-                line.removeFromRight(3);
-                control->setBounds(line);
-            }
+            // Where a knob would stand in this cell: the chooser or switch
+            // takes its caption line and sits on its centre line, so a row
+            // reads across as one line of captions over one line of controls.
+            auto unit = inner.withSizeKeepingCentre(inner.getWidth(),
+                                                    std::min(inner.getHeight(), captionHeight + knobSize + readingHeight));
+            parameterLabels[i]->setBounds(unit.removeFromTop(captionHeight));
+            unit.removeFromBottom(readingHeight);
+            auto* control = parameters[static_cast<size_t>(i)].toggle
+                ? static_cast<juce::Component*>(generatedToggles[i]) : generatedChoices[i];
+            const auto line = unit.withSizeKeepingCentre(unit.getWidth(), 22);
+            control->setBounds(line);
+            placeAutomationBadge(i, line);
         }
         x += width;
         if (g == 0 && !display.empty())

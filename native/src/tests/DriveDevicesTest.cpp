@@ -477,14 +477,9 @@ void checkDriveDevicesOnATrack(Session& session)
         panel->setLookAndFeel(&theme);
         const auto snapshot = panel->createComponentSnapshot(panel->getLocalBounds());
         panel->setLookAndFeel(nullptr);
+        // RHINO_DEVICE_SNAPSHOTS pictures these faces with every other one, in
+        // DeviceFacesTest.cpp.
         require(snapshot.getWidth() == panel->getWidth(), "the face paints");
-        if (const auto folder = juce::SystemStats::getEnvironmentVariable("RHINO_DEVICE_SNAPSHOTS", {}); folder.isNotEmpty())
-        {
-            const auto file = juce::File(folder).getChildFile(juce::String(device.id) + ".png");
-            file.deleteFile();
-            if (auto stream = file.createOutputStream())
-                juce::PNGImageFormat().writeImageToStream(snapshot, *stream);
-        }
         require(session.deleteDevice(track, slot->pluginIndex).wasOk(), "and the device comes off again");
     }
 

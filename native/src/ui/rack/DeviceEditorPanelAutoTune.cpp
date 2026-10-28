@@ -152,7 +152,7 @@ void DeviceEditorPanel::layoutAutoTune()
         const auto knobSize = std::min({40, std::max(24, cell.getWidth() - 12), std::max(24, cell.getHeight() - 30)});
         parameterSliders[i]->setBounds(cell.withSizeKeepingCentre(knobSize, knobSize).translated(0, 1));
         parameterValues[i]->setBounds(cell.getX() + 1, cell.getBottom() - 14, cell.getWidth() - 2, 13);
-        parameterAutomation[i]->setBounds(cell.getRight() - 17, cell.getY() + 13, 16, 14);
+        placeAutomationBadge(i, parameterSliders[i]->getBounds());
     }
 }
 

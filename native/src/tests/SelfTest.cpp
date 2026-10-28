@@ -26,6 +26,8 @@ namespace rhino
 void checkDriveDevices(Session&);
 void checkAmp(Session&);
 void checkTuner(Session&);
+// Every browsable device's face, painted: DeviceFacesTest.cpp.
+void checkDeviceFaces(Session&);
 
 int runSelfTest()
 {
@@ -728,6 +730,7 @@ int runSelfTest()
         checkDriveDevices(session);
         checkAmp(session);
         checkTuner(session);
+        checkDeviceFaces(session);
         checkDjCore(session);
 
         session.releaseAudioDevice();

@@ -121,7 +121,7 @@ void DeviceEditorPanel::layoutTuner()
     parameterLabels[0]->setBounds(cell.getX(), cell.getCentreY() - 44, cell.getWidth(), 14);
     parameterSliders[0]->setBounds(cell.withSizeKeepingCentre(48, 48));
     parameterValues[0]->setBounds(cell.getX(), cell.getCentreY() + 28, cell.getWidth(), 14);
-    parameterAutomation[0]->setBounds(cell.getRight() - 17, cell.getCentreY() - 30, 16, 14);
+    placeAutomationBadge(0, parameterSliders[0]->getBounds());
 }
 
 void DeviceEditorPanel::paintTuner(juce::Graphics& g)

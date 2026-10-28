@@ -193,6 +193,7 @@ target_sources(RhinoNative PRIVATE
     src/tests/DriveDevicesTest.cpp
     src/tests/AmpTest.cpp
     src/tests/TunerTest.cpp
+    src/tests/DeviceFacesTest.cpp
     src/tests/FmTest.cpp
     src/tests/DrumRackTest.cpp
     src/tests/DjTest.cpp

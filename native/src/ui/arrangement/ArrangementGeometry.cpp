@@ -150,6 +150,13 @@ ClipGeometry Arrangement::displayedPosition(const ClipView& clip) const
     return {cut.taken.start + delta, cut.taken.end + delta, cut.taken.offset};
 }
 
+double Arrangement::displayedSpeed(const ClipView& clip) const
+{
+    if (!dragging || !stretching || clip.id != selected || !(preview.end - preview.start > 0.0))
+        return clip.speed;
+    return clip.speed * (original.end - original.start) / (preview.end - preview.start);
+}
+
 int Arrangement::displayedTrack(const ClipView& clip) const
 {
     if (!dragging || gesture != ClipGesture::move || !carriedCut(clip).inside)

@@ -247,12 +247,20 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
     // A copy, not a reference: selecting the clip opens it in the note editor,
     // the session announces that, and the clip list is rebuilt under it.
     const auto clip = clips[static_cast<size_t>(index)];
+    // Shift on a warped clip's edge is Live's stretch: the edge takes the
+    // clip's tempo with it, so all the clip shows spreads over the span it is
+    // dragged to. An unwarped clip has no tempo to stretch, so there, and
+    // anywhere else on a clip, Shift widens the selection as below.
+    const auto stretchLimits = (zone == ClipZone::trimStart || zone == ClipZone::trimEnd)
+            && isExtendSelectionModifier(event.mods) && !isToggleSelectionModifier(event.mods) && clip.waveform != nullptr
+        ? session.clipStretchRange(clip.id) : juce::Range<double> {1.0, 1.0};
+    const auto stretch = !stretchLimits.isEmpty();
     // Ctrl or Shift widens the selection to take the clip in, and the press
     // is over. It must not also start carrying, or every attempt to add one
     // clip to a selection would nudge the whole selection. The selection is
     // one rectangle, so the two modifiers mean the same thing on a clip, and
     // a clip already inside stays inside.
-    if (isMultiSelectModifier(event.mods))
+    if (!stretch && isMultiSelectModifier(event.mods))
     {
         extendSelectionToClip(clip);
         focus = Focus::region;
@@ -309,6 +317,8 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
     repaint();
     gesture = zone == ClipZone::trimStart ? ClipGesture::trimLeft
         : zone == ClipZone::trimEnd ? ClipGesture::trimRight : ClipGesture::move;
+    stretching = stretch;
+    stretchRange = stretchLimits;
     // What the press took hold of. For a move it is the part of the clip the
     // selection carries - the whole clip, or the part inside the selection -
     // so the snap and the clamps are about the piece that travels and the
@@ -441,7 +451,8 @@ void Arrangement::mouseDrag(const juce::MouseEvent& event)
     // Nor may the selection's start leave the start of the song.
     if (gesture == ClipGesture::move)
         editTime = std::max(editTime, original.start - timeSelection.start);
-    preview = previewClipEdit(original, gesture, editTime, sourceDuration);
+    preview = stretching ? previewClipStretch(original, gesture, editTime, stretchRange.getStart(), stretchRange.getEnd())
+                         : previewClipEdit(original, gesture, editTime, sourceDuration);
     previewTrack = targetTrack;
     repaint();
 }
@@ -553,9 +564,13 @@ void Arrangement::mouseUp(const juce::MouseEvent& event)
         }
         else
         {
-            const auto result = session.editClip(selected, preview, gesture);
+            const auto length = original.end - original.start;
+            const auto result = stretching && length > 0.0
+                ? session.stretchClip(selected, (preview.end - preview.start) / length, gesture)
+                : session.editClip(selected, preview, gesture);
             if (result.failed() && status) status(result.getErrorMessage());
-            // The trimmed clip is the selection, at the span it now has.
+            // The trimmed or stretched clip is the selection, at the span it
+            // now has.
             else setSelection({selected}, selected);
         }
     }

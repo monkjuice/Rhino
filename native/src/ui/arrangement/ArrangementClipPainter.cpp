@@ -130,8 +130,11 @@ void Arrangement::paintClipPiece(juce::Graphics& g, const ClipView& clip, const 
         auto waveArea = visible.withTop(box.getY() + 26.0f).reduced(0, 5).getSmallestIntegerContainer();
         if (clip.waveform->thumbnail.getTotalLength() > 0.0)
         {
-            const auto start = (position.offset + std::max(0.0, timeAt(visible.getX()) - position.start)) * clip.speed;
-            const auto end = start + visible.getWidth() / lane(0).getWidth() * viewSpan * clip.speed;
+            // A clip being stretched reads its content faster or slower to
+            // fit the span it is dragged to, so the waveform stretches with it.
+            const auto speed = displayedSpeed(clip);
+            const auto start = (position.offset + std::max(0.0, timeAt(visible.getX()) - position.start)) * speed;
+            const auto end = start + visible.getWidth() / lane(0).getWidth() * viewSpan * speed;
             // A modest display-only lift keeps low-amplitude and steady tones legible
             // at arrangement zoom without changing the source audio or clip gain.
             const auto wave = juce::Colour(0xff8cc5d2);

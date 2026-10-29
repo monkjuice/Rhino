@@ -31,6 +31,24 @@ int runArrangementGeometryTest()
             throw std::runtime_error("Right extension stops at source end");
         if (!close(previewClipEdit(geometry, ClipGesture::move, -5, 1).start, 0))
             throw std::runtime_error("Move stops at timeline zero");
+        // A stretch moves the edge dragged and keeps the other, and the window
+        // into the content scales by the same ratio, within the ratios given.
+        {
+            const ClipGeometry stretched {2.0, 4.0, 0.5};
+            const auto right = previewClipStretch(stretched, ClipGesture::trimRight, 5.0, 0.25, 4.0);
+            if (!close(right.start, 2.0) || !close(right.end, 5.0) || !close(right.offset, 0.75))
+                throw std::runtime_error("A right edge stretched keeps the start and scales the offset");
+            const auto left = previewClipStretch(stretched, ClipGesture::trimLeft, 1.0, 0.25, 4.0);
+            if (!close(left.start, 1.0) || !close(left.end, 4.0) || !close(left.offset, 0.75))
+                throw std::runtime_error("A left edge stretched keeps the end and scales the offset");
+            if (!close(previewClipStretch(stretched, ClipGesture::trimRight, 99.0, 0.25, 4.0).end, 10.0)
+                || !close(previewClipStretch(stretched, ClipGesture::trimRight, -9.0, 0.25, 4.0).end, 2.5))
+                throw std::runtime_error("A stretch stops at the ratios the clip's tempo allows");
+            if (!close(previewClipStretch(stretched, ClipGesture::trimLeft, -9.0, 0.25, 4.0).start, 0.0))
+                throw std::runtime_error("A left edge stretches back no further than the start of the song");
+            if (!close(previewClipStretch(stretched, ClipGesture::trimRight, std::nan(""), 0.25, 4.0).end, 4.0))
+                throw std::runtime_error("A stretch to no position changes nothing");
+        }
 
         if (!canSplitClipAt(geometry, 1.0))
             throw std::runtime_error("A line inside a clip splits it");

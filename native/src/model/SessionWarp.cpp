@@ -308,20 +308,90 @@ juce::Result Session::setClipBpm(te::EditItemID id, double bpm)
     if (!(seconds > 0.0))
         return juce::Result::fail("This clip has no audio to measure a tempo against.");
     const auto clamped = juce::jlimit(minimumClipBpm, maximumClipBpm, bpm);
-    return applyAudioClipEdit(id, "Clip tempo", [this, clamped, seconds](te::WaveAudioClip& target)
+    return applyAudioClipEdit(id, "Clip tempo", [this, clamped](te::WaveAudioClip& target)
     {
-        const auto before = target.getMaximumLength().inSeconds();
-        // Written as beats rather than through LoopInfo::setBpm, which wants
-        // an AudioFileInfo to work the beats out from. The two say the same
-        // thing and this one cannot disagree with the length we measured.
-        target.getLoopInfo().setNumBeats(seconds * clamped / 60.0);
-        // A repitched clip's speed is worked out from its tempo, so changing
-        // the tempo has to change the speed with it.
-        if (storedWarpOn(target) && storedMode(target) == WarpMode::repitch)
-            target.setSpeedRatio(repitchSpeedFor(target, tempo()));
-        rescaleWarpedClip(target, before);
+        writeClipBpm(target, clamped);
         // Halving the clip tempo doubles the clip, and a clip that grew wins
         // the ground it grew over, as every other clip edit does.
+        makeRoomForClip(target);
+    });
+}
+
+void Session::writeClipBpm(te::WaveAudioClip& clip, double bpm)
+{
+    const auto before = clip.getMaximumLength().inSeconds();
+    // Written as beats rather than through LoopInfo::setBpm, which wants an
+    // AudioFileInfo to work the beats out from. The two say the same thing
+    // and this one cannot disagree with the length we measured.
+    clip.getLoopInfo().setNumBeats(clip.getSourceLength().inSeconds()
+                                   * juce::jlimit(minimumClipBpm, maximumClipBpm, bpm) / 60.0);
+    // A repitched clip's speed is worked out from its tempo, so changing the
+    // tempo has to change the speed with it.
+    if (storedWarpOn(clip) && storedMode(clip) == WarpMode::repitch)
+        clip.setSpeedRatio(repitchSpeedFor(clip, tempo()));
+    rescaleWarpedClip(clip, before);
+}
+
+juce::Range<double> Session::clipStretchRange(te::EditItemID id) const
+{
+    const auto* clip = findAudioClip(id);
+    if (clip == nullptr || !storedWarpOn(*clip))
+        return {1.0, 1.0};
+    const auto bpm = bpmOf(*clip);
+    if (!(bpm > 0.0))
+        return {1.0, 1.0};
+    auto lowest = minimumClipBpm, highest = maximumClipBpm;
+    // Repitch plays at the song's tempo over the clip's, a speed the engine
+    // holds between a tenth and ten (repitchSpeedFor). Past it the clip would
+    // stop getting longer while the drag went on stretching it.
+    if (storedMode(*clip) == WarpMode::repitch)
+    {
+        lowest = std::max(lowest, tempo() / 10.0);
+        highest = std::min(highest, tempo() * 10.0);
+    }
+    return {std::min(1.0, lowest / bpm), std::max(1.0, highest / bpm)};
+}
+
+// Stretching is the clip tempo by another name: a clip's tempo is its length
+// in beats, so scaling the one scales the other, and rescaleWarpedClip keeps
+// the window the clip shows into its content at the same fraction of it. The
+// engine stretches the audio to fit, as it does for :2 and *2.
+juce::Result Session::stretchClip(te::EditItemID id, double ratio, ClipGesture edge)
+{
+    if (!std::isfinite(ratio) || !(ratio > 0.0) || edge == ClipGesture::move)
+        return juce::Result::fail("Invalid stretch.");
+    auto* clip = findAudioClip(id);
+    if (clip == nullptr)
+        return juce::Result::fail("Select an audio clip first.");
+    if (!storedWarpOn(*clip))
+        return juce::Result::fail("Turn Warp on to stretch a clip by its edge.");
+    const auto bpm = bpmOf(*clip);
+    if (!(bpm > 0.0))
+        return juce::Result::fail("This clip has no tempo to stretch.");
+    const auto span = clip->getPosition().time;
+    const auto end = span.getEnd().inSeconds();
+    auto range = clipStretchRange(id);
+    // Stretched from its left edge the clip keeps its end, so it reaches back
+    // no further than the start of the song, as the preview stops there too.
+    if (edge == ClipGesture::trimLeft && span.getLength().inSeconds() > 0.0)
+        range = range.withEnd(std::max(range.getStart(), std::min(range.getEnd(), end / span.getLength().inSeconds())));
+    const auto scale = range.clipValue(ratio);
+    if (std::abs(scale - 1.0) < 1.0e-9)
+        return juce::Result::ok();
+    return applyAudioClipEdit(id, "Stretch clip", [this, bpm, scale, edge, end](te::WaveAudioClip& target)
+    {
+        writeClipBpm(target, bpm * scale);
+        if (edge == ClipGesture::trimLeft)
+        {
+            const auto now = target.getPosition();
+            const auto length = now.time.getLength().inSeconds();
+            const auto start = std::max(0.0, end - length);
+            target.setPosition({{tracktion::core::TimePosition::fromSeconds(start),
+                                 tracktion::core::TimePosition::fromSeconds(start + length)},
+                                now.offset});
+        }
+        // A clip stretched longer wins the ground it grew over, as a trim
+        // does.
         makeRoomForClip(target);
     });
 }

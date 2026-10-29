@@ -102,4 +102,29 @@ inline ClipGeometry previewClipEdit(ClipGeometry original, ClipGesture gesture,
     }
     return next;
 }
+
+// Live's Shift-drag from a warped clip's edge: the edge dragged goes to the
+// target and the other stays, and all the clip shows is spread or squeezed
+// over the new span, so its offset into its content scales by the same ratio.
+// The ratio keeps to what the clip's tempo can reach (Session::clipStretchRange)
+// and, from the left edge, to the start of the song. The model stretches by
+// the ratio this gives (Session::stretchClip), so the drop lands on the preview.
+inline ClipGeometry previewClipStretch(ClipGeometry original, ClipGesture edge, double target,
+                                       double minimumRatio, double maximumRatio)
+{
+    const auto length = original.end - original.start;
+    if (!std::isfinite(target) || !(length > 0.0) || edge == ClipGesture::move)
+        return original;
+    if (edge == ClipGesture::trimLeft)
+        maximumRatio = std::min(maximumRatio, original.end / length);
+    const auto wanted = (edge == ClipGesture::trimLeft ? original.end - target : target - original.start) / length;
+    const auto ratio = std::clamp(wanted, std::min(minimumRatio, maximumRatio), maximumRatio);
+    auto next = original;
+    next.offset = original.offset * ratio;
+    if (edge == ClipGesture::trimLeft)
+        next.start = original.end - length * ratio;
+    else
+        next.end = original.start + length * ratio;
+    return next;
+}
 }

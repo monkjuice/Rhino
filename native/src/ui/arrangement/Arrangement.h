@@ -615,6 +615,10 @@ private:
     // selection is dragged, otherwise the clip itself. The hit tests and the
     // waveform repaints read these; the painter reads every piece.
     ClipGeometry displayedPosition(const ClipView&) const;
+    // How fast the clip reads its source where it is drawn: its own speed,
+    // or while it is stretched the speed that fits its content to the
+    // previewed span.
+    double displayedSpeed(const ClipView&) const;
     int displayedTrack(const ClipView&) const;
     DisplayedPieces displayedPieces(const ClipView&) const;
     juce::Rectangle<float> bounds(const ClipView&) const;
@@ -790,6 +794,10 @@ private:
     double regionAnchorTime = 0.0;
     int regionAnchorTrack = 0;
     ClipGesture gesture = ClipGesture::move;
+    // A trim begun with Shift on a warped clip's edge stretches the clip
+    // instead, by a ratio its tempo keeps within stretchRange.
+    bool stretching = false;
+    juce::Range<double> stretchRange {1.0, 1.0};
     // What the press took hold of and where it is now. For a move it is the
     // piece of the grabbed clip the selection carries - the clip whole, or the
     // part inside the selection - so the snap and the clamps are about what

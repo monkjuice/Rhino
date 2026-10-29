@@ -1496,6 +1496,16 @@ public:
     // is what the :2 and *2 buttons are, through scaleClipBpm.
     juce::Result setClipBpm(te::EditItemID, double bpm);
     juce::Result scaleClipBpm(te::EditItemID, double factor);
+    // Live's Shift-drag from a warped clip's edge. The clip tempo is scaled
+    // by ratio, so all the clip shows spreads over ratio times its span, and
+    // the edge not dragged stays put: trimRight keeps the start, trimLeft the
+    // end. One undo step. Refused on an unwarped clip, which plays its file
+    // at the file's own speed and has no tempo to stretch.
+    juce::Result stretchClip(te::EditItemID, double ratio, ClipGesture edge);
+    // The ratios stretchClip can reach: the clip tempo's range and, for
+    // Repitch, the engine's speed limits. {1, 1} for a clip that cannot
+    // stretch, an unwarped one among them.
+    juce::Range<double> clipStretchRange(te::EditItemID) const;
     // Asks the engine to work the tempo out from the audio. Blocking, and
     // honest about failing: a clip with no steady pulse has no answer.
     juce::Result detectClipBpm(te::EditItemID);
@@ -1915,6 +1925,9 @@ private:
     // SessionWarp.cpp - holds a warped clip's length in step with its content
     // after the content's length in beats has changed.
     static void rescaleWarpedClip(te::WaveAudioClip&, double previousContentSeconds);
+    // Writes a clip tempo and rescales the clip to it, a Repitch clip's speed
+    // with it; setClipBpm and stretchClip both set the tempo through this.
+    void writeClipBpm(te::WaveAudioClip&, double bpm);
     // The one place the engine's warp state is written, from the switch and
     // the mode Rhino records on the clip.
     void applyWarpState(te::WaveAudioClip&, bool on, WarpMode);

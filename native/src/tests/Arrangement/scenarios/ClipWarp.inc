@@ -199,6 +199,95 @@
     require(warp.scaleClipBpm(warpClip, 16.0).failed(),
             "A doubling that would leave the range says so rather than clamping silently");
 
+    // Live's Shift-drag from a warped clip's edge stretches it: the clip tempo
+    // follows the edge, so all of the clip spreads over the new span. A plain
+    // drag still trims, and stops where the file does.
+    {
+        scenario("clip warp: Shift-drag on an edge stretches a warped clip");
+        const auto clipStart = [&warp, warpClip]
+        {
+            auto* clip = warp.findAudioClip(warpClip);
+            return clip != nullptr ? clip->getPosition().time.getStart().inSeconds() : -1.0;
+        };
+        const auto clipBpm = [&warp, warpClip] { return warp.clipWarp(warpClip).clipBpm; };
+        require(std::abs(clipLength() - 2.0) < 0.01 && std::abs(clipStart()) < 0.001 && std::abs(clipBpm() - 120.0) < 0.01,
+                "The stretch starts from the two second clip at the start of the song, at 120");
+        require(warp.stretchClip(warpClip, 1.5, ClipGesture::trimRight).wasOk(), "A warped clip stretches by its right edge");
+        require(std::abs(clipLength() - 3.0) < 0.01 && std::abs(clipStart()) < 0.001,
+                "to half again its length, its start where it was");
+        require(std::abs(clipBpm() - 180.0) < 0.01, "because its tempo went up by the same half");
+        warp.undo();
+        require(std::abs(clipLength() - 2.0) < 0.01 && std::abs(clipBpm() - 120.0) < 0.01,
+                "and one undo takes the whole stretch back");
+        require(warp.stretchClip(warpClip, 100.0, ClipGesture::trimRight).wasOk(), "A stretch past the tempo's range");
+        require(std::abs(clipBpm() - Session::maximumClipBpm) < 0.01, "stops at the fastest clip tempo there is");
+        warp.undo();
+
+        Arrangement stretchView(warp);
+        stretchView.setSize(1000, 354);
+        stretchView.sync();
+        stretchView.fit();
+        const auto rowY = stretchView.lane(2).getY() + 10.0f;
+        const auto stretchEvent = [&stretchView](juce::Point<float> down, juce::Point<float> point, bool dragged,
+                                          juce::ModifierKeys mods)
+        {
+            return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), point,
+                mods, 1.0f, 0, 0, 0, 0, &stretchView, &stretchView, juce::Time::getCurrentTime(), down,
+                juce::Time::getCurrentTime(), 1, dragged);
+        };
+        // Alt as well, so the edge lands where it is dragged rather than on
+        // whichever grid line the fitted zoom draws.
+        const auto stretchMods = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier
+                                                    | juce::ModifierKeys::shiftModifier | juce::ModifierKeys::altModifier);
+        const auto plainMods = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::altModifier);
+        // Grabs an edge two pixels inside the clip and carries it from one
+        // time to another, the grab's two pixels kept.
+        const auto dragEdge = [&](double from, double to, float inside, juce::ModifierKeys mods)
+        {
+            const juce::Point<float> down {stretchView.xFor(from) + inside, rowY};
+            const juce::Point<float> at {down.x + stretchView.xFor(to) - stretchView.xFor(from), rowY};
+            stretchView.mouseDown(stretchEvent(down, down, false, mods));
+            stretchView.mouseDrag(stretchEvent(down, at, true, mods));
+            return [&stretchView, &stretchEvent, down, at, mods] { stretchView.mouseUp(stretchEvent(down, at, true, mods)); };
+        };
+
+        auto release = dragEdge(2.0, 3.0, -2.0f, stretchMods);
+        require(stretchView.stretching && std::abs(stretchView.preview.end - 3.0) < 0.01
+                    && std::abs(stretchView.preview.start) < 0.001,
+                "Shift on the right edge previews the clip stretched to where the edge is dragged");
+        require(!stretchView.clips.empty()
+                    && std::abs(stretchView.displayedSpeed(stretchView.clips.front())
+                                - stretchView.clips.front().speed * 2.0 / 3.0) < 0.001,
+                "and draws its waveform spread over that span");
+        require(std::abs(clipLength() - 2.0) < 0.01, "without touching the clip until the release");
+        release();
+        require(std::abs(clipLength() - 3.0) < 0.01 && std::abs(clipStart()) < 0.001 && std::abs(clipBpm() - 180.0) < 0.01,
+                "The release stretches the clip to the span previewed");
+        warp.undo();
+
+        require(warp.editClip(warpClip, {2.0, 4.0, 0.0}, ClipGesture::move).wasOk(), "The clip moved off the start of the song");
+        stretchView.sync();
+        dragEdge(2.0, 1.0, 2.0f, stretchMods)();
+        require(std::abs(clipStart() - 1.0) < 0.01 && std::abs(clipLength() - 3.0) < 0.01 && std::abs(clipBpm() - 180.0) < 0.01,
+                "Shift on the left edge stretches the clip back, keeping its end");
+        warp.undo();
+        warp.undo();
+        stretchView.sync();
+
+        dragEdge(2.0, 3.0, -2.0f, plainMods)();
+        require(std::abs(clipLength() - 2.0) < 0.01 && std::abs(clipBpm() - 120.0) < 0.01,
+                "A plain drag on the edge trims, and the clip already ends where its audio does");
+
+        require(warp.setClipFollowsTempo(warpClip, false).wasOk(), "The clip unwarped");
+        stretchView.sync();
+        dragEdge(2.0, 3.0, -2.0f, stretchMods)();
+        require(!stretchView.stretching && std::abs(clipLength() - 2.0) < 0.01,
+                "Shift on an unwarped clip's edge stretches nothing: there is no tempo to stretch");
+        require(warp.stretchClip(warpClip, 1.5, ClipGesture::trimRight).failed(), "and the model refuses it too");
+        warp.undo();
+        require(warp.clipWarp(warpClip).followsTempo, "Warped again");
+    }
+
     // Warp markers.
     require(warp.addClipWarpMarker(warpClip, 1.0).failed(), "A marker needs the markers switched on first");
     require(warp.setClipWarpMarkersEnabled(warpClip, true).wasOk(), "Warp markers can be switched on");

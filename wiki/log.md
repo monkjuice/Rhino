@@ -1615,3 +1615,10 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/level-meters.md (MeterBallistics reused for gain reduction)
 - updated: pages/headless-ui-snapshots.md (RHINO_SIDECHAIN_SNAPSHOT shows the meter at 6 dB)
 - updated: index.md (Components: Compressor; Gotchas: the duplicate type name; Device rack's summary)
+
+## [2026-10-29] update | Shift-dragging a warped audio clip's edge stretches it (4193cdf)
+- source: the main agent's brief, checked against native/src/model/SessionWarp.cpp (`stretchClip`, `clipStretchRange`, `writeClipBpm`), model/ClipGeometry.h (`previewClipStretch`) and ui/arrangement/ArrangementGestures.cpp
+- updated: pages/time-warp.md (summary, tags; new section: why a trim stops at the audio's end, the stretch as the clip tempo, its range and the Repitch limits, preview equals drop, the gesture, the scenario, open: same cursor, no message at a trim's limit)
+- updated: pages/arrangement-view.md (a trim stops at the audio's end; Shift on a warped clip's edge stretches)
+- updated: pages/pointer-and-selection.md (Shift on a warped clip's trim handle is the exception to Shift-widens)
+- updated: index.md (Time warp's summary)

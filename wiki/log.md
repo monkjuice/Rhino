@@ -1622,3 +1622,7 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/arrangement-view.md (a trim stops at the audio's end; Shift on a warped clip's edge stretches)
 - updated: pages/pointer-and-selection.md (Shift on a warped clip's trim handle is the exception to Shift-widens)
 - updated: index.md (Time warp's summary)
+
+## [2026-10-29] update | An audio effect dropped on a clip goes on its track (dd27e92)
+- source: native/src/ui/arrangement/ArrangementDrops.cpp (`itemDropped`, `applyBrowserDrop`), tests/Arrangement/scenarios/AudioClipEditing.inc
+- updated: pages/device-chain-order.md (Clip effects: a browser drop on a clip now lands in the track's chain like a drop on the lane; the old clip-list insert, its hidden result and what survives of `addClipDevice`; updated date)

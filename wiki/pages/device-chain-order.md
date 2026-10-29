@@ -4,7 +4,7 @@ type: concept
 summary: A track's plugin list is its signal chain - the hidden DJ input (on a return track followed by its aux return), MIDI FX, instrument, audio FX, the hidden DJ output, a channel strip of Utility, fader and meter whose Utility sits on a different side of the fader on starter and added tracks, then one send per return - so the first visible device is plugin 1, or 2 on a return; how every add and every drag keeps that order.
 tags: [rhino, devices, signal-chain, dj, returns, gotcha]
 sources: []
-updated: 2026-10-27
+updated: 2026-10-29
 ---
 
 # Device chain order
@@ -39,7 +39,7 @@ Until commit `23de20c` (2026-10-05), a MIDI effect added to a track with no inst
 
 ## Clip effects
 
-An audio effect dropped on an audio clip goes into that clip's own plugin list (`Session::addClipDevice`), not the track's. A warped or reversed clip cannot host effects, and the drop then falls back to the track. Clip effects have no editor yet; the clip shows only an `FX<n>` badge.
+An audio effect dropped from the browser onto a clip goes on the clip's **track**, exactly as a drop on the bare lane does, and appears in the Device View (since commit `dd27e92`, 2026-10-29, at the user's request, as in Live). Until then a drop on an audio clip went into the clip's own plugin list (`Session::addClipDevice`), which nothing showed or edited: the clip gained only an `FX<n>` badge and the Device View stayed unchanged. `addClipDevice` survives in the model, reached by no UI path, and a clip's own list is where the hidden [clip envelope](clip-envelopes.md) devices live; the badge still counts whatever that list holds.
 
 ## Related
 

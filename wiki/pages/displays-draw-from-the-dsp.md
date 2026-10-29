@@ -4,7 +4,7 @@ type: convention
 summary: A curve on screen is computed by the same functions the audio runs, never from a second set of formulas, and tests hold the two together.
 tags: [both, ui, dsp, testing]
 sources: []
-updated: 2026-10-27
+updated: 2026-10-28
 ---
 
 # Displays draw from the DSP
@@ -22,6 +22,7 @@ A display is drawn from the arithmetic the engine actually runs, never from a pi
   - [Saturator](saturator.md) draws its curve with `SaturatorEngine::transferCurve`, from the same functions in `core/dsp/SaturatorCurves.h` that the audio runs. A test requires the end of the drawn curve to equal the audio's peak.
   - [Redux](redux.md) plays a sine through an engine of its own, `ReduxEngine::picture`.
   - [Erosion](erosion.md) draws its modulator by running the engine's own `modulators` in an engine of its own, `modulationPicture`.
+- **The [Compressor](compressor.md)'s gain reduction meter** (2026-10-28). Tracktion keeps the detector private, so rather than restate it, `CompressorDevice` reads the reduction off the audio, output over input less make-up, frame by frame. The meter shows the gain applied; a test holds it within 0.01 dB of the rendered audio.
 - **Forge FX slots** (`ui/ForgeFxDisplay.h`, since the 2026-10-21 strips one or two pictures per type; [Forge's FX strips are per-type plans in a pure header](forge-fx-strip-plans.md)). Each picture calls the engine's own arithmetic in `core/ForgeFxDsp.h` and `core/ForgeFx.h`:
   - the distortion's transfer curve is `fxShape` per pixel, and its TONE well is `distortionFilterMagnitude`;
   - the filter is `fxFilterMagnitude`;

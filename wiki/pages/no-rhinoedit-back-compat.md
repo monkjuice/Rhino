@@ -4,7 +4,7 @@ type: decision
 summary: Rhino owes older .rhinoedit documents nothing; a project that opens wrong is fixed in the current save and load path, not by a migration.
 tags: [rhino, project-files, persistence]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-28
 ---
 
 # No backward compatibility for .rhinoedit
@@ -36,6 +36,7 @@ The earlier research roadmap assumed versioned migration: `research/ROADMAP.md` 
 - Commit `cf85e3f` applied the decision to automation: lanes that stored their device as a slot are not converted, and
   a document saved with them loads without them ([Track automation](automation.md)).
 - Design a new property so its absence means the old default. `rhinoTrackType` is written only for MIDI, so every older document reads as audio and nothing had to be migrated ([Track kinds: audio and MIDI](track-kinds.md)).
+- A document saved before 2026-10-28 opens its compressor as the engine's plain `compressor`, which the catalog no longer names: no gain reduction meter and no catalog id. Accepted rather than migrated ([Compressor](compressor.md)).
 - When a project will not open, look for the fix in the save path that wrote it ([Debugging a crash only one project triggers](debugging-a-crashing-project.md)).
 
 ## Contrast with Forge

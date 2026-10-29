@@ -1600,3 +1600,18 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/profile-paint-on-a-software-image.md (compare pixels on software images too)
 - updated: pages/build-and-test-rhino.md (native_device_correctness at about its 30 s limit on an idle machine, committed tree included, not a hang; arrangement workflow 108-119 s later that day)
 - updated: index.md (summaries of Return tracks and sends, JUCE's rasteriser is not clip-invariant)
+
+## [2026-10-28] update | The Compressor shows its gain reduction in dB (532f3b4)
+- source: the main agent's brief, checked against native/src/devices/audio/CompressorDevice.h/.cpp, DeviceCatalog.cpp, ui/rack/DeviceEditorPanelCompressor.cpp, DeviceEditorPanel.h/.cpp and tests/DeviceConformance.cpp; the first ctest run failed native_device_conformance on the under-threshold check, fixed by `faintestDb`; after it all six CTest cases passed
+- created: pages/compressor.md (CompressorDevice over te::CompressorPlugin, rhino.compressor.v1, the reduction read off the audio in 64-frame pieces, the 0.01 dB deadband against the engine's denormal rounding and the copy of that rounding it rejected, the meter, older documents, tests and what they caught)
+- created: pages/tracktion-refuses-duplicate-built-in-type.md (registerBuiltInType silently ignores a taken name; Tracktion registers its built-ins first)
+- updated: pages/device-rack.md (summary; the meter's column, layout and repaint rule; the 24 Hz timer list; ballistics reset only on a device change or bypass; DeviceRackTest's checks)
+- updated: pages/built-in-devices.md (three Tracktion devices as they are, the Compressor its own row; a subclass of a Tracktion built-in needs its own type name)
+- updated: pages/device-catalog.md (the Compressor's factory and type name; nineteen registered; why the type name changed)
+- updated: pages/sidechains.md (the compressor is now Rhino's subclass, found by the same dynamic_cast)
+- updated: pages/colours-and-typography.md (`palette::gainReduction`)
+- updated: pages/displays-draw-from-the-dsp.md (the meter reads the gain applied rather than a model of the detector)
+- updated: pages/no-rhinoedit-back-compat.md (older documents' compressor opens with no meter and no catalog id)
+- updated: pages/level-meters.md (MeterBallistics reused for gain reduction)
+- updated: pages/headless-ui-snapshots.md (RHINO_SIDECHAIN_SNAPSHOT shows the meter at 6 dB)
+- updated: index.md (Components: Compressor; Gotchas: the duplicate type name; Device rack's summary)

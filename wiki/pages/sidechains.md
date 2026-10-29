@@ -4,7 +4,7 @@ type: component
 summary: Any device the engine says can take a sidechain may name one source track, which Tracktion taps after that track's fader and before its mute, with no gain and no other tap point; Rhino refuses a source that already carries the device's own track, and the rack's Sidechain strip chooses it on every plain-grid or generated face.
 tags: [rhino, devices, sidechain, routing, tracktion]
 sources: []
-updated: 2026-10-26
+updated: 2026-10-28
 ---
 
 # Sidechains
@@ -17,7 +17,7 @@ One track's audio routed into a device on another track: the [Rhino Vocoder](rhi
 
 - **A Rhino device** declares extra input channel names (the Vocoder's Carrier L and R). The device SDK (`devices/sdk/`) cannot declare one yet.
 - **A VST3** declares a sidechain bus. `te::ExternalPlugin` enables every bus on creation, so Duck reports four inputs.
-- **`te::CompressorPlugin`** (catalog id `Compressor`) declares a third input, "Sidechain Trigger".
+- **`te::CompressorPlugin`** (catalog id `Compressor`) declares a third input, "Sidechain Trigger". Since 2026-10-28 the catalog makes Rhino's subclass, `CompressorDevice` ([Compressor](compressor.md)); this page's code finds it by `dynamic_cast<te::CompressorPlugin*>` and did not change.
 
 ## What Tracktion does
 

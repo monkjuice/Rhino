@@ -4,7 +4,7 @@ type: component
 summary: A stereo peak meter on every track card and on the main row, fed once a frame by Session::takeOutputLevels from one engine level meter behind each track's fader and the main output's own measurer, drawn on Ardour's IEC 60268-18 scale and gated on the engine's mute and solo.
 tags: [rhino, mixer, ui, metering]
 sources: []
-updated: 2026-10-15
+updated: 2026-10-28
 ---
 
 # Track level meters
@@ -34,7 +34,7 @@ Since 2026-10-15 (commit `7a92d14`) every track card and the main row carry a le
 `native/src/ui/shared/LevelMeter.*` never reads the engine; its owner feeds it.
 
 - `meterFraction(dB)` is Ardour's IEC 60268-18 scale (`log_meter` in `libs/ardour/ardour/logmeter.h`): floor -70 dB, 0 dBFS at 100/115 (87%) of the height, +6 dB at the top. NaN reads as the floor.
-- `MeterBallistics`: instant attack, a fall of 24 dB/s, the peak held 1.5 s and then falling, never below the bar.
+- `MeterBallistics`: instant attack, a fall of 24 dB/s, the peak held 1.5 s and then falling, never below the bar. Since 2026-10-28 the [Compressor](compressor.md)'s gain reduction meter reuses it, fed decibels of reduction rather than of level.
 - `LevelMeter`: two 3 px bars and a 1 px gap (7 px) on `palette::displayInset`, lit through one gradient pinned to the meter rather than to the lit part, so a colour always means one level: `meterSafe` to -12 dB, `meterHot` by -3 dB, `meterClip` from 0 dBFS; a 1 px held-peak line. It is opaque and click-through, and repaints only when a bar or a hold moves a whole pixel: a silent song repaints nothing, and as JUCE clips opaque children out of the parent's paint, a moving meter never repaints the arrangement behind it.
 
 ## In the arrangement

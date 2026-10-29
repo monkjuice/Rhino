@@ -120,39 +120,6 @@ void Arrangement::itemDropped(const juce::DragAndDropTarget::SourceDetails& deta
         return;
     }
     const auto kind = browserDropKind(description);
-    if (kind == "effect")
-        if (const auto clipIndex = hit(details.localPosition.toFloat()); clipIndex >= 0)
-        {
-            const auto* effect = deviceFromId(browserDropId(description), DeviceKind::AudioEffect);
-            if (effect == nullptr)
-            {
-                if (status) status("That browser item cannot be inserted here.");
-                return;
-            }
-            // A copy: adding the device is announced, and the clip list is
-            // rebuilt before the fallback below reads it.
-            const auto clip = clips[static_cast<size_t>(clipIndex)];
-            const auto result = session.addClipDevice(effect->id, clip.id);
-            if (result.failed())
-            {
-                const auto trackResult = session.addDevice(effect->id, clip.track);
-                if (trackResult.failed())
-                {
-                    if (status) status(result.getErrorMessage() + " " + trackResult.getErrorMessage());
-                    return;
-                }
-                selected = clip.id;
-                selectTrack(clip.track);
-                if (status) status("Added browser effect to " + session.trackName(clip.track)
-                    + " Device View for selected MIDI clip");
-                return;
-            }
-            selected = clip.id;
-            selectTrack(clip.track);
-            if (status) status("Added browser effect to clip; clip FX count "
-                + juce::String(session.clipPluginCount(clip.id)));
-            return;
-        }
     if (targetTrack < 0 && static_cast<float>(details.localPosition.y) > lastLaneBottom())
     {
         // A preset needs the lane its device would.
@@ -205,6 +172,9 @@ juce::Result Arrangement::applyBrowserDrop(const juce::String& description, int 
         const auto* effect = deviceFromId(id, DeviceKind::AudioEffect);
         if (effect == nullptr) return juce::Result::fail("That browser item cannot be inserted here.");
         if (track < 0) return juce::Result::fail("Drop audio effects on a track or clip.");
+        // A clip under the pointer changes nothing: the effect goes on the
+        // clip's track, as in Live, where the Device View shows and edits it.
+        // It went into the clip's own plugin list once, which nothing showed.
         const auto result = session.addDevice(effect->id, track);
         if (result.failed()) return result;
         selectTrack(track);

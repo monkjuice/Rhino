@@ -119,11 +119,13 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
     // Tracktion refreshes its state. The face still has a stable catalog name.
     if (face == Face::Arp)
         deviceName = RhinoArpDevice::getPluginName();
+    reductionMetered = face == Face::Generic && deviceId == "Compressor";
     // Rhino Tune's meter, the Tuner's display, the vocoder's bank, the EQ's
-    // spectrum and the drum pads lighting as they are struck are the only
-    // things on any face that move on their own, so they are the only devices
-    // that ask for frames. The EQ stops asking when its analyser is switched
-    // off.
+    // spectrum, the Compressor's gain reduction and the drum pads lighting as
+    // they are struck are the only things on any face that move on their own,
+    // so they are the only devices that ask for frames. The EQ stops asking
+    // when its analyser is switched off, and the Compressor when it is
+    // bypassed.
     const auto* eqDevice = face == Face::Eq
         ? dynamic_cast<RhinoEqDevice*>(session.devicePlugin(track, pluginSlot)) : nullptr;
     const auto eqAnalysing = eqDevice != nullptr && device.enabled
@@ -132,7 +134,8 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
     // count, and the rack re-targets a face with a knob on a lane 30 times a
     // second while the song plays, so a 24 Hz frame never came due and the
     // EQ's spectrum stood still.
-    if (face == Face::AutoTune || face == Face::Vocoder || face == Face::DrumRack || face == Face::Tuner || eqAnalysing)
+    if (face == Face::AutoTune || face == Face::Vocoder || face == Face::DrumRack || face == Face::Tuner || eqAnalysing
+        || (reductionMetered && device.enabled))
     {
         if (!isTimerRunning())
             startTimerHz(24);
@@ -153,7 +156,16 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
         drumParametersFrom = -1;
     }
     const auto* plugin = session.devicePlugin(track, pluginSlot);
+    const auto previousKey = deviceKey;
     deviceKey = plugin != nullptr ? plugin->itemID.toString() : juce::String();
+    // The rack re-targets a face many times a second while a lane plays, so
+    // the meter starts again only for another device or a bypassed one.
+    if (!reductionMetered || !device.enabled || deviceKey != previousKey)
+    {
+        reduction = {};
+        reductionFedAt = 0.0;
+        reductionDrawn = {-1, -1, -1};
+    }
     display = face == Face::Generated ? session.deviceDisplay(track, pluginSlot) : DeviceDisplay {};
     mappable = face == Face::Generic && session.deviceHasMappedParameters(track, pluginSlot);
     mapping = mappable && session.isMappingParameters(track, pluginSlot);
@@ -238,9 +250,9 @@ int DeviceEditorPanel::preferredWidth() const
     // A chosen list grows along the face, two rows deep once it passes six,
     // rather than stopping at the twelve the plain grid lays out.
     if (mappable)
-        return std::max(190, 46 + genericColumns() * 66) + sidechainWidth();
+        return std::max(190, 46 + genericColumns() * 66) + sidechainWidth() + reductionMeterSpace();
     const auto columns = std::max(2, std::min(6, visibleParameterCount()));
-    return juce::jlimit(190, 470, 46 + columns * 66) + sidechainWidth();
+    return juce::jlimit(190, 470, 46 + columns * 66) + sidechainWidth() + reductionMeterSpace();
 }
 
 int DeviceEditorPanel::genericColumns() const
@@ -706,6 +718,8 @@ void DeviceEditorPanel::paint(juce::Graphics& g)
     // face shows.
     if (sidechained)
         paintSidechain(g);
+    if (reductionMetered)
+        paintReductionMeter(g);
 
     if (parameters.empty())
     {
@@ -757,6 +771,7 @@ void DeviceEditorPanel::resized()
     title.setBounds(27, 1, getWidth() - 32 - (mappable ? 46 : 0), 21);
     contentArea = getLocalBounds().withTrimmedTop(24).reduced(4);
     layoutSidechain();
+    layoutReductionMeter();
     // A panel can be retargeted from one device to another without being
     // rebuilt, so the EQ's own knobs go away when the face does.
     if (face != Face::Eq)

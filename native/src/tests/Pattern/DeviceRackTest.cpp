@@ -5,6 +5,7 @@
 #include "content/ContentLibrary.h"
 #include "dsp/ScaleQuantizer.h"
 #include "audio/AutoTuneDevice.h"
+#include "audio/CompressorDevice.h"
 #include "audio/RhinoEqDevice.h"
 #include "audio/UtilityDevice.h"
 #include "instruments/DrumRackDevice.h"
@@ -359,10 +360,27 @@ void runPatternDeviceRackTest()
             }
         require(knobs > 0, "The compressor keeps its knobs beside the strip");
 
+        // And how far it is turning the audio down, in a column of its own at
+        // the face's right that no knob stands in.
+        const auto meter = compressorPanel->reductionArea;
+        require(compressorPanel->reductionMetered && !reverbPanel->reductionMetered && reverbPanel->reductionArea.isEmpty(),
+                "Only the compressor carries a gain reduction meter");
+        require(!meter.isEmpty() && compressorPanel->getLocalBounds().contains(meter)
+                    && meter.getY() >= DeviceEditorPanel::headerHeight && compressorPanel->getWidth() - meter.getRight() < 12,
+                "The meter stands at the face's right under the name bar");
+        for (auto* child : compressorPanel->getChildren())
+            require(!child->isVisible() || !child->getBounds().intersects(meter), "and no control stands on it");
+        require(compressorPanel->isTimerRunning(), "A compressor's face asks for frames, to move its meter");
+
         const auto compressorSlot = compressorPanel->devicePluginIndex();
         auto* compressor = dynamic_cast<te::CompressorPlugin*>(session.devicePlugin(0, compressorSlot));
         require(compressor != nullptr && session.deviceSidechainSource(0, compressorSlot) == -1,
                 "A compressor just added takes no other track's audio");
+        require(dynamic_cast<CompressorDevice*>(compressor) != nullptr, "and it is Rhino's, which reports its reduction");
+        // Nothing has played through it, so a frame finds nothing to show.
+        compressorPanel->tickReductionMeter();
+        require(compressorPanel->reduction.levelDb <= 0.0f && compressorPanel->reduction.heldDb <= 0.0f,
+                "A compressor nothing has played through shows no reduction");
         const auto unrouted = compressorPanel->createComponentSnapshot(compressorPanel->getLocalBounds());
         require(unrouted.getWidth() == compressorPanel->getWidth(), "The strip paints with nothing chosen");
 
@@ -376,6 +394,8 @@ void runPatternDeviceRackTest()
                     && compressor->useSidechainTrigger.get(),
                 "Picking a track on the strip routes it, and tells the compressor to listen to it");
         require(said.contains(session.trackName(audioLane)), "and the status line names the track");
+        // The picture shows the meter as 6 dB of reduction leaves it.
+        compressorPanel->reduction.advance(6.0f, 0.0);
         Theme sidechainTheme;
         compressorPanel->setLookAndFeel(&sidechainTheme);
         const auto routed = compressorPanel->createComponentSnapshot(compressorPanel->getLocalBounds());

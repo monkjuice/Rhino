@@ -92,6 +92,9 @@ inline const juce::Colour send             {0xffa98cf2};
 inline const juce::Colour meterSafe        {0xff3ddc84};
 inline const juce::Colour meterHot         {0xffe8c547};
 inline const juce::Colour meterClip        {0xffed3935};
+// A compressor's gain reduction meter, which falls from the top as the audio is
+// turned down: amber, so it never reads as a level meter's green or yellow.
+inline const juce::Colour gainReduction    {0xffe9a84a};
 
 // MIDI processors use cyan because they transform events rather than audio.
 inline const juce::Colour midiEffect       {0xff55c7d5};

@@ -107,7 +107,7 @@
             require(song.addDevice("Compressor", delayReturn).wasOk(), "but takes audio effects");
             const auto slots = song.deviceSlots(delayReturn);
             require(slots.size() == 2 && slots[0].type == te::DelayPlugin::xmlTypeName
-                        && slots[1].type == te::CompressorPlugin::xmlTypeName,
+                        && slots[1].deviceId == "Compressor",
                     "after the devices already there, so the sends reach every one of them");
             require(song.groupTracks({0, delayReturn}).failed() && song.trackGroups().empty(),
                     "A return cannot be grouped");

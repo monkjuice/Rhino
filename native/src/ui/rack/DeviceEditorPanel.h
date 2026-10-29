@@ -1,5 +1,6 @@
 #pragma once
 #include "model/Session.h"
+#include "ui/shared/LevelMeter.h"
 #include "dsp/DrumRackEngine.h"
 #include "dsp/SpectrumAnalyser.h"
 #include <array>
@@ -206,6 +207,17 @@ private:
     // What a pick on the strip does: routes it and says so in the status line.
     // A test calls it in place of the menu.
     juce::Result chooseSidechainSource(int sourceTrack);
+    // Rhino's Compressor shows how far it is turning the audio down: a bar
+    // falling from 0 dB at the right of its plain grid, and under it the
+    // deepest reduction of the last moment in decibels. In
+    // DeviceEditorPanelCompressor.cpp.
+    static constexpr int reductionMeterWidth = 44, reductionMeterGap = 6;
+    int reductionMeterSpace() const { return reductionMetered ? reductionMeterWidth + reductionMeterGap : 0; }
+    // Takes the meter off the right of contentArea, leaving the knobs the rest.
+    void layoutReductionMeter();
+    void paintReductionMeter(juce::Graphics&);
+    void tickReductionMeter();
+    juce::String reductionMeterTooltip() const;
     // The Drum Rack's face is DeviceEditorPanelDrums.cpp: a map of all 128
     // notes, sixteen pads of them at a time, each with its mute, play and
     // solo, and beside them the selected pad's sound in
@@ -319,6 +331,16 @@ private:
     // The face carries the Sidechain strip, and where it and its chooser are.
     bool sidechained = false;
     juce::Rectangle<int> sidechainArea, sidechainSource;
+    // The face carries the gain reduction meter, and where it is; what it
+    // shows, in decibels of reduction (0 for none, never below), falling and
+    // held as a track's meter is; when it was last fed; and the bar, held line
+    // and tenths of a decibel it was last drawn at, so a compressor doing
+    // nothing asks for no frames.
+    bool reductionMetered = false;
+    juce::Rectangle<int> reductionArea;
+    MeterBallistics reduction;
+    double reductionFedAt = 0.0;
+    std::array<int, 3> reductionDrawn {-1, -1, -1};
     std::vector<Session::DeviceParameter> parameters;
     juce::OwnedArray<juce::Label> parameterLabels, parameterValues;
     juce::OwnedArray<juce::Slider> parameterSliders;

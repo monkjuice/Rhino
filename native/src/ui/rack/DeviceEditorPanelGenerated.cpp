@@ -505,6 +505,8 @@ juce::String DeviceEditorPanel::getTooltip()
             return tip;
     if (sidechained && sidechainArea.contains(getMouseXYRelative()))
         return sidechainTooltip();
+    if (reductionMetered && reductionArea.contains(getMouseXYRelative()))
+        return reductionMeterTooltip();
     if (mappable && mapButtonArea().contains(getMouseXYRelative()))
         return mapping ? "Mapping from " + deviceName + "'s window: every control touched there joins this rack. "
                          "Click to stop"

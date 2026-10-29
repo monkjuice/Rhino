@@ -34,6 +34,7 @@
 namespace rhino
 {
 void checkDeviceFaces(Session&);
+void checkCompressorMeter(te::Edit&);
 
 void runArpMechanicsTests(te::Edit&);
 
@@ -743,6 +744,8 @@ int runDeviceConformance()
             juce::Logger::writeToLog(line);
             std::fprintf(stderr, "%s\n", line.toRawUTF8());
         };
+        juce::Logger::writeToLog("Rhino: device conformance, the Compressor's meter");
+        checkCompressorMeter(*session.edit);
         juce::Logger::writeToLog("Rhino: device conformance, every device's face");
         checkDeviceFaces(session);
         report("Rhino: device conformance checked " + juce::String(checked) + " devices");

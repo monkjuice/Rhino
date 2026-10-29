@@ -16,6 +16,7 @@ add_library(RhinoDevices STATIC
     instruments/DrumRackDeviceEditing.cpp
     instruments/RhinoFmDevice.cpp
     audio/UtilityDevice.cpp
+    audio/CompressorDevice.cpp
     audio/RhinoSpaceDevice.cpp
     audio/RhinoBloomDevice.cpp
     audio/RhinoEqDevice.cpp

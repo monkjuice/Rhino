@@ -2,6 +2,7 @@
 #include "instruments/DrumRackDevice.h"
 #include "instruments/RhinoFmDevice.h"
 #include "audio/UtilityDevice.h"
+#include "audio/CompressorDevice.h"
 #include "audio/RhinoSpaceDevice.h"
 #include "audio/RhinoBloomDevice.h"
 #include "audio/RhinoEqDevice.h"
@@ -74,9 +75,11 @@ std::vector<DeviceDescriptor> buildCatalog()
          .kind = DeviceKind::AudioEffect, .category = "EQ and Filters", .description = "Eight bands over a live spectrum",
          .colour = 0xff6f9ec4, .browsable = true, .create = factory<RhinoEqDevice>()});
 
-    add({.id = "Compressor", .typeName = te::CompressorPlugin::xmlTypeName, .displayName = "Compressor",
+    // Tracktion's compressor, made as Rhino's own so it can say how far it is
+    // turning the audio down, which its face shows as a meter.
+    add({.id = "Compressor", .typeName = CompressorDevice::xmlTypeName, .displayName = "Compressor",
          .kind = DeviceKind::AudioEffect, .category = "Dynamics", .description = "Tracktion compressor",
-         .browsable = true});
+         .browsable = true, .create = factory<CompressorDevice>()});
 
     // Rhino Duck is the second independent plugin project, effects/rhino-duck,
     // a VST3 found the way Forge is. Its rack shows the controls a duck is

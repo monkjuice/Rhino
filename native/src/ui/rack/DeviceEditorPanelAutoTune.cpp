@@ -485,6 +485,11 @@ void DeviceEditorPanel::timerCallback()
         tickTuner();
         return;
     }
+    if (reductionMetered)
+    {
+        tickReductionMeter();
+        return;
+    }
     if (face != Face::AutoTune)
     {
         stopTimer();

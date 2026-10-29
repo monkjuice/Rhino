@@ -1626,3 +1626,10 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 ## [2026-10-29] update | An audio effect dropped on a clip goes on its track (dd27e92)
 - source: native/src/ui/arrangement/ArrangementDrops.cpp (`itemDropped`, `applyBrowserDrop`), tests/Arrangement/scenarios/AudioClipEditing.inc
 - updated: pages/device-chain-order.md (Clip effects: a browser drop on a clip now lands in the track's chain like a drop on the lane; the old clip-list insert, its hidden result and what survives of `addClipDevice`; updated date)
+
+## [2026-10-29] update | Pages that still described an effect dropped on a clip (dd27e92)
+- source: the main agent's brief, checked against native/src/ui/arrangement/ArrangementDrops.cpp (`applyBrowserDrop`'s "effect" branch)
+- updated: pages/tracktion-plugin-limit-per-track.md (no UI reaches `addClipDevice`, so a clip's 5-plugin cap is reached only by the envelope devices or direct model calls)
+- updated: pages/tracktion-clip-fades-ignore-clip-plugin-delay.md (a latent clip effect now comes only from an older document)
+- updated: pages/clip-envelopes.md (other effects in a clip's list are from before `dd27e92`)
+- updated: pages/forge-hosting.md (the external-effect refusal is `addClipDevice`'s; Duck dropped on a clip goes on its track)

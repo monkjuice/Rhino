@@ -4,7 +4,7 @@ type: gotcha
 summary: A clip's FadeInOutNode runs after the clip's own plugins and allows for none of their latency, so with Clip Pitch on a clip the fade-out fell 320 ms early and silenced the clip's last 320 ms; while a clip has a Pitch envelope, Rhino holds its fades as rhinoFadeIn/rhinoFadeOut and Clip Envelope plays them ahead of the shifter, so every fade reader goes through clipFadeInSeconds/clipFadeOutSeconds.
 tags: [rhino, tracktion, latency, audio-clips, measurement]
 sources: []
-updated: 2026-10-26
+updated: 2026-10-29
 ---
 
 # Tracktion fades a clip after its plugins, ignoring their delay
@@ -30,7 +30,7 @@ All of this is in `SessionClipEnvelopes.cpp`, declared in `SessionInternal.h`.
 - **Cuts.** Splitting a clip clears the held fade on each side of the cut (`clearHeldFadesAtCut`, in `splitClipAt`, `splitClips` and the bounce's region cuts).
 - **Merge.** Ctrl+J renders with plugins off, so `lendHeldFadesToEngine` puts the held fades on the engine for that render, outside the undo history, and takes them back afterwards.
 
-Only Clip Pitch is handled. A latent effect that a user drops on a clip with a fade has not been measured, but would presumably lose its end in the same way.
+Only Clip Pitch is handled. A latent effect in a clip's own plugin list, with a fade, has not been measured, but would presumably lose its end in the same way. Since commit `dd27e92` (2026-10-29) a browser drop on a clip puts the effect on the track instead, so such an effect now comes only from a document saved before then ([Device chain order](device-chain-order.md#clip-effects)).
 
 ## Related
 

@@ -4,7 +4,7 @@ type: component
 summary: How Rhino finds, loads and talks to the Forge VST3 and, since 2026-10-26, to any external entry of the catalog (Rhino Duck is the second), and what does and does not cross the plugin boundary.
 tags: [both, vst3, devices, hosting]
 sources: []
-updated: 2026-10-26
+updated: 2026-10-29
 ---
 
 # Hosting Forge in Rhino
@@ -23,7 +23,7 @@ A description qualifies (`looksLike`) if its name contains the entry's `pluginNa
 
 ## The catalog entry
 
-`RhinoForge` is an instrument with `external = true` and no `typeName`, so `registerBuiltInTypes` skips it and no type-name lookup can match it. The rack's `+` menu greys an external device until `isExternalAvailable(id)`; a drop while it is missing retries discovery once (`addDevice`'s effect path and `addInstrumentDevice` both do) and then fails with "<bundle> was not found. Build or install the <name> VST3 first." Otherwise Forge follows [One instrument per track](one-instrument-per-track.md) like any instrument (`switchTrackInstrument` takes the entry's description and makes the plugin from it), and Duck is added where any audio effect is, before the channel strip or at the end of the main track's list, by `Session::addDevice`, which makes an external effect with `createNewPlugin(te::ExternalPlugin::xmlTypeName, description)` rather than from a type name. An external effect is refused as a clip effect ("goes on a track, not on a clip").
+`RhinoForge` is an instrument with `external = true` and no `typeName`, so `registerBuiltInTypes` skips it and no type-name lookup can match it. The rack's `+` menu greys an external device until `isExternalAvailable(id)`; a drop while it is missing retries discovery once (`addDevice`'s effect path and `addInstrumentDevice` both do) and then fails with "<bundle> was not found. Build or install the <name> VST3 first." Otherwise Forge follows [One instrument per track](one-instrument-per-track.md) like any instrument (`switchTrackInstrument` takes the entry's description and makes the plugin from it), and Duck is added where any audio effect is, before the channel strip or at the end of the main track's list, by `Session::addDevice`, which makes an external effect with `createNewPlugin(te::ExternalPlugin::xmlTypeName, description)` rather than from a type name. `addClipDevice` refuses an external effect ("goes on a track, not on a clip"), but no UI reaches it since commit `dd27e92`: Duck dropped on a clip goes on the clip's track ([Device chain order](device-chain-order.md#clip-effects)).
 
 ## What crosses the boundary
 

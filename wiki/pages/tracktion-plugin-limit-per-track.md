@@ -4,7 +4,7 @@ type: gotcha
 summary: Tracktion's default EngineBehaviour::getEditLimits caps a track at 16 plugins, and PluginList::insertPlugin drops a plugin past the cap without a word (the Plugin::Ptr overload Rhino calls returns void); every Rhino track spends about seven on hidden plugins, so a chain filled at about nine devices until RhinoEngineBehaviour raised the cap to 128 on 2026-10-27. The master list (4) and clip lists (5) keep Tracktion's caps, and only addDevice checks, by comparing the list's size.
 tags: [rhino, tracktion, devices, gotcha]
 sources: []
-updated: 2026-10-27
+updated: 2026-10-29
 ---
 
 # Tracktion refuses a track's seventeenth plugin without a word
@@ -59,7 +59,7 @@ No other insert in the model checks whether its plugin went in:
 - sends and aux returns (`SessionReturns.cpp`);
 - clip effects, in `addClipDevice`.
 
-At 128 plugins per track the track paths are out of practical reach. A clip's 5 are not. While a clip has envelopes, its plugin list also holds Clip Envelope and Clip Pitch, so it can take as few as three effects before refusing the next without a word ([Clip envelopes](clip-envelopes.md)).
+At 128 plugins per track the track paths are out of practical reach. A clip's 5 are not. While a clip has envelopes, its plugin list also holds Clip Envelope and Clip Pitch, so it can take as few as three effects before refusing the next without a word ([Clip envelopes](clip-envelopes.md)). Since commit `dd27e92` (2026-10-29) no UI path calls `addClipDevice` (an effect dropped on a clip goes on its track, [Device chain order](device-chain-order.md#clip-effects)), so only the hidden clip-envelope devices and code calling the model directly fill a clip's list; add the size check if a path to it returns.
 
 **The rule:** after `insertPlugin(Plugin::Ptr, ...)`, compare the list's size before and after, as `addDevice` does. The call itself cannot tell you that Tracktion refused the plugin.
 

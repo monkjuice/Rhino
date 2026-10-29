@@ -4,7 +4,7 @@ type: component
 summary: Each audio clip carries its own Gain, Pan and Pitch envelopes, Live's clip envelopes, stored on the clip in seconds of its content, modulating the clip's knobs rather than replacing them, played by two hidden devices at the head of the clip's own plugin list that exist only while the clip has an envelope for them, with Pitch drawn on a square-root scale and snapped to semitones only with Ctrl.
 tags: [rhino, audio-clips, automation, devices, tracktion]
 sources: []
-updated: 2026-10-26
+updated: 2026-10-29
 ---
 
 # Clip envelopes
@@ -52,7 +52,7 @@ The engine plays the envelopes, live and in renders, through hidden devices at t
 - **Clip Envelope** (`rhino.clip.envelope.v1`) has the parameters `gain`, `pan` and `fade`. It ramps across each engine sub-block, so a step does not click.
 - **Clip Pitch** (`rhino.clip.pitch.v1`) has the parameter `semitones`. It shifts through Signalsmith, the stretcher an unwarped clip's Pitch knob uses.
 
-Both are catalog entries flagged `infrastructure` and both pass `--device-test`. A clip carries a device only while it has an envelope for it (`syncClipEnvelopeDevices`). A Pitch envelope also brings Clip Envelope, to play the fades. The devices are added and removed inside the edit's transaction, so an undo restores the envelope and its device together. `rhinoClipEnvelopeDevice` on a device's state (`level` or `pitch`) separates them from effects dropped on the clip. `Session::clipPluginCount` leaves them out, so neither the arrangement's FX badge nor the merge's list of lost clip effects counts them. Both answer `canBeAddedToMaster()` with true: after `AudioClipBase::setParent` a clip's plugin list has no owner track, and `insertPlugin` checks such a list as it checks the master's.
+Both are catalog entries flagged `infrastructure` and both pass `--device-test`. A clip carries a device only while it has an envelope for it (`syncClipEnvelopeDevices`). A Pitch envelope also brings Clip Envelope, to play the fades. The devices are added and removed inside the edit's transaction, so an undo restores the envelope and its device together. `rhinoClipEnvelopeDevice` on a device's state (`level` or `pitch`) separates them from any other effect in the clip's list (one dropped on a clip before commit `dd27e92`; a drop now goes on the track, [Device chain order](device-chain-order.md#clip-effects)). `Session::clipPluginCount` leaves them out, so neither the arrangement's FX badge nor the merge's list of lost clip effects counts them. Both answer `canBeAddedToMaster()` with true: after `AudioClipBase::setParent` a clip's plugin list has no owner track, and `insertPlugin` checks such a list as it checks the master's.
 
 The devices' parameters follow engine curves that `mirrorClipEnvelopes` writes in **edit time** from the content-time points, outside the undo history, the way track lanes are mirrored. `Session::mirrorAutomationToEngine` ends by calling `mirrorClipEnvelopesToEngine`, which visits only clips that have a plugin and leaves unchanged curves alone. The track mirror's sweep for stray curves covers only track and main plugin lists. `setClipEnvelope` also mirrors straight away, so a drag is heard before it ends, and it restarts playback when the set of devices changed. At the clip's end the curve takes `clipEnvelopeValueBefore`, so a clip cut exactly on a step does not ramp across its whole length towards the far side of the step.
 

@@ -44,3 +44,4 @@ All six CTest cases passed with these on 2026-10-28 (commit `532f3b4`): the Comp
 - [Device catalog](device-catalog.md)
 - [Sidechains](sidechains.md)
 - [Measure sound, don't read the DSP](measure-sound-dont-read-dsp.md)
+- [Multiband Dynamics](multiband-dynamics.md), the three-band compressor and expander beside it under Dynamics

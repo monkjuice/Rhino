@@ -4,7 +4,7 @@ type: decision
 summary: Rhino's own devices are written on one SDK base, held to one conformance runner and given generated faces, with their presets as .rnd files; VST3 stays the format for outside instruments.
 tags: [rhino, devices, sdk, testing]
 sources: []
-updated: 2026-10-28
+updated: 2026-11-07
 ---
 
 # The native device standard
@@ -77,6 +77,8 @@ On 2026-10-06 the Drum Rack replaced the hand-written Rhino Drums as the second 
 
 On 2026-10-27 five audio effects modelled on Live 12's joined on the base: [Amp](amp.md), [Saturator](saturator.md), [Redux](redux.md), [Erosion](erosion.md) and [Tuner](tuner.md). Each is a catalog entry and a thin shell over DSP in RhinoCore, and `--device-test` holds all five to the standard with nothing pending. Between them they use the SDK's latency, display and tab-group declarations. The Tuner adds one more use: its face's view switches are declared as choice controls, so view state saves and undoes like any setting.
 
+On 2026-11-07 [Multiband Dynamics](multiband-dynamics.md) joined the same way: 39 controls, its bands a "Bands" tab group, nothing pending, and `--device-test` checking 20 devices. Its display draws levels in dB on the generated face, which scales every trace to the loudest, so a `1:1` trace spanning -1 to 1 is there to hold that scale still. The SDK still cannot declare a sidechain, so Live's sidechain section was left out.
+
 Still to do: move the remaining devices onto the SDK.
 
 ## Consequences
@@ -92,6 +94,7 @@ Still to do: move the remaining devices onto the SDK.
 - [Built-in devices](built-in-devices.md)
 - [Rhino FM](rhino-fm.md)
 - [Drum Rack](drum-rack.md)
+- [Multiband Dynamics](multiband-dynamics.md)
 - [Device presets (.rnd)](device-presets.md)
 - [Writing Rhino tests](writing-rhino-tests.md)
 - [Real-time audio rules](real-time-audio-rules.md)

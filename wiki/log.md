@@ -1633,3 +1633,15 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/tracktion-clip-fades-ignore-clip-plugin-delay.md (a latent clip effect now comes only from an older document)
 - updated: pages/clip-envelopes.md (other effects in a clip's list are from before `dd27e92`)
 - updated: pages/forge-hosting.md (the external-effect refusal is `addClipDevice`'s; Duck dropped on a clip goes on its track)
+
+## [2026-11-07] update | Multiband Dynamics, Live's three-band compressor and expander (31a2e09)
+- source: the main agent's brief, checked against native/src/core/dsp/MultibandDynamicsEngine.h/.cpp, devices/audio/MultibandDynamicsDevice.h/.cpp, DeviceCatalog.cpp, ui/rack/DeviceEditorPanelDisplay.cpp (the trace scale), tests/MultibandDynamicsTest.cpp, tests/PresetTest.cpp and library/Presets/MultibandDynamics/
+- created: pages/multiband-dynamics.md (the all-pass LR4 split, controls, Rhino's ratio convention and why Live's notation was not copied, knee, caps, detector, the display and its 1:1 scale pin, why the trims are ±12 dB, presets, tests, why the check is in --device-test)
+- updated: pages/built-in-devices.md (its row; six SDK devices with nothing pending)
+- updated: pages/device-catalog.md (the entry and its place; twenty registered)
+- updated: pages/device-presets.md (thirteen presets for four devices, the new three regenerated to list every control like the others; PresetTest lists the devices)
+- updated: pages/native-device-standard.md (2026-11-07 paragraph: 20 devices checked, the 1:1 trace, no SDK sidechain)
+- updated: pages/displays-draw-from-the-dsp.md (transferDb drawn and held to the audio)
+- updated: pages/build-and-test-rhino.md (--self-test timed out with the new check in it, then passed in 29.03 and 29.27 s without it; arrangement workflow 276.15 s against 300; all six cases passed on the working tree)
+- updated: pages/compressor.md (Related link)
+- updated: index.md (Components: Multiband Dynamics)

@@ -4,7 +4,7 @@ type: component
 summary: A device's settings saved as a .rnd file by parameter id, filed under the device in the browser, dragged to add the device already set, and loaded or saved from its name bar.
 tags: [rhino, devices, presets, library, browser]
 sources: []
-updated: 2026-10-13
+updated: 2026-11-07
 ---
 
 # Device presets (.rnd)
@@ -33,7 +33,7 @@ A `.rnd` file is a preset of one device: Rhino Arp's `Super Creative Arpeggiatio
 - Rhino Space: Small Room, Vast Hall and Grit Plate;
 - Rhino Arp: Super Creative Arpeggiation, Straight Sixteenths and Triplet Cascade.
 
-They are generated so that each lists every control, and the scratch script that wrote them is not kept.
+They are generated so that each lists every control, and the scratch script that wrote them is not kept. On 2026-11-07 Multiband Dynamics joined with Gentle Glue, Upward and Downward, and De-esser, written the same way: every control, in declaration order ([Multiband Dynamics](multiband-dynamics.md)). Thirteen presets for four devices; `PresetTest.cpp` requires exactly those four.
 
 ## Applying one
 
@@ -57,7 +57,7 @@ The Drum Rack has no `.rnd` presets for the same reason. Its pads hold samples, 
 
 `native/src/tests/PresetTest.cpp`, run by `--device-test`, covers:
 - the format's round trip and the refusals;
-- every factory preset, which must be filed under its device and name only controls the device has, at values it can hold;
+- every factory preset, which must be filed under its device and name only controls the device has, at values it can hold, and the set of devices with factory presets, so a new device's presets mean editing that list;
 - adding, saving, loading, defaults, one undo step, refusal by the wrong device, an instrument already present, an effect, the Arp, and the scan of a user folder.
 
 Moving the preset out of the add's transaction fails *one undo takes away the device and its preset together*. `--self-test` checks that every preset is a browser row carrying its file. `BrowserDrops.inc` and the rack test drop presets. The menu's modal save and replace dialogs are untested, and so is how the opened browser tree looks: a headless snapshot shows an opened folder with no children ([Seeing the UI without taking the screen](headless-ui-snapshots.md)).
@@ -71,3 +71,4 @@ Moving the preset out of the add's transaction fails *one undo takes away the de
 - [Device catalog](device-catalog.md)
 - [Pattern presets](pattern-presets.md)
 - [Drum Rack](drum-rack.md)
+- [Multiband Dynamics](multiband-dynamics.md)

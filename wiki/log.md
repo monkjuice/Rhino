@@ -1645,3 +1645,13 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/build-and-test-rhino.md (--self-test timed out with the new check in it, then passed in 29.03 and 29.27 s without it; arrangement workflow 276.15 s against 300; all six cases passed on the working tree)
 - updated: pages/compressor.md (Related link)
 - updated: index.md (Components: Multiband Dynamics)
+
+## [2026-11-07] update | Multiband Dynamics gets a face of its own, after Live's display (14bd151, e00a76a)
+- source: the main agent's brief, checked against native/src/ui/rack/DeviceEditorPanelMultiband.cpp, ui/rack/MultibandDisplayGeometry.h, DeviceEditorPanel.cpp (setTarget, mouseMove, showParameterMenu), devices/audio/MultibandDynamicsDevice.h/.cpp, core/dsp/MultibandDynamicsEngine.h/.cpp, tests/MultibandDynamicsTest.cpp, and a search for other juce::String(x, 0) calls. The brief's "100 px = the whole -1..1 volume" is not what the code does: 100 px moves a block from 1:1 to either end (`volumePixels`), as the test's 50 px = 2:1 shows
+- created: pages/juce-string-zero-decimals-prints-all.md (226.413 ms; the SDK's Hz reading from 100 to 999 Hz, AudioClipPanel and the Vocoder's attack still make the call)
+- updated: pages/multiband-dynamics.md (summary, tags; the face: layout, blocks and volume mapping, modifiers, readouts, switches, one undo step per drag, the parameters-reference rule, meters read from the gain applied; what it replaced; index constants; time readings; tests)
+- updated: pages/device-rack.md (Face::Multiband, a face of its own over an SDK device; the only face that sets the cursor; the 24 Hz timer list; the automation menu at the mouse for drawn controls; never hold a reference into `parameters` across a Session call; runMultibandFaceTest)
+- updated: pages/displays-draw-from-the-dsp.md (volume drawn from slopeOf, the out meter from the gain applied; transferDb gone)
+- updated: pages/native-device-standard.md (the curve display and its 1:1 trace replaced by a face of its own)
+- updated: index.md (Multiband Dynamics' summary; Gotchas: juce::String with no decimal places)
+- follow-up the same day, checked against native/src/devices/sdk/NativeParameter.cpp (`placed`) and tests/DeviceConformance.cpp (the 523 Hz and 43 probe): the SDK's Hz, unitless and signed readings now round, so juce-string-zero-decimals-prints-all.md (summary), multiband-dynamics.md (the crossovers fixed) and native-device-standard.md (the SDK fix) were updated, and index.md's summary with them; AudioClipPanel's secondsText and the Vocoder's attack are still open. The block-travel code comment now agrees with the wiki

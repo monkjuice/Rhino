@@ -192,6 +192,13 @@ void checkProbeDeclarations(te::Edit& edit)
                 && device.cutoff.automatable().getCurrentValueAsString() == "1.00 kHz",
             "A skewed control puts its declared centre in the middle of its travel");
 
+    // A reading of whole numbers is rounded, not printed with every decimal
+    // the float has, which juce::String does when asked for no places.
+    ParamSpec wide;
+    wide.maximum = 100.0f;
+    require(device.cutoff.spec().text(523.25f) == "523 Hz" && wide.text(42.7f) == "43",
+            "A whole-number reading is rounded");
+
     // Typed readings parse back through the unit.
     require(near(device.gain.spec().parse("3 dB"), 3.0f) && near(device.glide.spec().parse("25%"), 0.25f)
                 && near(device.mode.spec().parse("Hot"), 2.0f) && near(device.bypass.spec().parse("On"), 1.0f),

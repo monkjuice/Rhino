@@ -72,12 +72,14 @@ public:
         bool operator==(const Settings&) const = default;
     };
 
-    // What a band's two thresholds do to a steady level, in dB, before
-    // attack and release ease them on and off.
-    struct Gain
+    // How loud a band was, linear and read the way its detector reads (a
+    // peak, or an RMS): coming in, after its Input, which is what the
+    // thresholds are measured against; and going out, after both thresholds
+    // and its Output. With nothing done to the band the two are the same.
+    struct Levels
     {
-        double above = 0.0;
-        double below = 0.0;
+        float input = 0.0f;
+        float output = 0.0f;
     };
 
     void prepare(double sampleRate);
@@ -85,18 +87,26 @@ public:
     void setSettings(const Settings&);
     // In place; channels past the second are left alone.
     void process(float* const* channels, int numChannels, int count);
+    // The loudest of each band during the last process(), none for a band
+    // not split off.
+    const std::array<Levels, bandCount>& levels() const { return lastLevels; }
 
     // The mid band always exists; the low and high bands only while split off.
     static bool bandExists(const Settings&, int band);
-    // The gain a band's thresholds apply to the level its detector reads,
-    // which is after the band's Input. The audio runs this function.
-    static Gain staticGain(const Settings&, int band, double levelDb);
-    // The level a band puts out for a steady level in: its Input, both
-    // thresholds, its Output and the device's Output, or the device's Output
-    // alone while the band is switched off. The curve the face draws.
-    static double transferDb(const Settings&, int band, double levelDb);
+    // How many dB of a level's distance past its threshold a ratio takes
+    // away, before Amount: none at 1:1, all of it at an infinite ratio, and
+    // less than none (it adds) under 1:1. The face draws a block's volume
+    // from it.
+    static double slopeOf(float ratio);
 
 private:
+    // What a band's two thresholds do to a steady level, in dB, before
+    // attack and release ease them on and off.
+    struct Gain
+    {
+        double above = 0.0;
+        double below = 0.0;
+    };
     // One band's thresholds as slopes, worked out once from the settings.
     struct Curve
     {
@@ -138,5 +148,6 @@ private:
     double output = 1.0;
     std::array<Splitter, maximumChannels> splitters;
     std::array<BandState, bandCount> bands;
+    std::array<Levels, bandCount> lastLevels {};
 };
 }

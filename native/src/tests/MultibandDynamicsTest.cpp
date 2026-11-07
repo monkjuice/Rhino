@@ -1,6 +1,7 @@
 #include "model/Session.h"
 #include "ui/rack/DeviceEditorPanel.h"
 #include "ui/shared/Theme.h"
+#include "ui/rack/MultibandDisplayGeometry.h"
 #include "content/ContentLibrary.h"
 #include "dsp/MultibandDynamicsEngine.h"
 #include "audio/MultibandDynamicsDevice.h"
@@ -9,14 +10,16 @@
 #include <optional>
 #include <source_location>
 #include <stdexcept>
+#include <tuple>
 #include <vector>
 
 // Multiband Dynamics, held to what it claims by measuring what comes out of
 // it: the split sums back to the input, each threshold moves a steady tone to
-// where its curve says, the curve the face draws is the level the audio
-// reaches, the bands stay apart, and Time and Amount scale what they say.
-// A level is a windowed single-frequency transform of rendered audio, so it
-// cannot agree with the engine by construction.
+// where its ratio says, the meters read the levels the audio has, the bands
+// stay apart, and Time and Amount scale what they say. A level is a windowed
+// single-frequency transform of rendered audio, so it cannot agree with the
+// engine by construction. Then the display's arithmetic, and the face driven
+// by real presses and drags.
 //
 // Run by --device-test rather than --self-test, which is already at its time
 // limit, because it builds and paints the device's face.
@@ -139,9 +142,6 @@ void checkCurves()
     down.bands[1].aboveThresholdDb = -20.0f;
     down.bands[1].aboveRatio = 4.0f;
     requireNear(levelOut(down, 1000.0, 0.5), -20.0 + (decibels(0.5) + 20.0) / 4.0, 0.1, "4:1 downward compression");
-    // The line the face draws for that band is where the tone lands.
-    requireNear(levelOut(down, 1000.0, 0.5), Engine::transferDb(down, 1, decibels(0.5)), 0.1,
-                "the face's curve is the level the audio reaches");
     auto limit = down;
     limit.bands[1].aboveRatio = Engine::infiniteRatio;
     requireNear(levelOut(limit, 1000.0, 0.5), -20.0, 0.1, "an infinite ratio holds the band at its threshold");
@@ -213,31 +213,147 @@ void checkTime()
     require(fast > 0.9, "Time at 10% puts it all on by then, measured " + juce::String(fast, 2));
 }
 
+void checkMeters()
+{
+    // The meters read what the audio does. Coming in is the tone after the
+    // band's Input; going out, with nothing done to the band, reads the same,
+    // and at 4:1 reads the tone the band sends, measured.
+    const auto readings = [] (const Engine::Settings& settings)
+    {
+        Engine engine;
+        engine.setSettings(settings);
+        engine.prepare(rate);
+        auto left = sine(1000.0, 0.5, settle + measure);
+        auto right = left;
+        Engine::Levels loudest;
+        for (size_t start = 0; start < left.size(); start += block)
+        {
+            const auto count = static_cast<int>(std::min<size_t>(block, left.size() - start));
+            float* channels[2] { left.data() + start, right.data() + start };
+            engine.process(channels, 2, count);
+            if (start >= static_cast<size_t>(settle))
+            {
+                loudest.input = std::max(loudest.input, engine.levels()[1].input);
+                loudest.output = std::max(loudest.output, engine.levels()[1].output);
+            }
+        }
+        return std::pair(loudest, decibels(amplitudeAt(left, settle, measure, 1000.0)));
+    };
+    const auto plain = readings(singleBand()).first;
+    requireNear(decibels(plain.input), decibels(0.5), 0.1, "the meter coming in reads the tone's peak");
+    requireNear(decibels(plain.output), decibels(plain.input), 0.01, "with nothing done, going out reads the same");
+    auto down = singleBand();
+    down.bands[1].inputDb = 6.0f;
+    down.bands[1].aboveThresholdDb = -20.0f;
+    down.bands[1].aboveRatio = 4.0f;
+    const auto [squeezed, heard] = readings(down);
+    requireNear(decibels(squeezed.input), decibels(0.5) + 6.0, 0.1, "coming in is after the band's Input");
+    requireNear(decibels(squeezed.output), heard, 0.2, "going out reads the level the band sends");
+}
+
+void checkDisplayGeometry()
+{
+    namespace md = multibanddisplay;
+    // A row runs -80 to 0 dB, its ends holding whatever is past them.
+    require(std::abs(md::xForDb(-40.0f, 10.0f, 160.0f) - 90.0f) < 1.0e-4f, "-40 dB stands in the middle of a row");
+    require(md::xForDb(-100.0f, 10.0f, 160.0f) == 10.0f && md::xForDb(6.0f, 10.0f, 160.0f) == 170.0f,
+            "a row's ends hold what is past them");
+    require(std::abs(md::dbForX(md::xForDb(-23.5f, 10.0f, 160.0f), 10.0f, 160.0f) + 23.5f) < 1.0e-3f,
+            "a level and its place on the row are one");
+
+    // A block's volume: 1:1 in the middle, compression the way it turns the
+    // block's signals, and the far ends the steepest expansion and an
+    // infinite ratio.
+    require(md::volumeForRatio(1.0f, true) == 0.0f && md::volumeForRatio(1.0f, false) == 0.0f, "1:1 is the middle");
+    require(std::abs(md::ratioForVolume(-0.5f, true) - 2.0f) < 1.0e-4f,
+            "half way down the Above block compresses at 2:1");
+    require(std::abs(md::ratioForVolume(0.5f, false) - 2.0f) < 1.0e-4f,
+            "half way up the Below block compresses upwards at 2:1");
+    require(md::ratioForVolume(-1.0f, true) == Engine::infiniteRatio && md::ratioForVolume(1.0f, false) == Engine::infiniteRatio,
+            "all the way to compression is an infinite ratio");
+    require(md::ratioForVolume(1.0f, true) == Engine::minimumRatio && md::ratioForVolume(-1.0f, false) == Engine::minimumRatio,
+            "all the way to expansion is the steepest");
+    for (const auto ratio : { 0.25f, 0.4f, 0.5f, 0.8f, 1.0f, 1.5f, 2.0f, 4.0f, 10.0f, 50.0f, 100.0f })
+        for (const auto above : { false, true })
+            require(std::abs(md::ratioForVolume(md::volumeForRatio(ratio, above), above) - ratio) < ratio * 1.0e-3f,
+                    "a ratio and its volume are one at " + juce::String(ratio));
+
+    // What a press takes hold of.
+    require(md::gripAt(30.0f, 40.0f, 120.0f) == md::Grip::belowBlock, "left of the lower edge is the Below block");
+    require(md::gripAt(38.0f, 40.0f, 120.0f) == md::Grip::belowEdge, "near the lower edge is the edge");
+    require(md::gripAt(80.0f, 40.0f, 120.0f) == md::Grip::none, "between the edges is neither block");
+    require(md::gripAt(123.0f, 40.0f, 120.0f) == md::Grip::aboveEdge, "near the upper edge is the edge");
+    require(md::gripAt(150.0f, 40.0f, 120.0f) == md::Grip::aboveBlock, "right of the upper edge is the Above block");
+    require(md::gripAt(79.0f, 80.0f, 80.0f) == md::Grip::belowEdge && md::gripAt(81.0f, 80.0f, 80.0f) == md::Grip::aboveEdge,
+            "edges on top of each other go to the side pressed");
+}
+
 void checkDevice(Session& session)
 {
-    // The face draws a curve for each band split off, and the 1:1 line.
     auto plugin = session.edit->getPluginCache().createNewPlugin(MultibandDynamicsDevice::xmlTypeName, {});
     auto* device = dynamic_cast<MultibandDynamicsDevice*>(plugin.get());
     require(device != nullptr, "the engine makes the device from its type name");
     require(device->getLatencySeconds() == 0.0 && device->getTailLength() == 0.0, "it adds no delay and no tail");
-    const auto traces = [device]
-    {
-        DeviceDisplay display;
-        device->describe(display);
-        juce::StringArray names;
-        for (const auto& trace : display.traces)
-            names.add(trace.name);
-        return names;
-    };
-    require(traces() == juce::StringArray { "Low", "Mid", "High", "1:1" }, "a curve for each band and the 1:1 line");
-    for (auto* parameter : device->getAutomatableParameters())
-        if (parameter->paramID == "lowBand")
-            parameter->setParameter(0.0f, juce::sendNotificationSync);
-    require(traces() == juce::StringArray { "Mid", "High", "1:1" }, "no curve for a band not split off");
 
-    // On a track, with a factory preset that compresses each band upwards
-    // below and downwards above, each band's curve leaves the 1:1 line at
-    // both ends: lifted at the quiet end, held down at the loud one.
+    // The face reaches each control by its place in the declaration order.
+    using Device = MultibandDynamicsDevice;
+    const std::pair<int, const char*> globals[] {
+        { Device::lowBandParameter, "lowBand" }, { Device::lowCrossoverParameter, "lowCrossover" },
+        { Device::highBandParameter, "highBand" }, { Device::highCrossoverParameter, "highCrossover" },
+        { Device::softKneeParameter, "softKnee" }, { Device::rmsParameter, "rms" }, { Device::outputParameter, "output" },
+        { Device::timeParameter, "time" }, { Device::amountParameter, "amount" } };
+    for (const auto& [index, id] : globals)
+        require(device->parameterSpec(index).id == id, juce::String("the face finds ") + id + " where it is declared");
+    const char* bands[] { "low", "mid", "high" };
+    const char* controls[] { "Active", "Solo", "Input", "Output", "BelowThreshold", "BelowRatio",
+                             "AboveThreshold", "AboveRatio", "Attack", "Release" };
+    for (int b = 0; b < 3; ++b)
+        for (int k = 0; k < Device::bandControlCount; ++k)
+        {
+            const auto id = juce::String(bands[b]) + controls[k];
+            require(device->parameterSpec(Device::bandParameter(b, static_cast<Device::BandControl>(k))).id == id,
+                    "the face finds " + id + " where it is declared");
+        }
+    require(device->parameterCount() == Device::bandParameter(2, Device::BandControl::release) + 1, "and nothing else");
+    // Times read in Live's three figures, whatever the value's fraction: a
+    // drag on a readout lands between whole milliseconds.
+    auto& attack = device->parameter(Device::bandParameter(1, Device::BandControl::attack)).automatable();
+    auto& release = device->parameter(Device::bandParameter(1, Device::BandControl::release)).automatable();
+    for (const auto& [control, value, reading] : { std::tuple(&attack, 5.0f, "5.00 ms"), std::tuple(&attack, 50.0f, "50.0 ms"),
+                                                   std::tuple(&attack, 226.413f, "226 ms"), std::tuple(&release, 1500.0f, "1.50 s") })
+    {
+        control->setParameter(value, juce::sendNotificationSync);
+        require(control->getCurrentValueAsString() == reading,
+                juce::String("a time reads ") + reading + ", not " + control->getCurrentValueAsString());
+    }
+
+    // Played a tone, it says how loud its bands were, once. What the tone's
+    // start rang into every band is read and spent first.
+    device->initialise({ {}, rate, block });
+    juce::AudioBuffer<float> buffer(2, block);
+    auto frame = 0;
+    const auto play = [&] (int blocks)
+    {
+        for (int pass = 0; pass < blocks; ++pass)
+        {
+            for (int i = 0; i < block; ++i, ++frame)
+                for (int channel = 0; channel < 2; ++channel)
+                    buffer.setSample(channel, i, static_cast<float>(0.5 * std::sin(2.0 * pi * 1000.0 * frame / rate)));
+            te::PluginRenderContext context(&buffer, 0, block, nullptr, 0.0, {}, false, false, true, false);
+            device->applyToBuffer(context);
+        }
+    };
+    play(40);
+    for (int b = 0; b < 3; ++b)
+        device->takeBandLevels(b);
+    play(20);
+    const auto mid = device->takeBandLevels(1);
+    require(mid.input > 0.25f && mid.output > 0.25f, "a tone in the mid band lights its meters");
+    require(device->takeBandLevels(1).input == 0.0f, "and a reading is spent once taken");
+    require(device->takeBandLevels(0).input < mid.input * 0.01f, "the low band hears next to nothing of 1 kHz");
+    device->deinitialise();
+
+    // A factory preset sets what it says.
     require(session.addAudioTrack().wasOk(), "a track for the device");
     const auto track = session.firstReturnTrack() - 1;
     require(session.addDevice("MultibandDynamics", track).wasOk(), "the session adds the device");
@@ -249,39 +365,177 @@ void checkDevice(Session& session)
     require(session.loadDevicePreset(track, slot->pluginIndex,
                                      ContentLibrary::file("Presets/MultibandDynamics/Upward and Downward.rnd")).wasOk(),
             "the factory preset loads");
-    const auto display = session.deviceDisplay(track, slot->pluginIndex);
-    require(display.traces.size() == 4, "a curve for each band and the 1:1 line");
-    const auto& unchanged = display.traces.back().points;
-    for (size_t b = 0; b < 3; ++b)
-    {
-        const auto& points = display.traces[b].points;
-        require(points.front() > unchanged.front() + 0.1f && points.back() < unchanged.back() - 0.1f,
-                display.traces[b].name + "'s curve is lifted at the quiet end and held down at the loud one");
-    }
+    const auto valueOf = [&] (int index) { return session.deviceParameter(track, slot->pluginIndex, index)->value; };
+    require(valueOf(Device::bandParameter(1, Device::BandControl::aboveRatio)) == Engine::infiniteRatio
+                && valueOf(Device::bandParameter(1, Device::BandControl::belowRatio)) == 4.0f
+                && valueOf(Device::amountParameter) == 0.5f,
+            "Upward and Downward compresses each band both ways at half Amount");
+    require(session.deleteDevice(track, slot->pluginIndex).wasOk(), "and the device comes off again");
+}
+}
 
-    // Its face is generated: every control on it, and it paints.
+// The face, driven by the presses and drags a person makes: real mouse
+// events at the places its layout puts things, each drag one undo step.
+void runMultibandFaceTest(Session& session)
+{
+    using Device = MultibandDynamicsDevice;
+    using Control = Device::BandControl;
+    namespace md = multibanddisplay;
+    require(session.addAudioTrack().wasOk(), "a track for the face");
+    const auto track = session.firstReturnTrack() - 1;
+    require(session.addDevice("MultibandDynamics", track).wasOk(), "the session adds the device");
+    std::optional<Session::DeviceSlot> slot;
+    for (const auto& candidate : session.deviceSlots(track))
+        if (candidate.deviceId == "MultibandDynamics")
+            slot = candidate;
+    require(slot.has_value(), "the device is in the chain");
     auto panel = std::make_unique<DeviceEditorPanel>(session);
     panel->setTarget(track, *slot, true);
+    require(panel->face == DeviceEditorPanel::Face::Multiband && panel->preferredWidth() == DeviceEditorPanel::multibandFaceWidth,
+            "Multiband Dynamics has a face of its own");
     panel->setSize(panel->preferredWidth(), DeviceEditorPanel::standardHeight);
+    const auto layout = DeviceEditorPanel::multibandLayout(panel->getLocalBounds());
+
+    // Everything drawn is on the face and clear of everything else, the
+    // knobs and their readings included.
+    std::vector<juce::Rectangle<int>> placed { layout.softKnee, layout.rms };
+    for (const auto& row : layout.bands)
+        for (const auto& area : { row.splitSwitch, row.active, row.crossover, row.solo, row.belowThreshold, row.belowRatio,
+                                  row.meter, row.aboveThreshold, row.aboveRatio, row.attack, row.release })
+            if (!area.isEmpty())
+                placed.push_back(area);
     for (auto* child : panel->getChildren())
-        require(!child->isVisible() || panel->getLocalBounds().contains(child->getBounds()), "every control is on the face");
-    Theme theme;
-    panel->setLookAndFeel(&theme);
-    const auto snapshot = panel->createComponentSnapshot(panel->getLocalBounds());
-    panel->setLookAndFeel(nullptr);
-    require(snapshot.getWidth() == panel->getWidth(), "the face paints");
+    {
+        const auto* button = dynamic_cast<juce::TextButton*>(child);
+        if (child->isVisible() && child->getY() >= DeviceEditorPanel::headerHeight
+            && (button == nullptr || button->getButtonText() != "A"))
+            placed.push_back(child->getBounds());
+    }
+    for (size_t a = 0; a < placed.size(); ++a)
+    {
+        require(panel->getLocalBounds().contains(placed[a]), "everything drawn is on the face");
+        for (size_t b = a + 1; b < placed.size(); ++b)
+            require(!placed[a].intersects(placed[b]), "and clear of everything else");
+    }
+
+    const auto valueOf = [&] (int index) { return session.deviceParameter(track, slot->pluginIndex, index)->value; };
+    const auto refresh = [&] { panel->setTarget(track, *slot, true); };
+    const auto event = [&panel] (juce::Point<float> at, juce::Point<float> downAt, juce::ModifierKeys mods, int clicks)
+    {
+        return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), at, mods, 1.0f, 0, 0, 0, 0,
+                                panel.get(), panel.get(), juce::Time::getCurrentTime(), downAt,
+                                juce::Time::getCurrentTime(), clicks, at != downAt);
+    };
+    const auto drag = [&] (juce::Point<float> from, juce::Point<float> to, int held = 0)
+    {
+        const juce::ModifierKeys mods(juce::ModifierKeys::leftButtonModifier | held);
+        panel->mouseDown(event(from, from, mods, 1));
+        for (int step = 1; step <= 4; ++step)
+            panel->mouseDrag(event(from + (to - from) * (static_cast<float>(step) / 4.0f), from, mods, 1));
+        panel->mouseUp(event(to, from, juce::ModifierKeys(held), 1));
+    };
+    const auto click = [&] (juce::Rectangle<int> area)
+    {
+        const auto at = area.getCentre().toFloat();
+        panel->mouseDown(event(at, at, juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier), 1));
+        panel->mouseUp(event(at, at, juce::ModifierKeys(), 1));
+    };
+    const auto undo = [&] { session.undo(); refresh(); };
+    const auto near = [] (float a, float b, float tolerance) { return std::abs(a - b) <= tolerance; };
+
+    // A switch is a click and an undo step.
+    const auto& mid = layout.bands[1];
+    click(mid.solo);
+    require(valueOf(Device::bandParameter(1, Control::solo)) == 1.0f, "S solos the band");
+    undo();
+    require(valueOf(Device::bandParameter(1, Control::solo)) == 0.0f, "and the click is one undo step");
+
+    // The Above block's edge is its threshold, dragged sideways.
+    const auto meter = mid.meter.toFloat();
+    const auto dbPerPixel = (md::ceilingDb - md::floorDb) / meter.getWidth();
+    const auto aboveEdge = juce::Point<float>(md::xForDb(-20.0f, meter.getX(), meter.getWidth()), meter.getCentreY());
+    const auto aboveThreshold = Device::bandParameter(1, Control::aboveThreshold);
+    const auto belowThreshold = Device::bandParameter(1, Control::belowThreshold);
+    drag(aboveEdge, aboveEdge.translated(-20.0f, 0.0f));
+    require(near(valueOf(aboveThreshold), -20.0f - 20.0f * dbPerPixel, 0.01f), "dragging the edge left lowers the threshold");
+    undo();
+    require(valueOf(aboveThreshold) == -20.0f, "and the drag is one undo step");
+    drag(aboveEdge, aboveEdge.translated(-40.0f, 0.0f), juce::ModifierKeys::shiftModifier);
+    require(near(valueOf(aboveThreshold), -20.0f - 10.0f * dbPerPixel, 0.01f), "Shift moves it a quarter as far");
+    undo();
+    // Ctrl moves the same edge on every band, in one undo step.
+    drag(aboveEdge, aboveEdge.translated(-20.0f, 0.0f), juce::ModifierKeys::ctrlModifier);
+    for (int b = 0; b < 3; ++b)
+        require(near(valueOf(Device::bandParameter(b, Control::aboveThreshold)), -20.0f - 20.0f * dbPerPixel, 0.01f),
+                "Ctrl moves every band's threshold");
+    undo();
+    for (int b = 0; b < 3; ++b)
+        require(valueOf(Device::bandParameter(b, Control::aboveThreshold)) == -20.0f, "and one undo takes all three back");
+    // Alt moves both of the band's thresholds.
+    drag(aboveEdge, aboveEdge.translated(-20.0f, 0.0f), juce::ModifierKeys::altModifier);
+    require(near(valueOf(aboveThreshold), -20.0f - 20.0f * dbPerPixel, 0.01f)
+                && near(valueOf(belowThreshold), -60.0f - 20.0f * dbPerPixel, 0.01f),
+            "Alt moves both of the band's thresholds");
+    undo();
+    // The lower threshold stops at the upper.
+    const auto belowEdge = juce::Point<float>(md::xForDb(-60.0f, meter.getX(), meter.getWidth()), meter.getCentreY());
+    drag(belowEdge, belowEdge.translated(300.0f, 0.0f));
+    require(valueOf(belowThreshold) == -20.0f, "the lower threshold stops at the upper");
+    undo();
+
+    // A block's volume is its ratio: down in the Above block compresses,
+    // up in the Below block compresses upwards, and a double-click is 1:1.
+    const auto aboveRatio = Device::bandParameter(1, Control::aboveRatio);
+    const auto belowRatio = Device::bandParameter(1, Control::belowRatio);
+    const auto inAbove = juce::Point<float>(md::xForDb(-10.0f, meter.getX(), meter.getWidth()), meter.getCentreY());
+    const auto inBelow = juce::Point<float>(md::xForDb(-70.0f, meter.getX(), meter.getWidth()), meter.getCentreY());
+    drag(inAbove, inAbove.translated(0.0f, 50.0f));
+    require(near(valueOf(aboveRatio), 2.0f, 0.01f), "half the travel down the Above block is 2:1");
+    drag(inBelow, inBelow.translated(0.0f, -50.0f));
+    require(near(valueOf(belowRatio), 2.0f, 0.01f), "half the travel up the Below block is 2:1 upwards");
+    const auto mods = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier);
+    panel->mouseDown(event(inAbove, inAbove, mods, 2));
+    panel->mouseDoubleClick(event(inAbove, inAbove, mods, 2));
+    panel->mouseUp(event(inAbove, inAbove, juce::ModifierKeys(), 2));
+    require(valueOf(aboveRatio) == 1.0f, "a double-click puts the block back to 1:1");
+
+    // A readout is dragged up and down across its control's travel.
+    const auto attack = Device::bandParameter(1, Control::attack);
+    const auto declared = *session.deviceParameter(track, slot->pluginIndex, attack);
+    const juce::NormalisableRange<float> travel(declared.minimum, declared.maximum, declared.interval,
+                                                static_cast<float>(declared.skew));
+    const auto wanted = travel.convertFrom0to1(travel.convertTo0to1(declared.value) + 0.3f);
+    drag(mid.attack.getCentre().toFloat(), mid.attack.getCentre().toFloat().translated(0.0f, -45.0f));
+    require(near(valueOf(attack), wanted, wanted * 1.0e-3f), "dragging a readout up 45 pixels takes it 30% of its travel");
+
+    // The band switches split a band off and back.
+    click(layout.bands[0].splitSwitch);
+    require(valueOf(Device::lowBandParameter) == 0.0f, "LOW stops splitting the low band off");
+
     // RHINO_DEVICE_SNAPSHOTS pictures it at its defaults with every other
-    // face, in DeviceFacesTest.cpp, and here with the preset's curves.
+    // face, in DeviceFacesTest.cpp, and here as these drags left it, with its
+    // meters lit as a song would light them.
     if (const auto folder = juce::SystemStats::getEnvironmentVariable("RHINO_DEVICE_SNAPSHOTS", {}); folder.isNotEmpty())
     {
-        const auto file = juce::File(folder).getChildFile("MultibandDynamics Upward and Downward.png");
+        click(layout.bands[0].splitSwitch);
+        refresh();
+        for (size_t b = 0; b < 3; ++b)
+        {
+            panel->multibandIn[b].levelDb = -18.0f + 4.0f * static_cast<float>(b);
+            panel->multibandOut[b].levelDb = -24.0f + 2.0f * static_cast<float>(b);
+        }
+        Theme theme;
+        panel->setLookAndFeel(&theme);
+        const auto snapshot = panel->createComponentSnapshot(panel->getLocalBounds());
+        panel->setLookAndFeel(nullptr);
+        const auto file = juce::File(folder).getChildFile("MultibandDynamics face.png");
         // An existing file is opened at its end, not replaced.
         file.deleteFile();
         juce::FileOutputStream stream(file);
         juce::PNGImageFormat().writeImageToStream(snapshot, stream);
     }
-    require(session.deleteDevice(track, slot->pluginIndex).wasOk(), "and the device comes off again");
-}
+    panel.reset();
+    require(session.deleteDevice(track, slot->pluginIndex).wasOk(), "the device comes off again");
 }
 
 void checkMultibandDynamics(Session& session)
@@ -289,6 +543,9 @@ void checkMultibandDynamics(Session& session)
     checkSplit();
     checkCurves();
     checkTime();
+    checkMeters();
+    checkDisplayGeometry();
     checkDevice(session);
+    runMultibandFaceTest(session);
 }
 }

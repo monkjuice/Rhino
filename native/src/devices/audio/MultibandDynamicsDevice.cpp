@@ -1,35 +1,25 @@
 #include "MultibandDynamicsDevice.h"
-#include <algorithm>
 
 namespace rhino
 {
 namespace
 {
-// The picture spans the levels Live's display does, -80 to 0 dB, a point a
-// decibel. A level is drawn as (dB + 40) / 40, so the unchanged line runs
-// corner to corner; what falls below -80 dB is drawn at the floor, and
-// nothing is drawn more than 20 dB over 0.
-constexpr int picturePoints = 81;
-constexpr double pictureFloorDb = -80.0;
-
-float drawnAt(double decibels)
-{
-    return static_cast<float>(std::clamp((decibels + 40.0) / 40.0, -1.0, 1.5));
-}
-
 juce::String ratioText(float ratio)
 {
     return ratio >= MultibandDynamicsEngine::infiniteRatio ? juce::String("inf:1")
                                                            : juce::String(ratio, ratio < 10.0f ? 2 : 1) + ":1";
 }
 
+// Live's three figures: 5.00 ms, 50.0 ms, 500 ms. A whole number is rounded
+// here, because juce::String given no decimal places prints all of them.
 juce::String timeText(float milliseconds)
 {
-    return milliseconds >= 1000.0f ? juce::String(milliseconds / 1000.0f, 2) + " s"
-                                   : juce::String(milliseconds, milliseconds < 10.0f ? 2 : milliseconds < 100.0f ? 1 : 0) + " ms";
+    if (milliseconds >= 1000.0f)
+        return juce::String(milliseconds / 1000.0f, 2) + " s";
+    if (milliseconds >= 100.0f)
+        return juce::String(juce::roundToInt(milliseconds)) + " ms";
+    return juce::String(milliseconds, milliseconds < 10.0f ? 2 : 1) + " ms";
 }
-
-constexpr const char* bandNames[MultibandDynamicsEngine::bandCount] { "Low", "Mid", "High" };
 }
 
 MultibandDynamicsDevice::BandControls MultibandDynamicsDevice::bandControls(const juce::String& band, float attackMs,
@@ -108,31 +98,27 @@ void MultibandDynamicsDevice::process(RenderBlock& block)
 {
     engine.setSettings(currentSettings());
     engine.process(block.channels, block.numChannels, block.numSamples);
+    const auto raise = [] (std::atomic<float>& loudest, float level)
+    {
+        auto held = loudest.load(std::memory_order_relaxed);
+        while (level > held && !loudest.compare_exchange_weak(held, level, std::memory_order_relaxed))
+        {
+        }
+    };
+    const auto& levels = engine.levels();
+    for (size_t b = 0; b < levels.size(); ++b)
+    {
+        raise(inputLevels[b], levels[b].input);
+        raise(outputLevels[b], levels[b].output);
+    }
 }
 
-// A line per band that is split off, the level it puts out against a steady
-// level in, and the line a ratio of 1 draws, which is also what keeps the
-// face's scale where it is.
-void MultibandDynamicsDevice::describe(DeviceDisplay& display)
+MultibandDynamicsEngine::Levels MultibandDynamicsDevice::takeBandLevels(int band)
 {
-    const auto now = currentSettings();
-    if (!pictured.has_value() || !(*pictured == now))
-    {
-        picture.clear();
-        const auto curve = [] (auto levelOut)
-        {
-            std::vector<float> points(static_cast<size_t>(picturePoints));
-            for (int k = 0; k < picturePoints; ++k)
-                points[static_cast<size_t>(k)] = drawnAt(levelOut(pictureFloorDb + static_cast<double>(k)));
-            return points;
-        };
-        for (int b = 0; b < MultibandDynamicsEngine::bandCount; ++b)
-            if (MultibandDynamicsEngine::bandExists(now, b))
-                picture.push_back({ bandNames[b], curve([&now, b] (double level)
-                                                        { return MultibandDynamicsEngine::transferDb(now, b, level); }) });
-        picture.push_back({ "1:1", curve([] (double level) { return level; }) });
-        pictured = now;
-    }
-    display.traces.insert(display.traces.end(), picture.begin(), picture.end());
+    if (!juce::isPositiveAndBelow(band, MultibandDynamicsEngine::bandCount))
+        return {};
+    const auto b = static_cast<size_t>(band);
+    return { inputLevels[b].exchange(0.0f, std::memory_order_relaxed),
+             outputLevels[b].exchange(0.0f, std::memory_order_relaxed) };
 }
 }

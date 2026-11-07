@@ -63,6 +63,7 @@ public:
     static constexpr int drumStackedHeight = 400;
     // The Tuner's face is as wide as this whatever it shows.
     static constexpr int tunerFaceWidth = 520;
+    static constexpr int multibandFaceWidth = 608;
     // Set by the rack: a Drum Rack face shows a button in its name bar that
     // opens it in a window of its own (DrumRackWindow).
     std::function<void()> openInWindow;
@@ -78,6 +79,7 @@ public:
     void mouseUp(const juce::MouseEvent&) override;
     void mouseDoubleClick(const juce::MouseEvent&) override;
     void mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
+    void mouseMove(const juce::MouseEvent&) override;
     std::function<void(juce::String)> status;
     std::function<void()> selected;
     // A preset was saved, so a list of them is out of date.
@@ -95,7 +97,8 @@ private:
     friend void runPatternDeviceRackTest();
     friend void runDrumRackFaceTest();
     friend void runDrumRackWindowTest();
-    enum class Face { Generic, Generated, Arp, AutoTune, Eq, Vocoder, DrumRack, Tuner };
+    friend void runMultibandFaceTest(Session&);
+    enum class Face { Generic, Generated, Arp, AutoTune, Eq, Vocoder, DrumRack, Tuner, Multiband };
     void ensureControls();
     void styleControls();
     void layoutGeneric();
@@ -188,6 +191,46 @@ private:
     void paintTuner(juce::Graphics&);
     bool handleTunerClick(const juce::MouseEvent&);
     void tickTuner();
+    // Multiband Dynamics' face is DeviceEditorPanelMultiband.cpp, after Live's:
+    // a row per band, High at the top, whose Below and Above blocks are
+    // dragged by their edges for the thresholds and up and down for the
+    // ratios, over meters of the band coming in and going out. Its switches
+    // and readouts are drawn; Input, Output, Time and Amount are knobs.
+    struct MultibandRow
+    {
+        juce::Rectangle<int> splitSwitch, active, crossover, solo, input, belowThreshold, belowRatio, meter,
+                             aboveThreshold, aboveRatio, attack, release, output;
+    };
+    struct MultibandLayout
+    {
+        juce::Rectangle<int> content, well, meters, scale, softKnee, rms, output, time, amount;
+        // By band, low first, though they stand High at the top.
+        std::array<MultibandRow, 3> bands;
+    };
+    static MultibandLayout multibandLayout(juce::Rectangle<int> bounds);
+    // What a point on the face is: a switch, a readout, a block's edge or the
+    // block itself, or a meter row between the two, and the control a click,
+    // a right-click or a double-click there acts on.
+    struct MultibandHit
+    {
+        enum class Kind { none, toggle, readout, edge, block, meters };
+        Kind kind = Kind::none;
+        int parameter = -1;
+        int band = -1;
+        bool above = false;
+    };
+    MultibandHit multibandHitAt(juce::Point<int>) const;
+    static bool isMultibandKnob(int parameter);
+    static bool isMultibandCaption(int parameter);
+    void layoutMultiband();
+    void paintMultiband(juce::Graphics&);
+    bool handleMultibandMouseDown(const juce::MouseEvent&);
+    void handleMultibandDrag(const juce::MouseEvent&);
+    void endMultibandDrag(bool report);
+    bool handleMultibandDoubleClick(const juce::MouseEvent&);
+    void readMultibandParameter(int parameter);
+    void tickMultiband();
+    juce::String multibandTooltip(juce::Point<int>) const;
     // Any other device that takes a sidechain - an external plugin with a
     // sidechain input, Tracktion's compressor, a device on the SDK - and has
     // no face of its own shows a Sidechain strip at the left of its face, as
@@ -394,6 +437,25 @@ private:
     float tunerStrobePhase = 0.0f;
     int tunerHistogramCentre = 69;
     juce::String tunerDrawn;
+    // Multiband Dynamics: a drag on its display or a readout, the controls it
+    // moves and where each started, how far it has gone in its own units (dB
+    // for an edge, volume for a block, travel for a readout; less with Shift),
+    // and where the pointer last was. Then each band's meters, in and out,
+    // falling as a track's do, and the pixels they were last drawn to, so a
+    // device with nothing coming in asks for no frames.
+    struct MultibandDrag
+    {
+        enum class Kind { none, edge, block, readout };
+        Kind kind = Kind::none;
+        std::vector<int> controls;
+        std::vector<float> from;
+        float travel = 0.0f;
+        juce::Point<float> last;
+    };
+    MultibandDrag multibandDrag;
+    std::array<MeterBallistics, 3> multibandIn {}, multibandOut {};
+    double multibandFedAt = 0.0;
+    std::array<int, 6> multibandDrawn {};
 
     // ---- Rhino EQ ---------------------------------------------------------
     // The reader is heap-allocated because it carries the transform tables

@@ -51,15 +51,6 @@ double beyond(double distance, double knee)
     return into * into / (2.0 * knee);
 }
 
-// How many dB of a level's distance past its threshold the band takes away:
-// none at 1:1, all of it at an infinite ratio, and less than none (it adds)
-// under 1:1.
-double slopeOf(float ratio)
-{
-    return ratio >= MultibandDynamicsEngine::infiniteRatio
-        ? 1.0 : 1.0 - 1.0 / std::max(static_cast<double>(ratio), static_cast<double>(MultibandDynamicsEngine::minimumRatio));
-}
-
 // Attack while the gain moves further from none in the direction it is
 // heading, release while it comes back.
 void ease(double& current, double target, double attack, double release)
@@ -72,6 +63,11 @@ void ease(double& current, double target, double attack, double release)
 bool MultibandDynamicsEngine::bandExists(const Settings& settings, int band)
 {
     return band == 0 ? settings.lowBand : band == 2 ? settings.highBand : band == 1;
+}
+
+double MultibandDynamicsEngine::slopeOf(float ratio)
+{
+    return ratio >= infiniteRatio ? 1.0 : 1.0 - 1.0 / std::max(static_cast<double>(ratio), static_cast<double>(minimumRatio));
 }
 
 MultibandDynamicsEngine::Curve MultibandDynamicsEngine::curveOf(const Settings& settings, int band)
@@ -97,21 +93,6 @@ MultibandDynamicsEngine::Gain MultibandDynamicsEngine::gainOf(const Curve& curve
     gain.below = std::clamp(curve.belowSlope * beyond(curve.belowThreshold - level, curve.knee),
                             -maximumCutDb, maximumBoostDb);
     return gain;
-}
-
-MultibandDynamicsEngine::Gain MultibandDynamicsEngine::staticGain(const Settings& settings, int band, double levelDb)
-{
-    return gainOf(curveOf(settings, band), levelDb);
-}
-
-double MultibandDynamicsEngine::transferDb(const Settings& settings, int band, double levelDb)
-{
-    const auto& controls = settings.bands[static_cast<size_t>(std::clamp(band, 0, bandCount - 1))];
-    if (!controls.active)
-        return levelDb + settings.outputDb;
-    const auto in = levelDb + controls.inputDb;
-    const auto gain = staticGain(settings, band, in);
-    return in + gain.above + gain.below + controls.outputDb + settings.outputDb;
 }
 
 void MultibandDynamicsEngine::prepare(double sampleRate)
@@ -154,6 +135,7 @@ void MultibandDynamicsEngine::reset()
         band.peak = band.meanSquare = 0.0;
         band.above = band.below = 0.0;
     }
+    lastLevels = {};
     snapToSettings();
 }
 
@@ -208,6 +190,7 @@ void MultibandDynamicsEngine::designCrossovers()
 void MultibandDynamicsEngine::process(float* const* audio, int numChannels, int count)
 {
     const auto used = std::min(numChannels, maximumChannels);
+    lastLevels = {};
     if (used <= 0 || count <= 0)
         return;
 
@@ -232,6 +215,9 @@ void MultibandDynamicsEngine::process(float* const* audio, int numChannels, int 
         heardTarget[static_cast<size_t>(b)] = !anySolo || controls.solo ? 1.0 : 0.0;
     }
     const auto inverseChannels = 1.0 / static_cast<double>(used);
+    // The loudest of each band in and out, in the detector's own terms: an
+    // amplitude for a peak, a mean square for RMS.
+    std::array<double, bandCount> loudestIn {}, loudestOut {};
 
     for (int i = 0; i < count; ++i)
     {
@@ -295,11 +281,29 @@ void MultibandDynamicsEngine::process(float* const* audio, int numChannels, int 
             const auto factor = band.heard * (1.0 + band.engaged * (wet - 1.0));
             for (int c = 0; c < used; ++c)
                 sum[c] += split[b][c] * factor;
+
+            // Going out, the band is its split signal times the factor, and
+            // the detector read it times Input: so what went out reads as
+            // what came in, Input taken back off and the factor put on.
+            const auto detected = settings.rms ? band.meanSquare : band.peak;
+            const auto through = factor / band.input;
+            loudestIn[static_cast<size_t>(b)] = std::max(loudestIn[static_cast<size_t>(b)], detected);
+            loudestOut[static_cast<size_t>(b)] = std::max(loudestOut[static_cast<size_t>(b)],
+                                                          settings.rms ? detected * through * through : detected * through);
         }
 
         output += (outputTarget - output) * gainSmoothing;
         for (int c = 0; c < used; ++c)
             audio[c][i] = static_cast<float>(sum[c] * output);
+    }
+
+    for (size_t b = 0; b < lastLevels.size(); ++b)
+    {
+        const auto toAmplitude = [this] (double reading)
+        {
+            return static_cast<float>(settings.rms ? std::sqrt(reading) : reading);
+        };
+        lastLevels[b] = { toAmplitude(loudestIn[b]), toAmplitude(loudestOut[b]) };
     }
 }
 }

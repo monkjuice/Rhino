@@ -148,6 +148,8 @@ target_sources(RhinoNative PRIVATE
     src/ui/rack/DeviceEditorPanelEq.cpp
     src/ui/rack/DeviceEditorPanelVocoder.cpp
     src/ui/rack/DeviceEditorPanelTuner.cpp
+    src/ui/rack/DeviceEditorPanelMultiband.cpp
+    src/ui/rack/DeviceEditorPanelMultibandGestures.cpp
     src/ui/rack/DeviceEditorPanelSidechain.cpp
     src/ui/rack/DeviceEditorPanelCompressor.cpp
     src/ui/rack/DeviceEditorPanelGenerated.cpp

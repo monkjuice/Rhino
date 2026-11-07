@@ -194,6 +194,7 @@ target_sources(RhinoNative PRIVATE
     src/tests/DriveDevicesTest.cpp
     src/tests/AmpTest.cpp
     src/tests/TunerTest.cpp
+    src/tests/MultibandDynamicsTest.cpp
     src/tests/DeviceFacesTest.cpp
     src/tests/CompressorMeterTest.cpp
     src/tests/FmTest.cpp

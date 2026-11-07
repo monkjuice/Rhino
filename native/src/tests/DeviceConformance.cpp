@@ -35,6 +35,7 @@ namespace rhino
 {
 void checkDeviceFaces(Session&);
 void checkCompressorMeter(te::Edit&);
+void checkMultibandDynamics(Session&);
 
 void runArpMechanicsTests(te::Edit&);
 
@@ -746,6 +747,8 @@ int runDeviceConformance()
         };
         juce::Logger::writeToLog("Rhino: device conformance, the Compressor's meter");
         checkCompressorMeter(*session.edit);
+        juce::Logger::writeToLog("Rhino: device conformance, Multiband Dynamics");
+        checkMultibandDynamics(session);
         juce::Logger::writeToLog("Rhino: device conformance, every device's face");
         checkDeviceFaces(session);
         report("Rhino: device conformance checked " + juce::String(checked) + " devices");

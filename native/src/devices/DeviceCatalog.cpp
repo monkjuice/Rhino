@@ -3,6 +3,7 @@
 #include "instruments/RhinoFmDevice.h"
 #include "audio/UtilityDevice.h"
 #include "audio/CompressorDevice.h"
+#include "audio/MultibandDynamicsDevice.h"
 #include "audio/RhinoSpaceDevice.h"
 #include "audio/RhinoBloomDevice.h"
 #include "audio/RhinoEqDevice.h"
@@ -80,6 +81,13 @@ std::vector<DeviceDescriptor> buildCatalog()
     add({.id = "Compressor", .typeName = CompressorDevice::xmlTypeName, .displayName = "Compressor",
          .kind = DeviceKind::AudioEffect, .category = "Dynamics", .description = "Tracktion compressor",
          .browsable = true, .create = factory<CompressorDevice>()});
+
+    // Live's Multiband Dynamics: three bands, each compressed or expanded
+    // above and below thresholds of its own.
+    add({.id = "MultibandDynamics", .typeName = MultibandDynamicsDevice::xmlTypeName,
+         .displayName = "Multiband Dynamics",
+         .kind = DeviceKind::AudioEffect, .category = "Dynamics", .description = "Three-band compressor and expander",
+         .colour = 0xffd8c050, .browsable = true, .create = factory<MultibandDynamicsDevice>()});
 
     // Rhino Duck is the second independent plugin project, effects/rhino-duck,
     // a VST3 found the way Forge is. Its rack shows the controls a duck is

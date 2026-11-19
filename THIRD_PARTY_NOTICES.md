@@ -27,7 +27,7 @@ All under the SIL Open Font License 1.1, with the licence beside the font files.
 
 Each pack under `library/Samples/` records its source and licence beside it.
 
-- `Cumbia/` and `HandClap/`: made for Rhino by their author and licensed under the GNU AGPL, version 3 or later, like Rhino itself (`SOURCE.md`)
+- `Cumbia/` and `HandClap/`: made for Rhino by Kmila (Camila Arenas) and licensed under the GNU AGPL, version 3 or later, like Rhino itself (`SOURCE.md`)
 - `TR808/`: recordings of a Roland TR-808 from [tidalcycles/sounds-tr808-fischer](https://github.com/tidalcycles/sounds-tr808-fischer), CC0 1.0 (`LICENSE-CC0.txt`, `SOURCE.md`)
 - `VinylDrums/`: the *Giant Vinyl Drums Pack* by Dmitriy "Cyberworm" Vasilyev, published royalty free at rhythm-lab.com (`SOURCE.md`)
 

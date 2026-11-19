@@ -1666,3 +1666,9 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/documentation-ownership.md (the three licensing files; installers must offer source)
 - updated: overview.md (history row)
 - updated: index.md (Decisions: the new page; the proprietary page's summary)
+
+## [2026-11-19] update | The Cumbia and HandClap packs are licensed under the AGPL
+- source: the user (the packs' author made them for Rhino and licenses them under the AGPL v3 or later), checked against the new library/Samples/Cumbia/SOURCE.md and library/Samples/HandClap/SOURCE.md, README.md (Licence) and THIRD_PARTY_NOTICES.md
+- updated: pages/agpl-licence.md (summary; the notices paragraph; the two packs dropped from Still open)
+- updated: pages/content-library.md (the provenance rule now says what each pack is under)
+- updated: index.md (the AGPL page's summary)

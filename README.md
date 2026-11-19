@@ -147,10 +147,10 @@ The detailed build notes, architecture, component guides, decisions, and known g
 
 Copyright © 2026 Agustin Barg.
 
-Rhino is free software: you can redistribute it and modify it under the terms of the [GNU Affero General Public License](LICENSE), version 3 or (at your option) any later version. That covers the DAW in `native/`, Rhino Forge in `instruments/rhino-forge/` and Rhino Duck in `effects/rhino-duck/`. Rhino is distributed without any warranty; see the licence for details.
+Rhino is free software: you can redistribute it and modify it under the terms of the [GNU Affero General Public License](LICENSE), version 3 or (at your option) any later version. That covers the DAW in `native/`, Rhino Forge in `instruments/rhino-forge/` and Rhino Duck in `effects/rhino-duck/`. The Cumbia and HandClap sample packs in `library/Samples/` were made for Rhino by their own author, who licenses them under the same terms. Rhino is distributed without any warranty; see the licence for details.
 
 Anyone who receives a build of Rhino is entitled to its source code under the same terms. JUCE (AGPLv3) and Tracktion Engine (GPLv3 or later), which Rhino is built on, require this too.
 
-Fonts, samples and other third-party work keep their own licences; see [Third-party notices](THIRD_PARTY_NOTICES.md).
+Fonts, the other sample packs and the rest of the third-party work keep their own licences; see [Third-party notices](THIRD_PARTY_NOTICES.md).
 
 Rhino is developed at [github.com/monkjuice/Rhino](https://github.com/monkjuice/Rhino).

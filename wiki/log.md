@@ -1633,3 +1633,26 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/tracktion-clip-fades-ignore-clip-plugin-delay.md (a latent clip effect now comes only from an older document)
 - updated: pages/clip-envelopes.md (other effects in a clip's list are from before `dd27e92`)
 - updated: pages/forge-hosting.md (the external-effect refusal is `addClipDevice`'s; Duck dropped on a clip goes on its track)
+
+## [2026-11-07] update | Multiband Dynamics, Live's three-band compressor and expander (31a2e09)
+- source: the main agent's brief, checked against native/src/core/dsp/MultibandDynamicsEngine.h/.cpp, devices/audio/MultibandDynamicsDevice.h/.cpp, DeviceCatalog.cpp, ui/rack/DeviceEditorPanelDisplay.cpp (the trace scale), tests/MultibandDynamicsTest.cpp, tests/PresetTest.cpp and library/Presets/MultibandDynamics/
+- created: pages/multiband-dynamics.md (the all-pass LR4 split, controls, Rhino's ratio convention and why Live's notation was not copied, knee, caps, detector, the display and its 1:1 scale pin, why the trims are ±12 dB, presets, tests, why the check is in --device-test)
+- updated: pages/built-in-devices.md (its row; six SDK devices with nothing pending)
+- updated: pages/device-catalog.md (the entry and its place; twenty registered)
+- updated: pages/device-presets.md (thirteen presets for four devices, the new three regenerated to list every control like the others; PresetTest lists the devices)
+- updated: pages/native-device-standard.md (2026-11-07 paragraph: 20 devices checked, the 1:1 trace, no SDK sidechain)
+- updated: pages/displays-draw-from-the-dsp.md (transferDb drawn and held to the audio)
+- updated: pages/build-and-test-rhino.md (--self-test timed out with the new check in it, then passed in 29.03 and 29.27 s without it; arrangement workflow 276.15 s against 300; all six cases passed on the working tree)
+- updated: pages/compressor.md (Related link)
+- updated: index.md (Components: Multiband Dynamics)
+
+## [2026-11-07] update | Multiband Dynamics gets a face of its own, after Live's display (14bd151, e00a76a)
+- source: the main agent's brief, checked against native/src/ui/rack/DeviceEditorPanelMultiband.cpp, ui/rack/MultibandDisplayGeometry.h, DeviceEditorPanel.cpp (setTarget, mouseMove, showParameterMenu), devices/audio/MultibandDynamicsDevice.h/.cpp, core/dsp/MultibandDynamicsEngine.h/.cpp, tests/MultibandDynamicsTest.cpp, and a search for other juce::String(x, 0) calls. The brief's "100 px = the whole -1..1 volume" is not what the code does: 100 px moves a block from 1:1 to either end (`volumePixels`), as the test's 50 px = 2:1 shows
+- created: pages/juce-string-zero-decimals-prints-all.md (226.413 ms; the SDK's Hz reading from 100 to 999 Hz, AudioClipPanel and the Vocoder's attack still make the call)
+- updated: pages/multiband-dynamics.md (summary, tags; the face: layout, blocks and volume mapping, modifiers, readouts, switches, one undo step per drag, the parameters-reference rule, meters read from the gain applied; what it replaced; index constants; time readings; tests)
+- updated: pages/device-rack.md (Face::Multiband, a face of its own over an SDK device; the only face that sets the cursor; the 24 Hz timer list; the automation menu at the mouse for drawn controls; never hold a reference into `parameters` across a Session call; runMultibandFaceTest)
+- updated: pages/displays-draw-from-the-dsp.md (volume drawn from slopeOf, the out meter from the gain applied; transferDb gone)
+- updated: pages/native-device-standard.md (the curve display and its 1:1 trace replaced by a face of its own)
+- updated: index.md (Multiband Dynamics' summary; Gotchas: juce::String with no decimal places)
+- follow-up the same day, checked against native/src/devices/sdk/NativeParameter.cpp (`placed`) and tests/DeviceConformance.cpp (the 523 Hz and 43 probe): the SDK's Hz, unitless and signed readings now round, so juce-string-zero-decimals-prints-all.md (summary), multiband-dynamics.md (the crossovers fixed) and native-device-standard.md (the SDK fix) were updated, and index.md's summary with them; AudioClipPanel's secondsText and the Vocoder's attack are still open. The block-travel code comment now agrees with the wiki
+- follow-up, the face split into DeviceEditorPanelMultiband.cpp and DeviceEditorPanelMultibandGestures.cpp over DeviceEditorPanelMultibandInternal.h (checked against the three files): device-rack.md's Multiband bullet names the two units and the private header, and says getTooltip asks multibandTooltip for its text; nothing else in wiki/ described the face as one file

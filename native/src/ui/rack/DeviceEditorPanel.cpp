@@ -113,6 +113,7 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
          : deviceId == "RhinoVocoder" ? Face::Vocoder
          : deviceId == "Drums" ? Face::DrumRack
          : deviceId == "Tuner" ? Face::Tuner
+         : deviceId == "MultibandDynamics" ? Face::Multiband
          : device.native ? Face::Generated
          : Face::Generic;
     // A freshly rebuilt built-in plugin can briefly have no display name while
@@ -121,11 +122,11 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
         deviceName = RhinoArpDevice::getPluginName();
     reductionMetered = face == Face::Generic && deviceId == "Compressor";
     // Rhino Tune's meter, the Tuner's display, the vocoder's bank, the EQ's
-    // spectrum, the Compressor's gain reduction and the drum pads lighting as
-    // they are struck are the only things on any face that move on their own,
-    // so they are the only devices that ask for frames. The EQ stops asking
-    // when its analyser is switched off, and the Compressor when it is
-    // bypassed.
+    // spectrum, the Compressor's gain reduction, Multiband Dynamics' band
+    // meters and the drum pads lighting as they are struck are the only
+    // things on any face that move on their own, so they are the only devices
+    // that ask for frames. The EQ stops asking when its analyser is switched
+    // off, and the Compressor and Multiband Dynamics when they are bypassed.
     const auto* eqDevice = face == Face::Eq
         ? dynamic_cast<RhinoEqDevice*>(session.devicePlugin(track, pluginSlot)) : nullptr;
     const auto eqAnalysing = eqDevice != nullptr && device.enabled
@@ -135,7 +136,7 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
     // second while the song plays, so a 24 Hz frame never came due and the
     // EQ's spectrum stood still.
     if (face == Face::AutoTune || face == Face::Vocoder || face == Face::DrumRack || face == Face::Tuner || eqAnalysing
-        || (reductionMetered && device.enabled))
+        || ((reductionMetered || face == Face::Multiband) && device.enabled))
     {
         if (!isTimerRunning())
             startTimerHz(24);
@@ -166,6 +167,17 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
         reductionFedAt = 0.0;
         reductionDrawn = {-1, -1, -1};
     }
+    if (face != Face::Multiband || !device.enabled || deviceKey != previousKey)
+    {
+        multibandIn = {};
+        multibandOut = {};
+        multibandFedAt = 0.0;
+        multibandDrawn.fill(-2);
+    }
+    // Only Multiband Dynamics changes the pointer over its face, and a panel
+    // is reused for whatever device it shows next.
+    if (face != Face::Multiband)
+        setMouseCursor(juce::MouseCursor::NormalCursor);
     display = face == Face::Generated ? session.deviceDisplay(track, pluginSlot) : DeviceDisplay {};
     mappable = face == Face::Generic && session.deviceHasMappedParameters(track, pluginSlot);
     mapping = mappable && session.isMappingParameters(track, pluginSlot);
@@ -243,6 +255,8 @@ int DeviceEditorPanel::preferredWidth() const
         return drumFaceWidth;
     if (face == Face::Tuner)
         return tunerFaceWidth;
+    if (face == Face::Multiband)
+        return multibandFaceWidth;
     if (face == Face::Generated)
         return generatedWidth() + sidechainWidth();
     if (face == Face::Arp)
@@ -356,6 +370,8 @@ void DeviceEditorPanel::mouseDown(const juce::MouseEvent& event)
             return;
         if (face == Face::Tuner && handleTunerClick(event))
             return;
+        if (face == Face::Multiband && handleMultibandMouseDown(event))
+            return;
     }
     if (event.eventComponent != this)
         return;
@@ -389,6 +405,8 @@ void DeviceEditorPanel::mouseDrag(const juce::MouseEvent& event)
         handleEqDrag(event);
     if (face == Face::DrumRack && event.eventComponent == this)
         handleDrumDrag(event);
+    if (face == Face::Multiband && event.eventComponent == this)
+        handleMultibandDrag(event);
 }
 
 void DeviceEditorPanel::mouseUp(const juce::MouseEvent& event)
@@ -397,6 +415,11 @@ void DeviceEditorPanel::mouseUp(const juce::MouseEvent& event)
     if (face == Face::DrumRack)
     {
         handleDrumMouseUp(event);
+        return;
+    }
+    if (face == Face::Multiband)
+    {
+        endMultibandDrag(true);
         return;
     }
     if (face != Face::Eq || !eqDragging)
@@ -415,6 +438,22 @@ void DeviceEditorPanel::mouseDoubleClick(const juce::MouseEvent& event)
 {
     if (face == Face::Eq && event.eventComponent == this)
         handleEqDoubleClick(event);
+    if (face == Face::Multiband && event.eventComponent == this)
+        handleMultibandDoubleClick(event);
+}
+
+// Over Multiband Dynamics' display the pointer says what a drag would do: a
+// block's edge moves sideways, a block or a readout up and down.
+void DeviceEditorPanel::mouseMove(const juce::MouseEvent& event)
+{
+    if (face != Face::Multiband || event.eventComponent != this)
+        return;
+    using Kind = MultibandHit::Kind;
+    const auto hit = multibandHitAt(event.getPosition());
+    setMouseCursor(hit.kind == Kind::edge ? juce::MouseCursor::LeftRightResizeCursor
+                   : hit.kind == Kind::block || hit.kind == Kind::readout ? juce::MouseCursor::UpDownResizeCursor
+                   : hit.kind == Kind::toggle ? juce::MouseCursor::PointingHandCursor
+                   : juce::MouseCursor::NormalCursor);
 }
 
 void DeviceEditorPanel::mouseWheelMove(const juce::MouseEvent& event,
@@ -470,7 +509,11 @@ void DeviceEditorPanel::showParameterMenu(int index)
         else if (index < generatedToggles.size() && generatedToggles[index]->isVisible())
             anchor = generatedToggles[index];
     }
-    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(anchor),
+    // What Multiband Dynamics draws rather than makes a knob has nothing to
+    // point at, so its menu opens where it was clicked.
+    const auto drawn = face == Face::Multiband && !isMultibandKnob(index);
+    menu.showMenuAsync(drawn ? juce::PopupMenu::Options().withMousePosition()
+                             : juce::PopupMenu::Options().withTargetComponent(anchor),
         [safe = juce::Component::SafePointer<DeviceEditorPanel>(this), target, name,
          reset = parameter.defaultValue] (int result)
         {
@@ -516,7 +559,7 @@ int DeviceEditorPanel::visibleParameterCount() const
     // chosen list is whatever has been mapped, up to the rack's limit, and
     // the face grows along the chain to hold it.
     const auto limit = face == Face::Arp ? RhinoArpDevice::parameterCount
-        : face == Face::Generated ? 48
+        : face == Face::Generated || face == Face::Multiband ? 48
         : face == Face::DrumRack ? 0
         : face == Face::AutoTune || face == Face::Vocoder ? 13
         // Reference; the view switches are drawn.
@@ -597,12 +640,13 @@ void DeviceEditorPanel::styleControls()
             && !(face == Face::Generated && onHiddenTab(i));
         // A generated face puts a chooser or a switch where a control is one;
         // only a continuous control gets a knob and a reading under it.
-        const auto knob = face != Face::Generated || isKnob(i);
+        // Multiband Dynamics draws all but its gains, Time and Amount.
+        const auto knob = face == Face::Multiband ? isMultibandKnob(i) : face != Face::Generated || isKnob(i);
         // The Arp face draws the two knob captions itself, alongside the
         // compact grouped controls. Leaving the generic captions or A buttons
         // live would retain their previous layout rectangles.
         const auto genericChromeVisible = visible && face != Face::Arp;
-        parameterLabels[i]->setVisible(genericChromeVisible);
+        parameterLabels[i]->setVisible(genericChromeVisible && (face != Face::Multiband || isMultibandCaption(i)));
         const auto arpRepeatReadout = face == Face::Arp && visible
             && i == RhinoArpDevice::repeatsParameter;
         parameterValues[i]->setVisible((genericChromeVisible && knob) || arpRepeatReadout);
@@ -633,7 +677,7 @@ void DeviceEditorPanel::styleControls()
         const auto& parameter = parameters[static_cast<size_t>(i)];
         // A chosen list wears its device's colour, as a generated face does.
         const auto accent = idle ? palette::disabled
-            : face == Face::Generated || mappable ? faceAccent()
+            : face == Face::Generated || face == Face::Multiband || mappable ? faceAccent()
             : face == Face::AutoTune ? juce::Colour(0xffb2739c)
             : face == Face::Vocoder ? juce::Colour(0xff7d8fc4)
             : face == Face::Tuner ? juce::Colour(0xff6fc98f)
@@ -653,8 +697,9 @@ void DeviceEditorPanel::styleControls()
         }
         // A generated knob steps the way its control declares, and travels
         // with the control's own skew; double-clicking puts it back to its
-        // default.
-        const auto generated = face == Face::Generated;
+        // default. So do the knobs of a face of its own over a device on the
+        // SDK, Multiband Dynamics'.
+        const auto generated = face == Face::Generated || face == Face::Multiband;
         const auto step = generated && parameter.interval > 0.0f ? static_cast<double>(parameter.interval)
             : parameter.discrete ? 1.0 : 0.0;
         parameterSliders[i]->setRange(parameter.minimum, parameter.maximum, step);
@@ -761,6 +806,11 @@ void DeviceEditorPanel::paint(juce::Graphics& g)
         paintTuner(g);
         return;
     }
+    if (face == Face::Multiband)
+    {
+        paintMultiband(g);
+        return;
+    }
     if (face == Face::Generated)
         paintGenerated(g);
 }
@@ -796,6 +846,8 @@ void DeviceEditorPanel::resized()
         layoutArp();
     else if (face == Face::Tuner)
         layoutTuner();
+    else if (face == Face::Multiband)
+        layoutMultiband();
     else if (face == Face::Generated)
         layoutGenerated();
     else

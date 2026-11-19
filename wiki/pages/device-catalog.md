@@ -4,7 +4,7 @@ type: component
 summary: The one table of Rhino's devices that the browser, drop targets, rack menu, engine registration and instrument rules all read.
 tags: [rhino, devices, catalog]
 sources: []
-updated: 2026-10-28
+updated: 2026-11-07
 ---
 
 # Device catalog
@@ -21,11 +21,11 @@ As of 2026-10-06 it lists 4OSC, Rhino FM, Rhino Forge (external), Drum Rack, Rhi
 - [Amp](amp.md), [Saturator](saturator.md), [Redux](redux.md) and [Erosion](erosion.md) under a new Distortion category, placed after Utility and before Reverb;
 - [Tuner](tuner.md) under a new Utilities category, after Rhino Vocoder. Utility itself stays under Dynamics.
 
-On 2026-10-28 the Compressor, until then Tracktion's own, gained a factory (`CompressorDevice`) and the type name `rhino.compressor.v1`, keeping its id ([Compressor](compressor.md)).
+On 2026-10-28 the Compressor, until then Tracktion's own, gained a factory (`CompressorDevice`) and the type name `rhino.compressor.v1`, keeping its id ([Compressor](compressor.md)). On 2026-11-07 [Multiband Dynamics](multiband-dynamics.md) (`MultibandDynamics`, `rhino.multiband-dynamics.v1`) joined under Dynamics, between the Compressor and Rhino Duck, with a factory.
 
 ## Readers
 
-The browser's device rows; the drop targets (`deviceFromId` in `native/src/ui/browser/BrowserIds.h`, `deviceFromBrowserDrop` in `native/src/ui/rack/DeviceRack.cpp`); the rack's `+` menu, which leaves out infrastructure and greys an external device until it is found; `Session::addDevice`, which dispatches on `kind`; the instrument rules (`isInstrumentPlugin`, the MIDI-effect skip in `switchTrackInstrument`); `Session::initialiseExternalPlugins`, which scans for every entry flagged `external` by its `pluginName`, `bundle` and `developmentArtefacts`; `defaultMappedIds` in `SessionMappedParameters.cpp`, which reads `rackParameters`; and `registerBuiltInTypes`, called once per engine from `Session`'s constructor, which registers every entry that carries a factory: nine on 2026-10-06, eleven on 2026-10-12, eighteen on 2026-10-27 and nineteen on 2026-10-28. It used to hold a `createBuiltInType<T>()` line per device, a second list to keep in step with the entries (until commit `71842c2`). It runs after Tracktion has registered its own built-ins, which then need no registration and whose names cannot be taken over ([Tracktion refuses a second built-in type under a name it already has](tracktion-refuses-duplicate-built-in-type.md)) and Forge arrives as a VST3 ([Hosting Forge in Rhino](forge-hosting.md)).
+The browser's device rows; the drop targets (`deviceFromId` in `native/src/ui/browser/BrowserIds.h`, `deviceFromBrowserDrop` in `native/src/ui/rack/DeviceRack.cpp`); the rack's `+` menu, which leaves out infrastructure and greys an external device until it is found; `Session::addDevice`, which dispatches on `kind`; the instrument rules (`isInstrumentPlugin`, the MIDI-effect skip in `switchTrackInstrument`); `Session::initialiseExternalPlugins`, which scans for every entry flagged `external` by its `pluginName`, `bundle` and `developmentArtefacts`; `defaultMappedIds` in `SessionMappedParameters.cpp`, which reads `rackParameters`; and `registerBuiltInTypes`, called once per engine from `Session`'s constructor, which registers every entry that carries a factory: nine on 2026-10-06, eleven on 2026-10-12, eighteen on 2026-10-27, nineteen on 2026-10-28 and twenty on 2026-11-07. It used to hold a `createBuiltInType<T>()` line per device, a second list to keep in step with the entries (until commit `71842c2`). It runs after Tracktion has registered its own built-ins, which then need no registration and whose names cannot be taken over ([Tracktion refuses a second built-in type under a name it already has](tracktion-refuses-duplicate-built-in-type.md)) and Forge arrives as a VST3 ([Hosting Forge in Rhino](forge-hosting.md)).
 
 ## Rules
 
@@ -51,3 +51,4 @@ Effects are fully catalog-driven; instruments nearly so. `native/src/model/Sessi
 - [Rhino's build targets](rhino-build-targets.md)
 - [The native device standard](native-device-standard.md)
 - [Compressor](compressor.md)
+- [Multiband Dynamics](multiband-dynamics.md)

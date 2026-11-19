@@ -17,6 +17,7 @@ add_library(RhinoDevices STATIC
     instruments/RhinoFmDevice.cpp
     audio/UtilityDevice.cpp
     audio/CompressorDevice.cpp
+    audio/MultibandDynamicsDevice.cpp
     audio/RhinoSpaceDevice.cpp
     audio/RhinoBloomDevice.cpp
     audio/RhinoEqDevice.cpp

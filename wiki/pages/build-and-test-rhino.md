@@ -4,7 +4,7 @@ type: guide
 summary: Fetch the pinned engine, build with Visual Studio 2022 from the shell or from VS Code's CMake Tools, and run the six CTest cases without being fooled by a stale or locked build.
 tags: [rhino, build, testing, windows, vscode]
 sources: []
-updated: 2026-10-28
+updated: 2026-11-07
 ---
 
 # Build and test Rhino
@@ -104,11 +104,16 @@ run, which carries every DJ scenario, at 114 s on 2026-10-11; what each case cov
   timed out under `ctest` three times at 30.9-31.0 s on an idle machine (CPU about 9%, no other RhinoDAW). Run
   directly with ctest's own command it passed (exit 0) every time, either side of the line: the committed tree in 31.3
   and 27.8 s, the working tree in 28.3, 30.9 and 31.4 s. So it is neither a hang nor that day's change: on this
-  machine, idle, the case now costs about its 30 s.
+  machine, idle, the case now costs about its 30 s. On 2026-11-07 it timed out again before reaching a check newly
+  added to it, its log stopping at the Amp check, with the user's RhinoDAW open; the check, Multiband Dynamics', moved
+  to `--device-test` ([Multiband Dynamics](multiband-dynamics.md)). Without it the case then passed in 29.03 and
+  29.27 s, RhinoDAW still open: under a second of headroom.
 - `native_arrangement_workflow` took about 244 s on 2026-10-28, against its 300 s limit, with or without that
   day's undo changes. The final full run of commit `8d2d883` passed all six cases, this one in 242.9 s and the whole
   suite in 321.7 s. The table's note above puts it at 114 s on 2026-10-11, and runs logged earlier in October took
-  80-114 s. The cause was not looked for. Later the same day, on an idle machine, it took 108-119 s.
+  80-114 s. The cause was not looked for. Later the same day, on an idle machine, it took 108-119 s. On 2026-11-07,
+  with the user's RhinoDAW open, it took 276.15 s, 24 s under the limit, in a run where all six cases passed
+  (pattern workflow 45.06 s, conformance 9.28 s).
 - `native_arrangement_geometry` also runs the layer lint (`tests/LayerLintTest.cpp`, 2026-10-23): it reads every
   source under `native/src/ui` and `native/src/app` and fails, naming file and line, on a line that reaches past
   `Session` into the engine ([Dependency direction](dependency-direction.md#the-views-ask-session-not-the-engine)).

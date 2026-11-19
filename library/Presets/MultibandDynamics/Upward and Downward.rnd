@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<RHINO_PRESET format="1" device="MultibandDynamics">
+  <PARAM id="lowBand" value="1"/>
+  <PARAM id="lowCrossover" value="120"/>
+  <PARAM id="highBand" value="1"/>
+  <PARAM id="highCrossover" value="2500"/>
+  <PARAM id="softKnee" value="1"/>
+  <PARAM id="rms" value="0"/>
+  <PARAM id="output" value="0"/>
+  <PARAM id="time" value="1"/>
+  <PARAM id="amount" value="0.5"/>
+  <PARAM id="lowActive" value="1"/>
+  <PARAM id="lowSolo" value="0"/>
+  <PARAM id="lowInput" value="0"/>
+  <PARAM id="lowOutput" value="6"/>
+  <PARAM id="lowBelowThreshold" value="-42"/>
+  <PARAM id="lowBelowRatio" value="4"/>
+  <PARAM id="lowAboveThreshold" value="-32"/>
+  <PARAM id="lowAboveRatio" value="100"/>
+  <PARAM id="lowAttack" value="50"/>
+  <PARAM id="lowRelease" value="300"/>
+  <PARAM id="midActive" value="1"/>
+  <PARAM id="midSolo" value="0"/>
+  <PARAM id="midInput" value="0"/>
+  <PARAM id="midOutput" value="5"/>
+  <PARAM id="midBelowThreshold" value="-42"/>
+  <PARAM id="midBelowRatio" value="4"/>
+  <PARAM id="midAboveThreshold" value="-32"/>
+  <PARAM id="midAboveRatio" value="100"/>
+  <PARAM id="midAttack" value="10"/>
+  <PARAM id="midRelease" value="200"/>
+  <PARAM id="highActive" value="1"/>
+  <PARAM id="highSolo" value="0"/>
+  <PARAM id="highInput" value="0"/>
+  <PARAM id="highOutput" value="6"/>
+  <PARAM id="highBelowThreshold" value="-42"/>
+  <PARAM id="highBelowRatio" value="4"/>
+  <PARAM id="highAboveThreshold" value="-32"/>
+  <PARAM id="highAboveRatio" value="100"/>
+  <PARAM id="highAttack" value="5"/>
+  <PARAM id="highRelease" value="100"/>
+</RHINO_PRESET>

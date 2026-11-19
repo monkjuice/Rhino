@@ -28,6 +28,7 @@ add_library(RhinoCore STATIC
     dsp/ReduxEngine.cpp
     dsp/ErosionEngine.cpp
     dsp/TunerEngine.cpp
+    dsp/MultibandDynamicsEngine.cpp
     dj/DjAnalysis.cpp
     dj/DjReleaseQueue.cpp
     dj/DjTrackPort.cpp

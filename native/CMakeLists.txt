@@ -148,6 +148,8 @@ target_sources(RhinoNative PRIVATE
     src/ui/rack/DeviceEditorPanelEq.cpp
     src/ui/rack/DeviceEditorPanelVocoder.cpp
     src/ui/rack/DeviceEditorPanelTuner.cpp
+    src/ui/rack/DeviceEditorPanelMultiband.cpp
+    src/ui/rack/DeviceEditorPanelMultibandGestures.cpp
     src/ui/rack/DeviceEditorPanelSidechain.cpp
     src/ui/rack/DeviceEditorPanelCompressor.cpp
     src/ui/rack/DeviceEditorPanelGenerated.cpp
@@ -194,6 +196,7 @@ target_sources(RhinoNative PRIVATE
     src/tests/DriveDevicesTest.cpp
     src/tests/AmpTest.cpp
     src/tests/TunerTest.cpp
+    src/tests/MultibandDynamicsTest.cpp
     src/tests/DeviceFacesTest.cpp
     src/tests/CompressorMeterTest.cpp
     src/tests/FmTest.cpp

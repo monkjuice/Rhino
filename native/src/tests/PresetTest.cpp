@@ -78,8 +78,9 @@ void checkFactoryPresets(Session& session)
         }
         devices.insert(preset.deviceId);
     }
-    require(devices == std::set<juce::String> { "RhinoArp", "RhinoFM", "RhinoSpace" },
-            "the library has presets for Rhino Arp, Rhino FM and Rhino Space, found " + juce::String(count));
+    require(devices == std::set<juce::String> { "MultibandDynamics", "RhinoArp", "RhinoFM", "RhinoSpace" },
+            "the library has presets for Multiband Dynamics, Rhino Arp, Rhino FM and Rhino Space, found "
+                + juce::String(count));
 }
 
 te::Plugin* deviceOn(Session& session, int track, const juce::String& deviceId, int* slot = nullptr)

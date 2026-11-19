@@ -14,9 +14,16 @@ int placesFor(const ParamSpec& spec)
     return span <= 2.0f ? 2 : span <= 20.0f ? 1 : 0;
 }
 
+// A reading with this many decimal places. juce::String given none prints
+// every decimal the float has, not none, so a whole number is rounded here.
+juce::String placed(float value, int places)
+{
+    return places > 0 ? juce::String(value, places) : juce::String(juce::roundToInt(value));
+}
+
 juce::String signedText(float value, int places)
 {
-    return (value > 0.0f ? "+" : "") + juce::String(value, places);
+    return (value > 0.0f ? "+" : "") + placed(value, places);
 }
 }
 
@@ -45,7 +52,7 @@ juce::String ParamSpec::text(float value) const
         case ParamUnit::decibels:
             return juce::String(value, 1) + " dB";
         case ParamUnit::hertz:
-            return value < 1000.0f ? juce::String(value, value < 100.0f ? 1 : 0) + " Hz"
+            return value < 1000.0f ? placed(value, value < 100.0f ? 1 : 0) + " Hz"
                                    : juce::String(value / 1000.0f, 2) + " kHz";
         case ParamUnit::seconds:
             return value < 1.0f ? juce::String(juce::roundToInt(value * 1000.0f)) + " ms"
@@ -60,7 +67,7 @@ juce::String ParamSpec::text(float value) const
         case ParamUnit::none:
             break;
     }
-    return juce::String(value, placesFor(*this));
+    return placed(value, placesFor(*this));
 }
 
 float ParamSpec::parse(const juce::String& reading) const

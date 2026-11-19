@@ -4,12 +4,12 @@ type: component
 summary: Every device Rhino ships, what each one is and where its source lives, with Utility's details and the pitfalls the devices share.
 tags: [rhino, devices, dsp]
 sources: []
-updated: 2026-10-28
+updated: 2026-11-07
 ---
 
 # Built-in devices
 
-Every device in the [Device catalog](device-catalog.md) on 2026-10-28. Rhino's own live under `native/src/devices/`, with their DSP under `native/src/core/dsp/`; three come from Tracktion as they are, and the Compressor is Tracktion's with a meter added.
+Every device in the [Device catalog](device-catalog.md) on 2026-11-07. Rhino's own live under `native/src/devices/`, with their DSP under `native/src/core/dsp/`; three come from Tracktion as they are, and the Compressor is Tracktion's with a meter added.
 
 | Device | Kind | Source | What it is |
 | --- | --- | --- | --- |
@@ -20,6 +20,7 @@ Every device in the [Device catalog](device-catalog.md) on 2026-10-28. Rhino's o
 | Rhino EQ | audio FX | `audio/RhinoEqDevice.*` | [Rhino EQ](rhino-eq.md) |
 | Compressor | audio FX | `audio/CompressorDevice.*` over Tracktion's `te::CompressorPlugin` | [Compressor](compressor.md): Tracktion's sound plus a gain reduction meter, since 2026-10-28; takes a sidechain from the rack's strip, which also switches on its `useSidechainTrigger` ([Sidechains](sidechains.md)) |
 | Reverb, Delay | audio FX | Tracktion built-ins | |
+| Multiband Dynamics | audio FX | `audio/MultibandDynamicsDevice.*` | [Multiband Dynamics](multiband-dynamics.md): Live's three-band compressor and expander, since 2026-11-07 |
 | Rhino Duck | audio FX | external VST3, `effects/rhino-duck/` | [Rhino Duck](rhino-duck.md), the second external entry, since 2026-10-26 |
 | Utility | audio FX | `audio/UtilityDevice.*` | Gain trim inside every track's chain |
 | Amp | audio FX | `audio/AmpDevice.*` | [Amp](amp.md): Live's seven guitar amps on one valve circuit, at 4x |
@@ -39,7 +40,7 @@ The two DJ ends are hand-written on `te::Plugin`, flagged `infrastructure` like 
 
 Rhino Wave, the first built-in synth (a morphing wavetable instrument), was removed on 2026-10-05. Rhino FM replaced it the same day, as a catalog entry with no special case in `Session`.
 
-Utility, Rhino Space, Rhino FM, the Drum Rack and, since 2026-10-27, Amp, Saturator, Redux, Erosion and Tuner are written on the device SDK, the Compressor subclasses `te::CompressorPlugin`, and the rest are hand-written on `te::Plugin` ([The native device standard](native-device-standard.md)). Every device with a catalog factory is held to the same checks by `--device-test`, the five new ones with nothing pending, and since 2026-10-28 the Compressor too.
+Utility, Rhino Space, Rhino FM, the Drum Rack, since 2026-10-27 Amp, Saturator, Redux, Erosion and Tuner, and since 2026-11-07 Multiband Dynamics are written on the device SDK, the Compressor subclasses `te::CompressorPlugin`, and the rest are hand-written on `te::Plugin` ([The native device standard](native-device-standard.md)). Every device with a catalog factory is held to the same checks by `--device-test`, the six newest with nothing pending, and since 2026-10-28 the Compressor too.
 
 The five of 2026-10-27 are Live 12's devices of the same names, built from the Live 12 manual at the user's request. Their DSP is plain C++ in RhinoCore, and nothing in `Session` or the UI names any of them except the Tuner's hand-built face. Amp and Saturator oversample through the shared [Oversampler](oversampler.md) and report 37 samples of latency, Erosion reports 6 at 48 kHz, and Redux and Tuner report none. Adding them pushed track 0's chain in `--self-test` past Tracktion's default of sixteen plugins per track ([Tracktion refuses a track's seventeenth plugin without a word](tracktion-plugin-limit-per-track.md)).
 
@@ -75,5 +76,5 @@ The two pitfalls listed here on 2026-10-03 are gone: Utility is no longer browsa
 - [Device chain order](device-chain-order.md)
 - [Content is files, never compiled in](content-is-files.md)
 - [Real-time audio rules](real-time-audio-rules.md)
-- [Amp](amp.md), [Saturator](saturator.md), [Redux](redux.md), [Erosion](erosion.md), [Tuner](tuner.md), [Compressor](compressor.md)
+- [Amp](amp.md), [Saturator](saturator.md), [Redux](redux.md), [Erosion](erosion.md), [Tuner](tuner.md), [Compressor](compressor.md), [Multiband Dynamics](multiband-dynamics.md)
 - [Tracktion refuses a track's seventeenth plugin without a word](tracktion-plugin-limit-per-track.md)

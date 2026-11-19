@@ -485,6 +485,11 @@ void DeviceEditorPanel::timerCallback()
         tickTuner();
         return;
     }
+    if (face == Face::Multiband)
+    {
+        tickMultiband();
+        return;
+    }
     if (reductionMetered)
     {
         tickReductionMeter();

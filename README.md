@@ -19,6 +19,8 @@ Rhino is a native desktop DAW built for electronic music, sound design, and fast
 
 It is written in C++20 with [JUCE](https://juce.com/) and [Tracktion Engine](https://github.com/Tracktion/tracktion_engine), with immediate pointer response and smooth visual feedback treated as core features—not finishing touches.
 
+Rhino is cross-platform: one codebase serves both Windows and macOS. Windows is where you can build and run it today; the code is kept portable to macOS throughout, and macOS joins Windows with installers at the first production release.
+
 ![Rhino's arrangement workspace with four color-coded audio and MIDI tracks, the browser, transport, and timeline](docs/images/rhino-workspace.png)
 
 <p align="center"><sub>The arrangement keeps tracks, browser, transport, and editing tools in one focused workspace.</sub></p>

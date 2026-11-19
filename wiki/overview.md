@@ -4,7 +4,7 @@ type: overview
 summary: "Rhino and Rhino Forge at a glance: what they are, how they are built and where to start reading."
 tags: [overview, rhino, forge]
 sources: []
-updated: 2026-10-26
+updated: 2026-11-19
 ---
 
 # Rhino and Rhino Forge
@@ -99,3 +99,4 @@ The full catalog is [index.md](index.md).
 | 2026-10-18/19 | Forge gains a [preset browser and bank](pages/forge-preset-browser.md), a factory set of 18 presets, and [import of Serum 2 and Vital presets](pages/forge-preset-import.md) |
 | 2026-10-26 | [Rhino Duck](pages/rhino-duck.md), a sidechain ducking VST3 under `effects/rhino-duck/`, and the [device catalog](pages/device-catalog.md) describing every external plugin by its entry, Duck the second |
 | 2026-10-27 | Five audio effects after Live 12's, on the device SDK: [Amp](pages/amp.md), [Saturator](pages/saturator.md), [Redux](pages/redux.md), [Erosion](pages/erosion.md) and [Tuner](pages/tuner.md); Tracktion's [16-plugin track cap](pages/tracktion-plugin-limit-per-track.md) raised to 128 |
+| 2026-11-19 | Relicensed from proprietary to the [GNU AGPL v3 or later](pages/agpl-licence.md), the licence the pinned JUCE and Tracktion already impose on a distributed build |

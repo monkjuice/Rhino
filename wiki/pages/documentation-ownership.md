@@ -4,7 +4,7 @@ type: convention
 summary: READMEs introduce and build the products; the wiki is the canonical home for engineering detail, decisions and gotchas.
 tags: [docs, readme, wiki, convention]
 sources: []
-updated: 2026-10-03
+updated: 2026-11-19
 ---
 
 # Documentation ownership
@@ -21,11 +21,16 @@ long-form documentation layer beside the wiki.
 Focused documents remain beside the thing they describe when that proximity is useful: test-runner READMEs, asset and
 font provenance, and the research record. Code remains the source of truth when any documentation disagrees with it.
 
+Licensing lives in three root files since 2026-11-19: `LICENSE` (the AGPL's text verbatim, nothing added), the
+README's *Licence* section (copyright and scope) and `THIRD_PARTY_NOTICES.md` (everything that keeps its own licence).
+See [Rhino is licensed under the AGPL v3 or later](agpl-licence.md).
+
 ## Release-stage wording
 
 The products are in mid-alpha. Windows is the currently documented and validated source-build path; macOS portability
 is preserved but remains unvalidated. Production installers for Windows and macOS are targeted for December
-2026-January 2027, so setup docs must not imply that installers exist before then.
+2026-January 2027, so setup docs must not imply that installers exist before then. Under the AGPL every installer
+must come with its source or an offer of it.
 
 ## Related
 

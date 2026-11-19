@@ -1656,3 +1656,13 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: index.md (Multiband Dynamics' summary; Gotchas: juce::String with no decimal places)
 - follow-up the same day, checked against native/src/devices/sdk/NativeParameter.cpp (`placed`) and tests/DeviceConformance.cpp (the 523 Hz and 43 probe): the SDK's Hz, unitless and signed readings now round, so juce-string-zero-decimals-prints-all.md (summary), multiband-dynamics.md (the crossovers fixed) and native-device-standard.md (the SDK fix) were updated, and index.md's summary with them; AudioClipPanel's secondsText and the Vocoder's attack are still open. The block-travel code comment now agrees with the wiki
 - follow-up, the face split into DeviceEditorPanelMultiband.cpp and DeviceEditorPanelMultibandGestures.cpp over DeviceEditorPanelMultibandInternal.h (checked against the three files): device-rack.md's Multiband bullet names the two units and the private header, and says getTooltip asks multibandTooltip for its text; nothing else in wiki/ described the face as one file
+
+## [2026-11-19] update | Rhino relicensed under the AGPL v3 or later (294207c)
+- source: the main agent's brief, checked against LICENSE, README.md (Licence), THIRD_PARTY_NOTICES.md, the files beside library/Samples/* and research/sources/lmms/
+- created: pages/agpl-licence.md (the three root files, why the AGPL, the CLA that dual licensing needs and that does not exist, the notices, what is still open: Cumbia and HandClap provenance, VinylDrums redistribution, the LMMS snapshot's COPYING, the installers' source offer)
+- updated: pages/proprietary-licence.md (marked superseded, kept for history; summary, tags; its third-party list moved to the new page; no delete tool, so superseded rather than renamed)
+- updated: pages/tracktion-and-juce.md (the engine's licences decided Rhino's own; Related link)
+- updated: pages/content-library.md (rule: record a pack's provenance; two packs have none)
+- updated: pages/documentation-ownership.md (the three licensing files; installers must offer source)
+- updated: overview.md (history row)
+- updated: index.md (Decisions: the new page; the proprietary page's summary)

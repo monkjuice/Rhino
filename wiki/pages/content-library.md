@@ -4,7 +4,7 @@ type: component
 summary: Samples, device presets, drum kits and drum presets live as files under library/, found at runtime by ContentLibrary, audio stored with Git LFS, nothing compiled in.
 tags: [rhino, library, content]
 sources: []
-updated: 2026-10-13
+updated: 2026-11-19
 ---
 
 # Content library
@@ -43,6 +43,7 @@ Every sample carries a `drumType`, one of `drumTypes()` (Kick, Snare, Clap, Hat,
 - **Read off the audio thread, and survive absence.** Content is data on disk and can be missing; `ContentLibrary::file` returns a non-existent `File` then. The Drum Rack reads a pad's sample on the message thread when the pad changes. A missing file logs `drum sample missing` and leaves that pad silent. A file that is present but will not decode, which is what a Git LFS pointer that was never pulled looks like, logs `drum sample unreadable` (commit `492cc8b`). `--self-test` logs how long the 808 Kit's eight samples take to read onto their pads: about 3 ms warm on 2026-10-06, 5.3-6.3 ms warm and 51.6 ms cold on 2026-10-07 once the rack had 768 controls ([Drum Rack](drum-rack.md), [Real-time audio rules](real-time-audio-rules.md)).
 - **The browser mirrors the scan.** `--self-test` asserts that the Samples section's rows equal `ContentLibrary::samples().size()`, which also holds with no library present.
 - **An installed build needs `Library` beside the executable**; no build step or script copies it there yet (as of 2026-10-03).
+- **Record a pack's provenance.** Samples are not covered by Rhino's AGPL: each pack carries its `SOURCE.md` and any licence file beside the audio and a line in `THIRD_PARTY_NOTICES.md`. As of 2026-11-19 only `TR808` and `VinylDrums` do; `Cumbia` and `HandClap` have neither, so their redistribution rights are unrecorded ([Rhino is licensed under the AGPL v3 or later](agpl-licence.md)).
 
 ## Related
 
@@ -54,3 +55,4 @@ Every sample carries a `drumType`, one of `drumTypes()` (Kick, Snare, Clap, Hat,
 - [Pattern presets](pattern-presets.md)
 - [Device presets (.rnd)](device-presets.md)
 - [Drum Rack](drum-rack.md)
+- [Rhino is licensed under the AGPL v3 or later](agpl-licence.md)

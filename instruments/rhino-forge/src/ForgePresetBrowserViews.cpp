@@ -508,7 +508,7 @@ void PresetBrowser::PresetTable::mouseDown(const juce::MouseEvent& event)
 {
     grabKeyboardFocus();
     dragStarted = false;
-    pressed = {};
+    pressed = juce::File {};
     // A click on a title sorts by it.
     if (event.y < 4 + headerHeight)
     {
@@ -555,7 +555,7 @@ void PresetBrowser::PresetTable::mouseUp(const juce::MouseEvent& event)
         browser.dropAt(browser.getLocalPoint(this, event.getPosition()));
     }
     dragStarted = false;
-    pressed = {};
+    pressed = juce::File {};
 }
 
 void PresetBrowser::PresetTable::mouseDoubleClick(const juce::MouseEvent& event)

@@ -120,7 +120,7 @@ PresetBrowser::PresetBrowser(Processor& p) : processor(p)
     initButton.onClick = [this]
     {
         processor.initialisePatch();
-        highlighted = {};
+        highlighted = juce::File {};
         info->refresh();
         table->repaint();
         if (onPresetLoaded) onPresetLoaded(juce::Result::ok(), {});
@@ -479,7 +479,7 @@ juce::String PresetBrowser::folderCaption(const juce::File& folder) const
 void PresetBrowser::showSaveForm(bool show)
 {
     saving = show;
-    confirmReplace = {};
+    confirmReplace = juce::File {};
     saveButton.setButtonText("SAVE");
     if (show)
     {
@@ -589,7 +589,7 @@ void PresetBrowser::commitRename()
 {
     if (renaming == juce::File {}) return;
     const auto from = renaming;
-    renaming = {};
+    renaming = juce::File {};
     renameField.setVisible(false);
     juce::File renamed;
     const auto result = presetBank::rename(from, renameField.getText(), renamed);
@@ -599,7 +599,7 @@ void PresetBrowser::commitRename()
 
 void PresetBrowser::cancelRename()
 {
-    renaming = {};
+    renaming = juce::File {};
     renameField.setVisible(false);
 }
 
@@ -842,7 +842,7 @@ void PresetBrowser::dropAt(juce::Point<int> at)
     const auto row = dropRow;
     const auto preset = dragging;
     dropRow = -1;
-    dragging = {};
+    dragging = juce::File {};
     folders->repaint();
     if (row >= 0 && preset != juce::File {}) movePreset(preset, folderRows[static_cast<size_t>(row)].folder);
 }
@@ -875,7 +875,7 @@ void PresetBrowser::textEditorTextChanged(juce::TextEditor& editor)
     if (&editor == &search) refilter();
     if (&editor == &nameField && confirmReplace != juce::File {})
     {
-        confirmReplace = {};
+        confirmReplace = juce::File {};
         saveButton.setButtonText("SAVE");
     }
 }

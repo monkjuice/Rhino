@@ -389,7 +389,7 @@ void Processor::setStateInformation(const void* data, int size)
             applySavedState(juce::ValueTree::fromXml(*xml));
             // The project knows which patch this is by its name, which came
             // with the tree; it does not know which file, if any, it was.
-            currentPresetFile = {};
+            currentPresetFile = juce::File {};
         }
 }
 
@@ -534,7 +534,7 @@ void Processor::presetFileMoved(const juce::File& from, const juce::File& to)
 void Processor::initialisePatch()
 {
     applySavedState(juce::ValueTree(state.state.getType()));
-    currentPresetFile = {};
+    currentPresetFile = juce::File {};
 }
 
 // Reconcile a preset of any supported version with the parameters that exist

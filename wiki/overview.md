@@ -4,7 +4,7 @@ type: overview
 summary: "Rhino and Rhino Forge at a glance: what they are, how they are built and where to start reading."
 tags: [overview, rhino, forge]
 sources: []
-updated: 2026-11-19
+updated: 2026-11-20
 ---
 
 # Rhino and Rhino Forge
@@ -23,7 +23,8 @@ This repository holds three products.
   finds their development builds without a copy step ([Hosting Forge in Rhino](pages/forge-hosting.md)).
 
 All three are in mid-alpha. Source builds are supported on Windows; production installers for Windows and macOS
-are targeted for December 2026-January 2027. Ableton Live is the reference for Rhino's workflow vocabulary, as Serum
+are targeted for December 2026-January 2027. Since 2026-11-20 CI also builds Forge for macOS (app, VST3 and AU) into
+an ad hoc signed test package ([Forge's macOS build and installer](pages/forge-macos-build.md)). Ableton Live is the reference for Rhino's workflow vocabulary, as Serum
 is for Forge's.
 
 ## Repository layout
@@ -100,3 +101,4 @@ The full catalog is [index.md](index.md).
 | 2026-10-26 | [Rhino Duck](pages/rhino-duck.md), a sidechain ducking VST3 under `effects/rhino-duck/`, and the [device catalog](pages/device-catalog.md) describing every external plugin by its entry, Duck the second |
 | 2026-10-27 | Five audio effects after Live 12's, on the device SDK: [Amp](pages/amp.md), [Saturator](pages/saturator.md), [Redux](pages/redux.md), [Erosion](pages/erosion.md) and [Tuner](pages/tuner.md); Tracktion's [16-plugin track cap](pages/tracktion-plugin-limit-per-track.md) raised to 128 |
 | 2026-11-19 | Relicensed from proprietary to the [GNU AGPL v3 or later](pages/agpl-licence.md), the licence the pinned JUCE and Tracktion already impose on a distributed build |
+| 2026-11-20 | Forge built for macOS on a GitHub-hosted runner and packed into an installer ([Forge's macOS build and installer](pages/forge-macos-build.md)) |

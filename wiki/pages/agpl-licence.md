@@ -4,7 +4,7 @@ type: decision
 summary: Since commit 294207c (2026-11-19) the repository - the DAW, Forge and Duck - is under the GNU AGPL v3 or later, because the pinned JUCE (AGPLv3 or commercial) and Tracktion (GPLv3+ or commercial) already bind any distributed build to it; third-party work is listed in THIRD_PARTY_NOTICES.md, a commercial licence beside the AGPL stays possible only if outside contributions come under a CLA (none exists yet), and the VinylDrums pack's redistribution terms and the installers' source offer are still open.
 tags: [both, licence, repository]
 sources: []
-updated: 2026-11-19
+updated: 2026-11-20
 ---
 
 # Rhino is licensed under the AGPL v3 or later
@@ -31,7 +31,7 @@ Commit `294207c` (2026-11-19) replaced the proprietary `LICENSE` of `ce97dd7` ([
 
 - VinylDrums is published "royalty free"; whether that permits redistributing the samples themselves is unchecked.
 - The `research/sources/lmms` snapshot has no `COPYING` file of its own.
-- The AGPL requires every distributed binary to come with its source or an offer of it. The release installers, targeted for December 2026-January 2027 ([Documentation ownership](documentation-ownership.md)), must do so.
+- The AGPL requires every distributed binary to come with its source or an offer of it. The release installers, targeted for December 2026-January 2027 ([Documentation ownership](documentation-ownership.md)), must do so. The Forge `.pkg` that CI has built and published as a run artifact since 2026-11-20 carries neither the licence text nor a source offer yet ([Forge's macOS build and installer](forge-macos-build.md)).
 
 Not legal advice: this records the licence files as of `294207c`.
 

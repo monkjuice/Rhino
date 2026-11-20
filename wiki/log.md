@@ -1672,3 +1672,16 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/agpl-licence.md (summary; the notices paragraph; the two packs dropped from Still open)
 - updated: pages/content-library.md (the provenance rule now says what each pack is under)
 - updated: index.md (the AGPL page's summary)
+
+## [2026-11-20] update | Forge built for macOS in CI and packed into an installer (1672601, f23ae56, 22c7b03)
+- source: the main agent's brief, checked against .github/workflows/forge-macos.yml, instruments/rhino-forge/packaging/macos/build-pkg.sh and scripts/postinstall, instruments/rhino-forge/CMakeLists.txt and src/ForgePresetBank.cpp; the first macos-15 run's result is pending, so the new page leaves "verified" open
+- created: pages/forge-macos-build.md (why CI, the workflow, errors as one annotation readable without signing in, the package script, ad hoc signing and Gatekeeper, relocation off for the shared bundle id, the postinstall, no source offer, macos-14 retired)
+- updated: pages/forge-preset-browser.md (factorySourceFor: the factory set from a bundle's Contents/Resources/Factory; the bankSuite check and its case-insensitive false match)
+- updated: pages/build-and-test-forge.md (a macOS section; summary, tags)
+- updated: pages/forge.md (AU on macOS; status bullet; summary)
+- updated: pages/build-and-test-rhino.md (the fetch script sends GITHUB_TOKEN)
+- updated: pages/agpl-licence.md (the CI package carries no licence text or source offer)
+- updated: pages/documentation-ownership.md (the CI package is a test build, not the production installer)
+- updated: pages/buffered-child-breaks-pixel-stability.md (forge_theme still fails by two pixels on 2026-11-20)
+- updated: overview.md (the CI macOS build; history row)
+- updated: index.md (Guides: the new page; summaries of Rhino Forge and Build and test Forge)

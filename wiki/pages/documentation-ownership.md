@@ -4,7 +4,7 @@ type: convention
 summary: READMEs introduce and build the products; the wiki is the canonical home for engineering detail, decisions and gotchas.
 tags: [docs, readme, wiki, convention]
 sources: []
-updated: 2026-11-19
+updated: 2026-11-20
 ---
 
 # Documentation ownership
@@ -30,7 +30,9 @@ See [Rhino is licensed under the AGPL v3 or later](agpl-licence.md).
 The products are in mid-alpha. Windows is the currently documented and validated source-build path; macOS portability
 is preserved but remains unvalidated. Production installers for Windows and macOS are targeted for December
 2026-January 2027, so setup docs must not imply that installers exist before then. Under the AGPL every installer
-must come with its source or an offer of it.
+must come with its source or an offer of it. The Forge `.pkg` that CI has built since 2026-11-20 is a test build,
+signed ad hoc, not notarized and carrying no source offer, so it is not that installer
+([Forge's macOS build and installer](forge-macos-build.md)).
 
 ## Related
 

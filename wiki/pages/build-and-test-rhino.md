@@ -4,7 +4,7 @@ type: guide
 summary: Fetch the pinned engine, build with Visual Studio 2022 from the shell or from VS Code's CMake Tools, and run the six CTest cases without being fooled by a stale or locked build.
 tags: [rhino, build, testing, windows, vscode]
 sources: []
-updated: 2026-11-07
+updated: 2026-11-20
 ---
 
 # Build and test Rhino
@@ -30,7 +30,9 @@ cmake --build native/build --config Release --parallel 2
 
 1. The fetch script downloads the pinned Tracktion and JUCE revisions into `native/.deps/` and marks each with a
    `.rhino-revision` file. It skips one already at its revision and refuses a folder without the marker. Configure
-   stops with an error until it has run.
+   stops with an error until it has run. When `GITHUB_TOKEN` is set, it sends the token as a bearer token. CI sets it
+   because shared runner addresses use up GitHub's unauthenticated limit of 60 API requests an hour
+   ([Forge's macOS build and installer](forge-macos-build.md)).
 2. Re-run the configure line after any `CMakeLists.txt` edit. `CMAKE_SUPPRESS_REGENERATION ON` means the build never
    reconfigures itself, so a new `.cpp` is silently skipped and the link fails with `LNK2019`
    ([A new source file needs an explicit CMake configure](cmake-does-not-reconfigure.md)). Configure after a merge

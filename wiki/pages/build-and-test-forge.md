@@ -1,10 +1,10 @@
 ---
 title: Build and test Forge
 type: guide
-summary: Configure Forge against the JUCE and zstd checkouts Rhino's script fetches, build around the toolchain's traps, fix /W4 warnings at their source, run one test area at a time, audition or convert any preset from the command line, and time a preset load and the browser with --profile-browser.
-tags: [forge, build, testing, windows, warnings, vscode]
+summary: Configure Forge against the JUCE and zstd checkouts Rhino's script fetches, build around the toolchain's traps (the macOS build runs in CI), fix /W4 warnings at their source, run one test area at a time, audition or convert any preset from the command line, and time a preset load and the browser with --profile-browser.
+tags: [forge, build, testing, windows, macos, warnings, vscode]
 sources: []
-updated: 2026-10-25
+updated: 2026-11-20
 ---
 
 # Build and test Forge
@@ -61,6 +61,13 @@ mid-session. Move the held binary aside first (`Move-Item` it to `Rhino Forge.vs
 `--target RhinoForgeTests RhinoForge_Standalone` and report the VST3 as stale
 ([LNK1104 means a running binary holds the file](locked-executable-lnk1104.md)). Never commit a bundle, and install one
 only after validating it in a host.
+
+## macOS
+
+`FORMATS` is `forge_formats`: VST3 and Standalone, plus AU when `APPLE` is set. Nobody here builds on a Mac. Since
+2026-11-20 a GitHub-hosted `macos-15` runner builds the three universal bundles and packs them into an ad hoc signed
+`Rhino Forge.pkg` ([Forge's macOS build and installer](forge-macos-build.md)). It is configured with the default
+Makefiles generator, so none of the MSBuild flags above apply there.
 
 ## Warnings
 
@@ -149,6 +156,7 @@ ctest --test-dir instruments/rhino-forge/build -C Release -j 8 --output-on-failu
 ## Related
 
 - [Rhino Forge](forge.md)
+- [Forge's macOS build and installer](forge-macos-build.md)
 - [Forge is an independent VST3](forge-is-an-independent-vst3.md)
 - [Driving Forge's standalone on Windows](driving-the-forge-standalone.md)
 - [Seeing the UI without taking the screen](headless-ui-snapshots.md)

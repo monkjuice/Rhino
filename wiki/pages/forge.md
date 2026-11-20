@@ -1,15 +1,15 @@
 ---
 title: Rhino Forge
 type: component
-summary: Rhino's independent wavetable and spectral synth, a VST3 and standalone app built from one JUCE AudioProcessor.
+summary: Rhino's independent wavetable and spectral synth, a VST3 and standalone app (plus an AU on macOS) built from one JUCE AudioProcessor.
 tags: [forge, synth, overview]
 sources: []
-updated: 2026-10-25
+updated: 2026-11-20
 ---
 
 # Rhino Forge
 
-Forge is the polyphonic synth under `instruments/rhino-forge/`. One JUCE `AudioProcessor` (`src/ForgeProcessor.*`) builds both a VST3 and a standalone app. Forge owns no Tracktion or Rhino types, and Rhino hosts it as an external VST3 ([Forge is an independent VST3](forge-is-an-independent-vst3.md)). Its CMake project takes JUCE from Rhino's pinned checkout through `RHINO_JUCE_DIR` (default `native/.deps/juce`), so Rhino's dependencies must be fetched first. It was scaffolded on 2026-09-13, under the project's earlier name, Theta.
+Forge is the polyphonic synth under `instruments/rhino-forge/`. One JUCE `AudioProcessor` (`src/ForgeProcessor.*`) builds both a VST3 and a standalone app, and on macOS an AU as well ([Forge's macOS build and installer](forge-macos-build.md)). Forge owns no Tracktion or Rhino types, and Rhino hosts it as an external VST3 ([Forge is an independent VST3](forge-is-an-independent-vst3.md)). Its CMake project takes JUCE from Rhino's pinned checkout through `RHINO_JUCE_DIR` (default `native/.deps/juce`), so Rhino's dependencies must be fetched first. It was scaffolded on 2026-09-13, under the project's earlier name, Theta.
 
 ## The panel
 
@@ -62,6 +62,7 @@ As of 2026-10-25:
 - **Done on 2026-10-22:** M15, a second filter, in parallel or in series with the first ([Forge filter](forge-filter.md)). The importers do not fill it yet.
 - **Done on 2026-10-23:** a Drum n Bass folder in the factory set, eleven growls, leads and subs, 29 presets in all ([Writing Forge factory presets](writing-forge-factory-presets.md)).
 - **Done on 2026-10-25** (session rhino-62, commit `ad945e1`): the preset browser made fast after the user reported it slow, measured by the new `--profile-browser`. A load no longer rebuilds untouched tables or walks the tree per parameter and lays the rack out once ([Forge presets and state](forge-presets-and-state.md#one-way-a-patch-arrives)); the browser lists on a thread from a kept scan and caches its chrome ([Forge preset browser and bank](forge-preset-browser.md#listing-on-a-thread)); the editor's tick repaints only its live regions ([Forge's tick repaints its live regions at 24 Hz](forge-panel-repaint-cost.md)); and `src/ForgeProcessor.h` includes nothing under `ui/` ([Forge's Processor includes nothing under ui/](forge-processor-includes-no-ui.md)).
+- **Done on 2026-11-20:** a macOS build in CI. A GitHub-hosted runner builds the universal app, VST3 and AU and packs them into an ad hoc signed, unnotarized `.pkg` that carries the factory set inside each bundle ([Forge's macOS build and installer](forge-macos-build.md)). The first run on `macos-15` was not yet verified at the time of writing.
 - **Not started:**
   - M13c, the pattern editor.
   - M14c, sample noise sources.
@@ -80,5 +81,6 @@ Until commit `f2a972e` Forge could freeze its host when its DLL unloaded after i
 - [Forge's Processor includes nothing under ui/](forge-processor-includes-no-ui.md)
 - [Forge presets and state](forge-presets-and-state.md)
 - [Build and test Forge](build-and-test-forge.md)
+- [Forge's macOS build and installer](forge-macos-build.md)
 - [Hosting Forge in Rhino](forge-hosting.md)
 - [A plugin's static Direct2D images deadlock NVIDIA's driver at unload](plugin-static-images-deadlock-on-unload.md)

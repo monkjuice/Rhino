@@ -90,7 +90,11 @@ void setRootForTests(const juce::File&);
 void setLibraryRootsForTests(const juce::Array<juce::File>& serumAndVital);
 
 // The factory set as it ships: presets/Factory in the source tree, found upward
-// from the binary as the tables are. Nothing in a build with no source tree.
+// from the binary as the tables are, or else Factory in the Resources folder of
+// the bundle the binary is in, which is where an installed build carries it
+// (packaging/macos/build-pkg.sh). Nothing when neither is there.
+juce::File factorySourceFor(const juce::File& binary);
+// factorySourceFor this binary: the plugin's own file in a plugin.
 juce::File factorySource();
 inline constexpr const char* factoryFolderName = "Factory";
 

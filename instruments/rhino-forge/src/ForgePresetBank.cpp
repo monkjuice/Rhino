@@ -292,11 +292,19 @@ void setLibraryRootsForTests(const juce::Array<juce::File>& folders)
     libraryOverridden() = !folders.isEmpty();
 }
 
+juce::File factorySourceFor(const juce::File& binary)
+{
+    const auto above = sourceFolderAbove(binary, juce::String("presets/") + factoryFolderName);
+    if (above != juce::File {}) return above;
+    // A bundle's binary sits in a folder of Contents (MacOS, or x86_64-win in a
+    // Windows VST3), and Resources is that folder's sibling.
+    const auto carried = binary.getParentDirectory().getSiblingFile("Resources").getChildFile(factoryFolderName);
+    return carried.isDirectory() ? carried : juce::File {};
+}
+
 juce::File factorySource()
 {
-    const auto found = sourceFolderAbove(juce::File::getSpecialLocation(juce::File::currentExecutableFile),
-                                         juce::String("presets/") + factoryFolderName);
-    return found;
+    return factorySourceFor(juce::File::getSpecialLocation(juce::File::currentExecutableFile));
 }
 
 int restoreFactory()

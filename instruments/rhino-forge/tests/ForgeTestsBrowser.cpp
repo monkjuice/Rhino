@@ -105,6 +105,22 @@ void bankSuite()
                 "a new bank is given the factory set");
     require(presetBank::restoreFactory() == 0, "restoring a complete factory set copies nothing");
 
+    // An installed build has no source tree above it and carries the set in its
+    // bundle's Resources instead, which is all that fills a new bank on a
+    // machine that never had the source. The bundle gets a folder of its own:
+    // beside the scratch bank, the walk upward would find the bank's own
+    // Presets/Factory, the disk being case-insensitive.
+    const auto installed = juce::File::getSpecialLocation(juce::File::tempDirectory)
+        .getNonexistentChildFile("rhino-forge-installed-test", {}, true);
+    const auto contents = installed.getChildFile("Rhino Forge.vst3").getChildFile("Contents");
+    const auto binary = contents.getChildFile("MacOS").getChildFile("Rhino Forge");
+    require(presetBank::factorySourceFor(binary) == juce::File {},
+            "a binary with no source tree above it and nothing in its bundle has no factory set");
+    const auto carried = contents.getChildFile("Resources").getChildFile(presetBank::factoryFolderName);
+    require(carried.createDirectory(), "a bundle's Resources can be made");
+    require(presetBank::factorySourceFor(binary) == carried, "an installed build finds the set in its bundle");
+    installed.deleteRecursively();
+
     Processor processor;
     const auto basses = presetBank::root().getChildFile("Basses");
     juce::File made;

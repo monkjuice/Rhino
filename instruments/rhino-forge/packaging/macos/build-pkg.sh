@@ -47,6 +47,9 @@ place() {
     ditto "$bundle" "$placed"
     mkdir -p "$placed/Contents/Resources"
     ditto "$forge/presets/Factory" "$placed/Contents/Resources/Factory"
+    # codesign refuses a bundle whose files carry extended attributes
+    # ("resource fork, Finder information, or similar detritus").
+    xattr -cr "$placed"
     codesign --force --sign - "$placed"
     codesign --verify --strict "$placed"
     echo "$(basename "$bundle"): $(lipo -archs "$placed/Contents/MacOS/"*)"

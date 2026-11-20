@@ -75,26 +75,11 @@ jobs:
           -- -k
           2>&1 | tee build.log
 
-      # A failed configure or compile is put on the run's page as one
-      # annotation, readable there and through the API without signing in.
-      # clang compiles a universal file once per architecture, so each error
-      # comes twice; the second is dropped.
-      - name: Report errors
-        if: failure()
-        run: |
-          errors=$(cat configure.log build.log 2>/dev/null \
-            | grep -E 'error:|CMake Error' | cut -c1-400 | awk '!seen[$0]++' | head -60 || true)
-          if [[ -n $errors ]]; then
-            errors=${errors//'%'/'%25'}
-            errors=${errors//$'\r'/'%0D'}
-            errors=${errors//$'\n'/'%0A'}
-            echo "::error title=Forge macOS build failed::$errors"
-          fi
-
       - name: Package
-        run: >
-          bash instruments/rhino-forge/packaging/macos/build-pkg.sh
-          "$BUILD/RhinoForge_artefacts/Release" "$PACKAGE"
+        run: |
+          find "$BUILD/RhinoForge_artefacts" -maxdepth 3 2>&1 | tee package.log
+          bash instruments/rhino-forge/packaging/macos/build-pkg.sh \
+            "$BUILD/RhinoForge_artefacts/Release" "$PACKAGE" 2>&1 | tee -a package.log
 
       - uses: actions/upload-artifact@v4
         with:
@@ -105,8 +90,32 @@ jobs:
 
       - name: Install the package and validate the AU
         run: |
-          sudo installer -pkg "$PACKAGE" -target /
-          ls -d "/Applications/Rhino Forge.app" \
-            "/Library/Audio/Plug-Ins/VST3/Rhino Forge.vst3" \
-            "/Library/Audio/Plug-Ins/Components/Rhino Forge.component/Contents/Resources/Factory"
-          auval -v aumu Frge Rhno
+          {
+            sudo installer -pkg "$PACKAGE" -target /
+            ls -d "/Applications/Rhino Forge.app" \
+              "/Library/Audio/Plug-Ins/VST3/Rhino Forge.vst3" \
+              "/Library/Audio/Plug-Ins/Components/Rhino Forge.component/Contents/Resources/Factory"
+            auval -v aumu Frge Rhno
+          } 2>&1 | tee install.log
+
+      # Whatever failed is put on the run's page as one annotation, readable
+      # there and through the API without signing in, which a run's log is
+      # not: a configure or compile by its error lines (clang compiles a
+      # universal file once per architecture, so the second copy of each is
+      # dropped), packaging and installing by the end of what they printed.
+      - name: Report errors
+        if: failure()
+        run: |
+          errors=$(cat configure.log build.log 2>/dev/null \
+            | grep -E 'error:|CMake Error' | cut -c1-400 | awk '!seen[$0]++' | head -60 || true)
+          for log in package.log install.log; do
+            if [[ -f $log ]]; then
+              errors+=$'\n'"--- end of $log"$'\n'$(tail -n 30 "$log" | cut -c1-400)
+            fi
+          done
+          if [[ -n $errors ]]; then
+            errors=${errors//'%'/'%25'}
+            errors=${errors//$'\r'/'%0D'}
+            errors=${errors//$'\n'/'%0A'}
+            echo "::error title=Forge macOS build failed::$errors"
+          fi

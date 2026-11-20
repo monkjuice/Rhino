@@ -66,19 +66,24 @@ jobs:
           -DBUILD_TESTING=OFF
           2>&1 | tee configure.log
 
+      # make's -k carries on past a file that fails, so one run reports every
+      # file clang refuses rather than the first.
       - name: Build
         run: >
           cmake --build "$BUILD" --parallel 4
           --target RhinoForge_Standalone RhinoForge_VST3 RhinoForge_AU
+          -- -k
           2>&1 | tee build.log
 
       # A failed configure or compile is put on the run's page as one
       # annotation, readable there and through the API without signing in.
+      # clang compiles a universal file once per architecture, so each error
+      # comes twice; the second is dropped.
       - name: Report errors
         if: failure()
         run: |
           errors=$(cat configure.log build.log 2>/dev/null \
-            | grep -E 'error:|CMake Error|Error [0-9]+' | cut -c1-400 | head -40 || true)
+            | grep -E 'error:|CMake Error' | cut -c1-400 | awk '!seen[$0]++' | head -60 || true)
           if [[ -n $errors ]]; then
             errors=${errors//'%'/'%25'}
             errors=${errors//$'\r'/'%0D'}

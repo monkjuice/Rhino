@@ -67,7 +67,9 @@ only after validating it in a host.
 `FORMATS` is `forge_formats`: VST3 and Standalone, plus AU when `APPLE` is set. Nobody here builds on a Mac. Since
 2026-11-20 a GitHub-hosted `macos-15` runner builds the three universal bundles and packs them into an ad hoc signed
 `Rhino Forge.pkg` ([Forge's macOS build and installer](forge-macos-build.md)). It is configured with the default
-Makefiles generator, so none of the MSBuild flags above apply there.
+Makefiles generator, so none of the MSBuild flags above apply there. clang rejects code that MSVC accepts, so a clean
+Windows build says nothing about the Mac. Clear a `juce::File` with `= juce::File {}`, never `= {}`
+([clang refuses `= {}` on a juce::File](juce-file-assign-empty-braces.md)).
 
 ## Warnings
 

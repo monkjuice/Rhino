@@ -1685,3 +1685,30 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/buffered-child-breaks-pixel-stability.md (forge_theme still fails by two pixels on 2026-11-20)
 - updated: overview.md (the CI macOS build; history row)
 - updated: index.md (Guides: the new page; summaries of Rhino Forge and Build and test Forge)
+
+## [2026-11-20] update | Forge's first macOS run failed on clang's ambiguous `file = {}` (547aaec, d9a27af)
+- source: the main agent's addendum (run 44836075420 on 22c7b03), checked against .github/workflows/forge-macos.yml and the ten `= juce::File {};` in instruments/rhino-forge/src; a third run on c9c48f3 is pending, so "verified" stays open
+- created: pages/juce-file-assign-empty-braces.md (why clang calls `file = {}` ambiguous and MSVC does not, the ten sites, the rule, what is unaffected, the other MSVC-only constructs Forge was checked for)
+- updated: pages/forge-macos-build.md (make -k, the deduplicated annotation, the clang and Node 20 gotchas, the run's status; summary)
+- updated: pages/build-and-test-forge.md (macOS section: a Windows build proves nothing for clang; the File rule)
+- updated: pages/forge.md (status bullet)
+- updated: index.md (Gotchas: the new page; the macOS page's summary)
+
+## [2026-11-20] update | Forge compiles on macOS; packaging fails, and every failure now reaches the annotation (afa06f5)
+- source: the main agent's second addendum (run 44836970348 on c9c48f3), checked against .github/workflows/forge-macos.yml and instruments/rhino-forge/packaging/macos/build-pkg.sh; run 4 on afa06f5 is pending, so "verified" stays open and the xattr fix is recorded as unconfirmed
+- updated: pages/forge-macos-build.md (package.log and install.log; Report errors moved last and carrying their tails, with the rule that every failure is readable from the annotation; xattr -cr before codesign, unconfirmed; run 3 in Status; summary)
+- updated: pages/juce-file-assign-empty-braces.md (run 3 compiled every plugin source, so the ten were the only refusals)
+- updated: pages/forge.md (status bullet)
+- updated: index.md (the macOS page's summary)
+
+## [2026-11-20] update | Forge's macOS packaging: pkgbuild writes no BundleIsRelocatable key (3333e60)
+- source: the main agent's third addendum (run 3's Package log read by the user while signed in; run 44837843204 on afa06f5), checked against instruments/rhino-forge/packaging/macos/build-pkg.sh; run 5 on 3333e60 is pending, so "verified" stays open
+- updated: pages/forge-macos-build.md (the xattr bullet removed and recorded in Status as a wrong guess; the relocation bullet now uses plutil -replace and fails when no bundle is found; a gotcha for the missing key; run 3's real cause, run 4 and run 5 in Status; asking a signed-in user for the step log as the fastest diagnosis; summary)
+- updated: index.md (the macOS page's summary)
+
+## [2026-11-20] update | Forge's macOS build verified on the runner (3333e60, c76231d, f17df10)
+- source: the main agent's fourth addendum (run 44838611409 green), checked against .github/workflows/forge-macos.yml (the AU VALIDATION SUCCEEDED grep) and instruments/rhino-forge/README.md (Get Forge on macOS); run 6 on f17df10 is confirming the stricter check, and no real Mac has installed the package yet
+- updated: pages/forge-macos-build.md (Status verified on the runner with run 5's step times, the history condensed, what is still open; the auval success line required; the README section linked for download and install; summary)
+- updated: pages/forge.md (status bullet)
+- updated: pages/documentation-ownership.md (the Forge README's macOS section owns the install instructions)
+- updated: index.md (the macOS page's summary)

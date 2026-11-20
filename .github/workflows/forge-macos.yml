@@ -32,9 +32,9 @@ defaults:
 
 jobs:
   build:
-    # macos-14 for its Xcode 15 and macOS 14 SDK, which the pinned JUCE builds
-    # against.
-    runs-on: macos-14
+    # Named rather than macos-latest, so a new image arrives as a deliberate
+    # change. macos-14 was retired: a run on it is cancelled before it starts.
+    runs-on: macos-15
     timeout-minutes: 90
     env:
       BUILD: instruments/rhino-forge/build

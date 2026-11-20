@@ -63,12 +63,19 @@ function(forge_use_precompiled_header target)
         "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/src/ForgePch.h>")
 endfunction()
 
+# AU as well on macOS, where Logic and GarageBand load nothing else. The Mac
+# build and its installer are .github/workflows/forge-macos.yml.
+set(forge_formats VST3 Standalone)
+if (APPLE)
+    list(APPEND forge_formats AU)
+endif()
+
 juce_add_plugin(RhinoForge
     COMPANY_NAME "Rhino"
     BUNDLE_ID "com.rhino.forge"
     PLUGIN_MANUFACTURER_CODE Rhno
     PLUGIN_CODE Frge
-    FORMATS VST3 Standalone
+    FORMATS ${forge_formats}
     PRODUCT_NAME "Rhino Forge"
     IS_SYNTH TRUE
     ICON_BIG ui/assets/forge_app_icon_512.png

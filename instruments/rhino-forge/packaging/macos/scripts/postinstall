@@ -1,0 +1,19 @@
+#!/bin/bash
+# Runs as root once Rhino Forge.pkg has put its bundles in place.
+#
+# A host refuses a plugin that still carries a download's quarantine flag, and
+# says nothing useful about why, so the flag is cleared from what was installed
+# wherever it came along. xattr fails on a bundle without the flag, which is
+# the usual case, so its failure is not one.
+for installed in \
+    "/Applications/Rhino Forge.app" \
+    "/Library/Audio/Plug-Ins/VST3/Rhino Forge.vst3" \
+    "/Library/Audio/Plug-Ins/Components/Rhino Forge.component"; do
+    xattr -dr com.apple.quarantine "$installed" 2>/dev/null || true
+done
+
+# The AU registrar keeps its own list of Components; restarting it is what makes
+# Logic and GarageBand see a new or replaced AU without a log-out. It is not
+# always running, and then there is nothing to restart.
+killall -9 AudioComponentRegistrar 2>/dev/null || true
+exit 0

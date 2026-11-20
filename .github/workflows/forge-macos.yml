@@ -1,0 +1,107 @@
+name: Forge macOS
+
+# Builds Rhino Forge for macOS - the app, the VST3 and the AU, each universal
+# for Apple Silicon and Intel - and packs them into one installer, kept as the
+# run's artifact. It then installs that package on the runner and has Apple's
+# auval load and play the installed AU, so a run that passes has proved the
+# installer, not only the build. Signed ad hoc only; see
+# instruments/rhino-forge/packaging/macos/build-pkg.sh for what that means for
+# whoever installs it.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'instruments/rhino-forge/**'
+      - 'native/scripts/fetch-dependencies.py'
+      - '.github/workflows/forge-macos.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: forge-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    # An explicit bash runs with pipefail, so a build piped through tee still
+    # fails the step.
+    shell: bash
+
+jobs:
+  build:
+    # macos-14 for its Xcode 15 and macOS 14 SDK, which the pinned JUCE builds
+    # against.
+    runs-on: macos-14
+    timeout-minutes: 90
+    env:
+      BUILD: instruments/rhino-forge/build
+      PACKAGE: Rhino Forge.pkg
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache JUCE and zstd
+        uses: actions/cache@v4
+        with:
+          path: native/.deps
+          key: native-deps-${{ hashFiles('native/scripts/fetch-dependencies.py') }}
+
+      - name: Fetch JUCE and zstd
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python native/scripts/fetch-dependencies.py
+
+      - name: Configure
+        run: >
+          cmake -S instruments/rhino-forge -B "$BUILD"
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+          -DBUILD_TESTING=OFF
+          2>&1 | tee configure.log
+
+      - name: Build
+        run: >
+          cmake --build "$BUILD" --parallel 4
+          --target RhinoForge_Standalone RhinoForge_VST3 RhinoForge_AU
+          2>&1 | tee build.log
+
+      # A failed configure or compile is put on the run's page as one
+      # annotation, readable there and through the API without signing in.
+      - name: Report errors
+        if: failure()
+        run: |
+          errors=$(cat configure.log build.log 2>/dev/null \
+            | grep -E 'error:|CMake Error|Error [0-9]+' | cut -c1-400 | head -40 || true)
+          if [[ -n $errors ]]; then
+            errors=${errors//'%'/'%25'}
+            errors=${errors//$'\r'/'%0D'}
+            errors=${errors//$'\n'/'%0A'}
+            echo "::error title=Forge macOS build failed::$errors"
+          fi
+
+      - name: Package
+        run: >
+          bash instruments/rhino-forge/packaging/macos/build-pkg.sh
+          "$BUILD/RhinoForge_artefacts/Release" "$PACKAGE"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Rhino-Forge-macOS
+          path: ${{ env.PACKAGE }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Install the package and validate the AU
+        run: |
+          sudo installer -pkg "$PACKAGE" -target /
+          ls -d "/Applications/Rhino Forge.app" \
+            "/Library/Audio/Plug-Ins/VST3/Rhino Forge.vst3" \
+            "/Library/Audio/Plug-Ins/Components/Rhino Forge.component/Contents/Resources/Factory"
+          auval -v aumu Frge Rhno

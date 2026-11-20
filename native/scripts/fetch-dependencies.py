@@ -1,5 +1,6 @@
 """Fetch the exact engine and JUCE revisions used by the native evaluation."""
 import io
+import os
 from pathlib import Path
 import tarfile
 import time
@@ -26,9 +27,16 @@ for name, repository, revision in DEPENDENCIES:
     if destination.exists():
         raise SystemExit(f'{destination} exists without the expected revision marker')
     print(f'Fetching {repository} at {revision}', flush=True)
+    headers = {'User-Agent': 'Rhino-native-build'}
+    # GitHub allows an address sixty unauthenticated API requests an hour, and
+    # a CI runner shares its address with many others. A token in the
+    # environment, as a workflow can pass, lifts that; the repositories are
+    # public, so nothing else needs one.
+    if os.environ.get('GITHUB_TOKEN'):
+        headers['Authorization'] = f'Bearer {os.environ["GITHUB_TOKEN"]}'
     request = urllib.request.Request(
         f'https://api.github.com/repos/{repository}/tarball/{revision}',
-        headers={'User-Agent': 'Rhino-native-build'},
+        headers=headers,
     )
     with urllib.request.urlopen(request, timeout=120) as response:
         archive = response.read()

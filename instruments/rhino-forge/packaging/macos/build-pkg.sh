@@ -47,9 +47,6 @@ place() {
     ditto "$bundle" "$placed"
     mkdir -p "$placed/Contents/Resources"
     ditto "$forge/presets/Factory" "$placed/Contents/Resources/Factory"
-    # codesign refuses a bundle whose files carry extended attributes
-    # ("resource fork, Finder information, or similar detritus").
-    xattr -cr "$placed"
     codesign --force --sign - "$placed"
     codesign --verify --strict "$placed"
     echo "$(basename "$bundle"): $(lipo -archs "$placed/Contents/MacOS/"*)"
@@ -61,14 +58,19 @@ place "$artefacts/AU/Rhino Forge.component" /Library/Audio/Plug-Ins/Components
 # Installer relocates a bundle: finding one with the same identifier elsewhere
 # on the disk, it updates that copy instead of installing to the path given.
 # The app and both plugins carry one identifier, so relocation is turned off
-# and every bundle lands where it says.
+# and every bundle lands where it says. The analysis does not always write the
+# key, so it is added rather than changed (plutil -replace does either).
 components=$stage/components.plist
 pkgbuild --analyze --root "$stage/root" "$components"
 index=0
-while /usr/libexec/PlistBuddy -c "Print :$index" "$components" >/dev/null 2>&1; do
-    /usr/libexec/PlistBuddy -c "Set :$index:BundleIsRelocatable false" "$components"
+while plutil -extract "$index" xml1 -o - "$components" >/dev/null 2>&1; do
+    plutil -replace "$index.BundleIsRelocatable" -bool NO "$components"
     index=$((index + 1))
 done
+if [[ $index -eq 0 ]]; then
+    echo "pkgbuild found no bundles under $stage/root" >&2
+    exit 1
+fi
 
 mkdir -p "$stage/scripts"
 cp "$here/scripts/postinstall" "$stage/scripts/postinstall"

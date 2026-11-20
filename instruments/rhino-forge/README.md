@@ -13,7 +13,7 @@
 </p>
 
 > [!IMPORTANT]
-> Rhino Forge is in **mid-alpha**. It currently ships as a source-built Windows VST3 and standalone app. Installers for Windows and macOS are planned with Rhino's first production release, targeted for **December 2026–January 2027**.
+> Rhino Forge is in **mid-alpha**. It currently ships as a source-built Windows VST3 and standalone app, and as an unsigned [macOS test installer](#get-forge-on-macos) built by CI. Signed installers for Windows and macOS are planned with Rhino's first production release, targeted for **December 2026–January 2027**.
 
 Rhino Forge is a polyphonic wavetable and spectral synthesizer built for movement. Three oscillators, a playable noise engine, deep per-voice modulation, flexible mixing, and three effects racks live in one resizable instrument with a fast, direct workflow.
 
@@ -114,6 +114,31 @@ instruments/rhino-forge/build/RhinoForge_artefacts/Release/VST3/Rhino Forge.vst3
 ```
 
 Rhino finds this development bundle automatically. For another host, add its parent folder to the host's VST3 search paths or install the bundle in the standard system VST3 location after testing it.
+
+## Get Forge on macOS
+
+Every push to `main` that touches Forge builds it on a GitHub-hosted Mac ([`.github/workflows/forge-macos.yml`](../../.github/workflows/forge-macos.yml)): the app, the VST3 and an AU, each universal for Apple Silicon and Intel, for macOS 11 or later. They come as one installer, **Rhino Forge.pkg**. Open the latest green run under **Actions → Forge macOS** and download **Rhino-Forge-macOS** at the foot of its page (signed in to GitHub); it is kept for 30 days.
+
+The package installs:
+
+| Format | Installed at |
+| --- | --- |
+| Standalone | `/Applications/Rhino Forge.app` |
+| VST3 | `/Library/Audio/Plug-Ins/VST3/Rhino Forge.vst3` |
+| AU, for Logic and GarageBand | `/Library/Audio/Plug-Ins/Components/Rhino Forge.component` |
+
+It is signed ad hoc, not with an Apple Developer ID, so the first double-click is refused. Open **System Settings → Privacy & Security**, choose **Open Anyway** beside the message about the package, and enter your password. The factory presets come inside the bundles and fill `~/Documents/Rhino Forge/Presets` on first use.
+
+To build the same package on a Mac with Xcode's command-line tools, CMake and Python 3.12:
+
+```sh
+python3 native/scripts/fetch-dependencies.py
+cmake -S instruments/rhino-forge -B instruments/rhino-forge/build -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 -DBUILD_TESTING=OFF
+cmake --build instruments/rhino-forge/build --parallel --target RhinoForge_Standalone RhinoForge_VST3 RhinoForge_AU
+bash instruments/rhino-forge/packaging/macos/build-pkg.sh \
+  instruments/rhino-forge/build/RhinoForge_artefacts/Release "Rhino Forge.pkg"
+```
 
 ## Verify a development build
 

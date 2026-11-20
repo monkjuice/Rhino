@@ -97,6 +97,8 @@ jobs:
               "/Library/Audio/Plug-Ins/Components/Rhino Forge.component/Contents/Resources/Factory"
             auval -v aumu Frge Rhno
           } 2>&1 | tee install.log
+          # Required in so many words, not left to auval's exit status.
+          grep -q 'AU VALIDATION SUCCEEDED' install.log
 
       # Whatever failed is put on the run's page as one annotation, readable
       # there and through the API without signing in, which a run's log is

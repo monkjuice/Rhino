@@ -117,7 +117,11 @@ Rhino finds this development bundle automatically. For another host, add its par
 
 ## Get Forge on macOS
 
-Every push to `main` that touches Forge builds it on a GitHub-hosted Mac ([`.github/workflows/forge-macos.yml`](../../.github/workflows/forge-macos.yml)): the app, the VST3 and an AU, each universal for Apple Silicon and Intel, for macOS 11 or later. They come as one installer, **Rhino Forge.pkg**. Open the latest green run under **Actions → Forge macOS** and download **Rhino-Forge-macOS** at the foot of its page (signed in to GitHub); it is kept for 30 days.
+Every push to `main` that touches Forge builds it on a GitHub-hosted Mac ([`.github/workflows/forge-macos.yml`](../../.github/workflows/forge-macos.yml)): the app, the VST3 and an AU, each universal for Apple Silicon and Intel, for macOS 11 or later. They come as one installer, published as the pre-release [Rhino Forge for macOS (test build)](https://github.com/monkjuice/Rhino/releases/tag/forge-macos-latest), which every green run replaces. Download it directly, no GitHub account needed:
+
+**[Rhino-Forge-macOS.pkg](https://github.com/monkjuice/Rhino/releases/download/forge-macos-latest/Rhino-Forge-macOS.pkg)**
+
+Each run also keeps the package as an artifact for 30 days, under **Actions → Forge macOS**, for anyone signed in to GitHub.
 
 The package installs:
 

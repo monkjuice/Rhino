@@ -7,6 +7,10 @@ name: Forge macOS
 # installer, not only the build. Signed ad hoc only; see
 # instruments/rhino-forge/packaging/macos/build-pkg.sh for what that means for
 # whoever installs it.
+#
+# A run from main that passes also replaces the public pre-release
+# forge-macos-latest with its package, because an artifact downloads only for
+# someone signed in to GitHub and a release asset downloads for anyone.
 
 on:
   push:
@@ -30,6 +34,9 @@ defaults:
     # fails the step.
     shell: bash
 
+env:
+  PACKAGE: Rhino Forge.pkg
+
 jobs:
   build:
     # Named rather than macos-latest, so a new image arrives as a deliberate
@@ -38,7 +45,6 @@ jobs:
     timeout-minutes: 90
     env:
       BUILD: instruments/rhino-forge/build
-      PACKAGE: Rhino Forge.pkg
     steps:
       - uses: actions/checkout@v4
 
@@ -121,3 +127,50 @@ jobs:
             errors=${errors//$'\n'/'%0A'}
             echo "::error title=Forge macOS build failed::$errors"
           fi
+
+  # Its own job so that the write permission it needs is never held by the
+  # build, which runs compilers and third-party code. It runs only after the
+  # build job, so only a package that installed and passed auval is published.
+  publish:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: forge-macos-latest
+      # A release asset's name may not hold a space; GitHub would make it a dot.
+      ASSET: Rhino-Forge-macOS.pkg
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Rhino-Forge-macOS
+
+      # Replaced rather than edited, so the tag moves to the commit built and
+      # the release page always says which one that was. Its address, and the
+      # asset's, stay the same.
+      - name: Replace the test build release
+        run: |
+          mv "$PACKAGE" "$ASSET"
+          short=${GITHUB_SHA:0:7}
+          cat > notes.md <<EOF
+          An unsigned test build of Rhino Forge for macOS 11 or later, universal for Apple Silicon and Intel, built from commit ${short}. It is replaced by every push to \`main\` that changes Forge.
+
+          **${ASSET}** installs the standalone app into Applications and the VST3 and AU into /Library/Audio/Plug-Ins.
+
+          It is not signed with an Apple Developer ID, so macOS refuses it the first time. Open **System Settings → Privacy & Security**, choose **Open Anyway** beside the message about the package, and enter your password.
+
+          Rhino Forge is free software under the GNU AGPL 3.0 or later. Its source is this repository at commit ${GITHUB_SHA}; see [LICENSE](https://github.com/${GH_REPO}/blob/${GITHUB_SHA}/LICENSE), and [THIRD_PARTY_NOTICES.md](https://github.com/${GH_REPO}/blob/${GITHUB_SHA}/THIRD_PARTY_NOTICES.md) for the work it includes under other licences.
+          EOF
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release delete "$TAG" --cleanup-tag --yes
+          fi
+          gh release create "$TAG" "$ASSET" \
+            --prerelease --latest=false \
+            --target "$GITHUB_SHA" \
+            --title "Rhino Forge for macOS (test build)" \
+            --notes-file notes.md
+          echo "::notice title=Published::https://github.com/${GH_REPO}/releases/download/${TAG}/${ASSET}"

@@ -106,6 +106,47 @@ jobs:
           # Required in so many words, not left to auval's exit status.
           grep -q 'AU VALIDATION SUCCEEDED' install.log
 
+      # Opens the installed app and quits it the way a person does, and fails
+      # if macOS wrote a crash report for it - the first thing a real Mac showed
+      # was a crash on every quit - printing the crashed thread. An app that
+      # does not quit is only warned about: a permission prompt nobody can
+      # answer on the runner could be what holds it.
+      - name: Open and quit the app
+        run: |
+          {
+            marker=$(mktemp)
+            open "/Applications/Rhino Forge.app"
+            sleep 15
+            pgrep -x "Rhino Forge" >/dev/null || { echo "the app was not running 15 s after it was opened"; exit 1; }
+            osascript -e 'quit app "Rhino Forge"' || true
+            for _ in $(seq 30); do pgrep -x "Rhino Forge" >/dev/null || break; sleep 1; done
+            if pgrep -x "Rhino Forge" >/dev/null; then
+              echo "::warning title=Rhino Forge did not quit::still running 30 s after it was asked to quit"
+              pkill -9 -x "Rhino Forge" || true
+            fi
+            # ReportCrash writes its report a moment after the process ends.
+            sleep 10
+            reports=$(find ~/Library/Logs/DiagnosticReports -name 'Rhino Forge*' -newer "$marker" 2>/dev/null)
+            if [[ -n $reports ]]; then
+              report=$(echo "$reports" | head -n 1)
+              echo "crashed on quit: $report"
+              python3 - "$report" <<'PY'
+          import json, sys
+          header, body = open(sys.argv[1], encoding='utf-8').read().split('\n', 1)
+          crash = json.loads(body)
+          print(json.dumps(crash.get('exception', {})))
+          images = crash.get('usedImages', [])
+          thread = crash['threads'][crash['faultingThread']]
+          for frame in thread['frames'][:30]:
+              index = frame.get('imageIndex')
+              image = images[index].get('name', '?') if index is not None and index < len(images) else '?'
+              print(image, frame.get('symbol', hex(frame.get('imageOffset', 0))))
+          PY
+              exit 1
+            fi
+            echo "quit cleanly"
+          } 2>&1 | tee quit.log
+
       # Whatever failed is put on the run's page as one annotation, readable
       # there and through the API without signing in, which a run's log is
       # not: a configure or compile by its error lines (clang compiles a
@@ -116,7 +157,7 @@ jobs:
         run: |
           errors=$(cat configure.log build.log 2>/dev/null \
             | grep -E 'error:|CMake Error' | cut -c1-400 | awk '!seen[$0]++' | head -60 || true)
-          for log in package.log install.log; do
+          for log in package.log install.log quit.log; do
             if [[ -f $log ]]; then
               errors+=$'\n'"--- end of $log"$'\n'$(tail -n 30 "$log" | cut -c1-400)
             fi

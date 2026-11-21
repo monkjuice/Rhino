@@ -27,7 +27,7 @@ The panel is one `Editor` (`src/ForgeEditor.h`) defined across twenty `.cpp` fil
 
 ## Fitting the first window to the screen
 
-The panel opens at 1440×900 with a minimum of 1180×820 (`ui/ForgePlacement.h`). On the first real Mac (2026-11-20), a 13-inch MacBook, the keyboard and everything under it opened off the screen. Such a Mac shows 1440×900 points by default, and less the menu bar, the Dock and the title bar it leaves about 780 points of height. That is under even the minimum, so resizing could not help. Since `251b554`, the panel shrinks to fit.
+The panel opens at 1440×900 with a minimum of 1180×820 (`ui/ForgePlacement.h`). On the first real Mac (2026-11-20), a 13-inch MacBook, the keyboard and everything under it opened off the screen. Such a Mac shows 1440×900 points by default, and less the menu bar, the Dock and the title bar it leaves about 780 points of height. That is under even the minimum, so resizing could not help. Since `251b554` the panel shrinks to fit, and since `e79b4b3` the standalone's window shrinks with it.
 
 **The arithmetic.** `ui::fitPanel(availableWidth, availableHeight)` is a pure function returning a `PanelFit {width, height, scale}`:
 
@@ -40,11 +40,21 @@ The panel opens at 1440×900 with a minimum of 1180×820 (`ui/ForgePlacement.h`)
 
 **When it runs.** `Editor::parentHierarchyChanged` (`src/ForgeEditorLayout.cpp`) calls `fitToScreen()` once, the first time the editor has a peer, meaning it is in a window on the desktop.
 
-1. It takes the display under the editor (`getDisplayForRect(getScreenBounds())`, `userBounds`; `userArea` is deprecated in JUCE 8.0.13).
-2. It subtracts the window's chrome: the top-level component's size less the editor's, plus the peer's frame. At least 60 points of height are allowed for a host's header, which the editor cannot see.
-3. It calls `setSize(fit)` and then `AudioProcessorEditor::setScaleFactor(fit.scale)`.
+It works in screen points: the display's `userBounds` times the current `Desktop` global scale. `userArea` is deprecated in JUCE 8.0.13.
 
-The scale goes through `setScaleFactor`, not `setTransform`, because `AudioProcessorEditor` asserts that its transform equals the host's scale transform. JUCE's standalone window and plugin wrappers size themselves from the editor's transformed bounds (`getLocalArea(editor, ...)` in `juce_StandaloneFilterWindow.h`), so the scale reaches the window.
+1. It takes the display under the editor (`getDisplayForRect(getScreenBounds())`).
+2. It subtracts what surrounds the panel. In the standalone (`wrapperType_Standalone`), that is the `ResizableWindow`'s `getContentComponentBorder()` (its title bar and border) plus the peer's `getFrameSizeIfPresent()`. In a plugin it is 60 points of height for a host's header, which the editor cannot see.
+3. It leaves 32 more points free on each axis (`breathingRoom`), which the user asked for so the window does not feel cramped.
+4. It calls `setSize(fit)` and then applies the scale:
+   - In the standalone, `Desktop::setGlobalScaleFactor(fit.scale)`, which keeps the window's limits and the panel in the same units.
+   - In a plugin, `AudioProcessorEditor::setScaleFactor(fit.scale)`. A global scale would reach every other window of the host's copy of JUCE, and the plugin wrappers do allow for the editor's transform. The scale goes through `setScaleFactor`, not `setTransform`, because `AudioProcessorEditor` asserts that its transform equals the host's scale transform.
+
+**What `251b554` got wrong.** On the real Mac, after reinstalling, the bottom of the panel was still under the Dock, about 15 px short. There were two mistakes:
+
+- It scaled the standalone with `setScaleFactor`. JUCE's standalone holds its window to the editor's resize limits without the editor's transform, so the window stayed the minimum's full height ([JUCE's standalone holds its window to the editor's unscaled limits](juce-standalone-ignores-editor-scale.md)).
+- It measured the chrome as the top-level window's size less the editor's. The fit runs from `parentHierarchyChanged` while `setContentOwned` is still adding the content, before the window has its size, so that figure meant nothing and the 60-point allowance always applied.
+
+The fit is not exercised in CI: nobody knows whether the runner's screen is small, and nothing there measures the window. `e79b4b3` passes on Windows. On the real Mac it was not yet confirmed when this was written.
 
 **Choices:**
 
@@ -110,3 +120,4 @@ The tick repaints only the live regions and every ordinary knob shares one size:
 - [Forge's Processor includes nothing under ui/](forge-processor-includes-no-ui.md)
 - [A plugin's static Direct2D images deadlock NVIDIA's driver at unload](plugin-static-images-deadlock-on-unload.md)
 - [A static juce::Font aborts every quit on macOS](static-juce-font-aborts-quit-on-macos.md)
+- [JUCE's standalone holds its window to the editor's unscaled limits](juce-standalone-ignores-editor-scale.md)

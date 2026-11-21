@@ -1763,3 +1763,17 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/forge.md (status bullet)
 - updated: pages/development-environment.md (the PowerShell -m here-string with double quotes failed again, committing nothing)
 - updated: index.md (summaries of the macOS page and the font gotcha)
+
+## [2026-11-20] update | Forge's window fit, second attempt: the standalone scales globally (e79b4b3)
+- source: the main agent's addendum (the real Mac, after reinstalling 195b93d's build, still about 15 px under the Dock; JUCE 8.0.13's juce_StandaloneFilterWindow.h and juce_BorderedComponentBoundsConstrainer.cpp read on GitHub), checked against Editor::fitToScreen in instruments/rhino-forge/src/ForgeEditorLayout.cpp; e79b4b3's run and the real Mac's confirmation are pending
+- created: pages/juce-standalone-ignores-editor-scale.md (the standalone's DecoratorConstrainer applies the editor's limits without its transform; scale a standalone with Desktop::setGlobalScaleFactor; plugin wrappers unaffected)
+- updated: pages/forge-editor.md (Fitting the first window: screen points, the standalone's border read from the window, 32 points of breathing room, global scale in the standalone and setScaleFactor in a plugin, what 251b554 got wrong, not exercised in CI; the earlier claim that the standalone sizes itself from the editor's transformed bounds corrected; Related)
+- updated: pages/forge-macos-build.md (the fit's failure on the Mac and e79b4b3 in Status; Still open; summary; Related)
+- updated: pages/forge-macos-rolling-prerelease.md (the release's window fit is 251b554's, which did not work)
+- updated: pages/forge.md (status bullet rewritten as two items)
+- updated: index.md (Gotchas: the new page; the macOS page's summary)
+
+## [2026-11-20] update | e79b4b3's run green and published; the fit unconfirmed on the Mac
+- source: the main agent's update (run 44852672043; the pre-release at e79b4b3, 2026-11-21T01:59:29Z)
+- updated: pages/forge-macos-rolling-prerelease.md (the release now carries the global-scale fit)
+- updated: pages/forge-macos-build.md (Status: run 44852672043 published; the auto-hiding Dock as an open question)

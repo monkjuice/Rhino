@@ -1,7 +1,7 @@
 ---
 title: Forge's macOS build and installer
 type: guide
-summary: Since 2026-11-20 a GitHub-hosted macos-15 runner builds Forge's app, VST3 and AU universal (arm64 and x86_64, macOS 11 and up), packs them into one Rhino Forge.pkg signed ad hoc and not notarized, keeps it 30 days as the run's artifact, then installs it on the runner and runs auval; from main a green run also publishes it as a public pre-release. Whoever installs it must allow it once under Privacy & Security. Verified end to end on the runner on 2026-11-20 (3333e60), after clang refused `file = {}` and `pkgbuild --analyze` wrote no BundleIsRelocatable key. On the first real Mac it installed, but the window was too tall (fixed in 251b554) and every quit crashed. A CI quit check that reads the app's exit status, since the runner writes no crash reports, reproduced the crash: static fonts outliving JUCE's CoreText registry. The fix, 195b93d, passed it, and the pre-release carries both fixes; neither has been confirmed on the real Mac yet.
+summary: Since 2026-11-20 a GitHub-hosted macos-15 runner builds Forge's app, VST3 and AU universal (arm64 and x86_64, macOS 11 and up), packs them into one Rhino Forge.pkg signed ad hoc and not notarized, keeps it 30 days as the run's artifact, then installs it on the runner and runs auval; from main a green run also publishes it as a public pre-release. Whoever installs it must allow it once under Privacy & Security. Verified end to end on the runner on 2026-11-20 (3333e60), after clang refused `file = {}` and `pkgbuild --analyze` wrote no BundleIsRelocatable key. On the first real Mac it installed, but the window was too tall and every quit crashed. A CI quit check that reads the app's exit status, since the runner writes no crash reports, reproduced the crash: static fonts outliving JUCE's CoreText registry, fixed in 195b93d. The window fit needed two attempts, 251b554 and then e79b4b3, because JUCE's standalone ignores the editor's scale; the second was not yet confirmed on the Mac.
 tags: [forge, build, macos, ci, packaging, release]
 sources: []
 updated: 2026-11-20
@@ -94,7 +94,11 @@ How it got there:
 
 **On a real Mac, 2026-11-20.** The first install was on a 13-inch MacBook (2560×1600 panel, macOS in Spanish). The installer worked once past Gatekeeper (above). It showed two problems:
 
-- **The window did not fit.** Everything from the keyboard down opened off the screen. Fixed in `251b554`, which fits the first window to the screen and scales the panel down where even its minimum does not fit ([Forge editor (panel)](forge-editor.md#fitting-the-first-window-to-the-screen)). The pre-release has carried the fix since run 44845567288 (`4ce11ab`).
+- **The window did not fit.** Everything from the keyboard down opened off the screen. `251b554` fits the first window to the screen and scales the panel down where even its minimum does not fit ([Forge editor (panel)](forge-editor.md#fitting-the-first-window-to-the-screen)).
+  - After reinstalling `195b93d`'s build, the panel's bottom was still under the Dock, about 15 px short. JUCE's standalone held the window to the unscaled minimum, and the chrome had been measured before the window had its size ([JUCE's standalone holds its window to the editor's unscaled limits](juce-standalone-ignores-editor-scale.md)).
+  - `e79b4b3` scales the standalone through `Desktop::setGlobalScaleFactor`, measures the window's border directly, and leaves 32 points of room on each axis.
+  - Run 44852672043 (`e79b4b3`) passed every step, the quit included, and published the pre-release at 2026-11-21T01:59:29Z. CI does not exercise the fit, and the real Mac had not confirmed it when this was written.
+  - Open question: does that Mac's Dock hide automatically? An auto-hiding Dock is not taken out of the screen's usable area, so it can still cover the bottom edge when it pops up.
 - **Every quit crashed** ("Rhino Forge se ha cerrado inesperadamente", that is, quit unexpectedly). Fixed in `195b93d` and verified on the runner.
   - Run 44845567288 (`4ce11ab`) passed the first quit check, which looked only for a crash report.
   - Run 44846507141 (`792745a`) then reproduced the crash through the exit status: 134, `std::system_error: mutex lock failed`. It wrote no report, so the first check had been blind.
@@ -103,7 +107,7 @@ How it got there:
 
 Still open:
 
-- Neither the window fit nor the quit fix has been confirmed on the real Mac. That waits for a reinstall from the pre-release.
+- The window fit as of `e79b4b3` has not been confirmed on the real Mac. After the reinstall of `195b93d`'s build, no failure of the quit fix was reported, but nobody confirmed it either.
 - Forge's tests are not built or run on macOS.
 - The workflow's actions target Node 20 (a warning only).
 - Developer ID signing and notarization.
@@ -114,6 +118,7 @@ Still open:
 - [Forge's macOS test build is a rolling public pre-release](forge-macos-rolling-prerelease.md)
 - [Forge editor (panel)](forge-editor.md)
 - [A static juce::Font aborts every quit on macOS](static-juce-font-aborts-quit-on-macos.md)
+- [JUCE's standalone holds its window to the editor's unscaled limits](juce-standalone-ignores-editor-scale.md)
 - [Build and test Forge](build-and-test-forge.md)
 - [clang refuses `= {}` on a juce::File](juce-file-assign-empty-braces.md)
 - [Rhino Forge](forge.md)

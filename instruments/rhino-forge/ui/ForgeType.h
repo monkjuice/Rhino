@@ -32,32 +32,65 @@ enum class Face
     reading
 };
 
-// Loaded once each and kept. Typeface::createSystemTypefaceFor parses the font
-// every time it is called, so doing it per repaint would be a frame cost for
-// nothing — these never change.
+// Everything the panel keeps that holds a font: the four typefaces, the fonts
+// made from them (panelFont) and drawTrackedText's measurements (ForgeChrome.h).
+//
+// Kept for as long as JUCE runs and given back when JUCE shuts down, never
+// left to the end of the process as a static would be. On macOS a typeface,
+// when the last font using it goes, takes itself out of JUCE's registry of
+// loaded fonts under a mutex that is a static of JUCE's own; a static of
+// Forge's made after that one outlives it, so on every quit a typeface locked a
+// destroyed mutex and the app aborted ("mutex lock failed: Invalid argument").
+// Windows keeps no such registry, which is why it only ever showed on a Mac.
+// Message thread only, like everything that paints.
+class FontStore final : private juce::DeletedAtShutdown
+{
+public:
+    struct Made
+    {
+        Face face;
+        float height;
+        juce::Font font;
+    };
+
+    struct Tracked
+    {
+        juce::Font font;
+        juce::String lettering;
+        std::vector<float> widths;
+    };
+
+    // Loaded once each. Typeface::createSystemTypefaceFor parses the font every
+    // time it is called, so doing it per repaint would be a frame cost for
+    // nothing — these never change.
+    juce::Typeface::Ptr header = juce::Typeface::createSystemTypefaceFor(
+        BinaryData::ChakraPetchSemiBold_ttf, BinaryData::ChakraPetchSemiBold_ttfSize);
+    juce::Typeface::Ptr label = juce::Typeface::createSystemTypefaceFor(
+        BinaryData::RajdhaniMedium_ttf, BinaryData::RajdhaniMedium_ttfSize);
+    juce::Typeface::Ptr emphasis = juce::Typeface::createSystemTypefaceFor(
+        BinaryData::RajdhaniSemiBold_ttf, BinaryData::RajdhaniSemiBold_ttfSize);
+    juce::Typeface::Ptr reading = juce::Typeface::createSystemTypefaceFor(
+        BinaryData::IBMPlexMonoMedium_ttf, BinaryData::IBMPlexMonoMedium_ttfSize);
+
+    std::vector<Made> made;
+    std::vector<Tracked> tracked;
+
+    ~FontStore() override { clearSingletonInstance(); }
+
+    JUCE_DECLARE_SINGLETON_INLINE(FontStore, false)
+};
+
 inline juce::Typeface::Ptr typefaceFor(Face face)
 {
-    struct Loaded
-    {
-        juce::Typeface::Ptr header  = juce::Typeface::createSystemTypefaceFor(
-            BinaryData::ChakraPetchSemiBold_ttf, BinaryData::ChakraPetchSemiBold_ttfSize);
-        juce::Typeface::Ptr label   = juce::Typeface::createSystemTypefaceFor(
-            BinaryData::RajdhaniMedium_ttf, BinaryData::RajdhaniMedium_ttfSize);
-        juce::Typeface::Ptr emphasis = juce::Typeface::createSystemTypefaceFor(
-            BinaryData::RajdhaniSemiBold_ttf, BinaryData::RajdhaniSemiBold_ttfSize);
-        juce::Typeface::Ptr reading = juce::Typeface::createSystemTypefaceFor(
-            BinaryData::IBMPlexMonoMedium_ttf, BinaryData::IBMPlexMonoMedium_ttfSize);
-    };
-    static const Loaded loaded;
-
+    const auto& store = *FontStore::getInstance();
     switch (face)
     {
-        case Face::header:   return loaded.header;
-        case Face::label:    return loaded.label;
-        case Face::emphasis: return loaded.emphasis;
-        case Face::reading:  return loaded.reading;
+        case Face::header:   return store.header;
+        case Face::label:    return store.label;
+        case Face::emphasis: return store.emphasis;
+        case Face::reading:  return store.reading;
     }
-    return loaded.label;
+    return store.label;
 }
 
 // Rajdhani and Chakra Petch are both tall-x, narrow faces drawn for panels, and
@@ -87,13 +120,7 @@ inline constexpr float controlLabelSize = 12.5f;
 // else may call this.
 inline juce::Font panelFont(Face face, float height)
 {
-    struct Entry
-    {
-        Face face;
-        float height;
-        juce::Font font;
-    };
-    static std::vector<Entry> made;
+    auto& made = FontStore::getInstance()->made;
 
     const auto wanted = height * panelFontScale;
     for (const auto& entry : made)

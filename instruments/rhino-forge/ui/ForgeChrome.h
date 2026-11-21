@@ -5,6 +5,7 @@
 // hand off to its counterpart in one line.
 #include "ForgeTheme.h"
 #include "ForgeMerliMaterial.h"
+#include "ForgeType.h"
 #include <algorithm>
 #include <array>
 #include <vector>
@@ -510,14 +511,9 @@ inline void drawTrackedText(juce::Graphics& g, const juce::String& textToDraw,
     const auto font = g.getCurrentFont();
     // Resizing moves fixed legends without changing their metrics. Keep the
     // widths so a full-resolution redraw need not shape each character twice.
-    // This bounded cache is used on the message thread, like panelFont.
-    struct Metrics
-    {
-        juce::Font font;
-        juce::String lettering;
-        std::vector<float> widths;
-    };
-    static std::vector<Metrics> cached;
+    // This bounded cache is used on the message thread, like panelFont, and is
+    // kept in FontStore because it holds fonts (see ForgeType.h).
+    auto& cached = FontStore::getInstance()->tracked;
     auto found = std::find_if(cached.begin(), cached.end(), [&] (const auto& entry)
     {
         return entry.font == font && entry.lettering == textToDraw;
@@ -525,7 +521,7 @@ inline void drawTrackedText(juce::Graphics& g, const juce::String& textToDraw,
     if (found == cached.end())
     {
         if (cached.size() == 128) cached.erase(cached.begin());
-        Metrics entry {font, textToDraw, {}};
+        FontStore::Tracked entry {font, textToDraw, {}};
         for (int i = 0; i < textToDraw.length(); ++i)
             entry.widths.push_back(juce::GlyphArrangement::getStringWidth(font, textToDraw.substring(i, i + 1)));
         cached.push_back(std::move(entry));

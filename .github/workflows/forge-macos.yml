@@ -107,29 +107,39 @@ jobs:
           grep -q 'AU VALIDATION SUCCEEDED' install.log
 
       # Opens the installed app and quits it the way a person does, and fails
-      # if macOS wrote a crash report for it - the first thing a real Mac showed
-      # was a crash on every quit - printing the crashed thread. An app that
-      # does not quit is only warned about: a permission prompt nobody can
-      # answer on the runner could be what holds it.
+      # if it did not exit cleanly - the first thing a real Mac showed was a
+      # crash on every quit. The binary is started directly rather than with
+      # `open` so its exit status can be read: a crash is a signal whether or
+      # not the runner writes crash reports. The crashed thread is printed from
+      # the report when there is one. An app that does not quit is only warned
+      # about: a permission prompt nobody can answer on the runner could hold it.
       - name: Open and quit the app
         run: |
           {
             marker=$(mktemp)
-            open "/Applications/Rhino Forge.app"
+            "/Applications/Rhino Forge.app/Contents/MacOS/Rhino Forge" > app-output.log 2>&1 &
+            pid=$!
             sleep 15
-            pgrep -x "Rhino Forge" >/dev/null || { echo "the app was not running 15 s after it was opened"; exit 1; }
+            kill -0 "$pid" 2>/dev/null || { echo "the app was not running 15 s after it was opened"; exit 1; }
             osascript -e 'quit app "Rhino Forge"' || true
-            for _ in $(seq 30); do pgrep -x "Rhino Forge" >/dev/null || break; sleep 1; done
-            if pgrep -x "Rhino Forge" >/dev/null; then
+            for _ in $(seq 30); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+            killed=false
+            if kill -0 "$pid" 2>/dev/null; then
               echo "::warning title=Rhino Forge did not quit::still running 30 s after it was asked to quit"
-              pkill -9 -x "Rhino Forge" || true
+              kill -9 "$pid" || true
+              killed=true
             fi
+            status=0
+            wait "$pid" || status=$?
+            echo "exit status $status"
+            tail -n 20 app-output.log
             # ReportCrash writes its report a moment after the process ends.
             sleep 10
             reports=$(find ~/Library/Logs/DiagnosticReports -name 'Rhino Forge*' -newer "$marker" 2>/dev/null)
-            if [[ -n $reports ]]; then
+            if [[ $killed == false && $status -ne 0 ]] || [[ -n $reports ]]; then
               report=$(echo "$reports" | head -n 1)
-              echo "crashed on quit: $report"
+              echo "did not quit cleanly; report: ${report:-none written}"
+              [[ -n $report ]] || exit 1
               python3 - "$report" <<'PY'
           import json, sys
           header, body = open(sys.argv[1], encoding='utf-8').read().split('\n', 1)

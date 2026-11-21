@@ -31,8 +31,9 @@ The products are in mid-alpha. Windows is the currently documented and validated
 is preserved but remains unvalidated. Production installers for Windows and macOS are targeted for December
 2026-January 2027, so setup docs must not imply that installers exist before then. Under the AGPL every installer
 must come with its source or an offer of it. The Forge `.pkg` that CI has built since 2026-11-20 is a test build,
-signed ad hoc, not notarized and carrying no source offer, so it is not that installer
-([Forge's macOS build and installer](forge-macos-build.md)). The Forge README's alpha note calls it an unsigned macOS
+signed ad hoc, not notarized and carrying no source offer itself, so it is not that installer
+([Forge's macOS build and installer](forge-macos-build.md)). It is published as a public pre-release
+([Forge's macOS test build is a rolling public pre-release](forge-macos-rolling-prerelease.md)). The Forge README's alpha note calls it an unsigned macOS
 test installer. Its *Get Forge on macOS* section owns how a person downloads and installs it, and the wiki links to
 that section rather than repeating it.
 

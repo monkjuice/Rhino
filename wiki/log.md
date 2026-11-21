@@ -1712,3 +1712,18 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/forge.md (status bullet)
 - updated: pages/documentation-ownership.md (the Forge README's macOS section owns the install instructions)
 - updated: index.md (the macOS page's summary)
+
+## [2026-11-20] update | Forge's macOS build published as a rolling public pre-release (aac0b67)
+- source: the main agent's fifth addendum (run 6 green under the stricter check; run 7 on aac0b67 the first to publish, pending), checked against .github/workflows/forge-macos.yml (the publish job and its notes)
+- created: pages/forge-macos-rolling-prerelease.md (signed-out users cannot download artifacts; the publish job, its own write token, after the validated build; delete and recreate so the tag moves while the addresses stay; --latest=false; the brief 404; the notes' licence and source links; publishing unverified). A decision page of its own because forge-macos-build.md had passed the schema's few hundred words
+- updated: pages/forge-macos-build.md (artifacts need sign-in, so the pre-release; run 6 and run 7 in Status; the AGPL item partly answered by the notes; summary)
+- updated: pages/agpl-licence.md (the pre-release's notes link the licence and source; the .pkg still carries no licence text)
+- updated: pages/documentation-ownership.md (the test build is published as a pre-release)
+- updated: pages/forge.md (status bullet)
+- updated: index.md (Decisions: the new page; the macOS page's summary)
+
+## [2026-11-20] update | Forge's macOS pre-release verified: it downloads with no GitHub account
+- source: the main agent's sixth addendum (run 44841968703 on aac0b67 green; the release API and the asset URL checked without authentication)
+- updated: pages/forge-macos-rolling-prerelease.md (Status verified, with the run and the outside check; download-artifact's Node 20 warning; summary)
+- updated: pages/forge-macos-build.md (run 7 verified in Status; download-artifact added to the Node 20 gotcha)
+- updated: index.md (the pre-release page's summary)

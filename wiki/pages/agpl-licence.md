@@ -31,7 +31,7 @@ Commit `294207c` (2026-11-19) replaced the proprietary `LICENSE` of `ce97dd7` ([
 
 - VinylDrums is published "royalty free"; whether that permits redistributing the samples themselves is unchecked.
 - The `research/sources/lmms` snapshot has no `COPYING` file of its own.
-- The AGPL requires every distributed binary to come with its source or an offer of it. The release installers, targeted for December 2026-January 2027 ([Documentation ownership](documentation-ownership.md)), must do so. The Forge `.pkg` that CI has built and published as a run artifact since 2026-11-20 carries neither the licence text nor a source offer yet ([Forge's macOS build and installer](forge-macos-build.md)).
+- The AGPL requires every distributed binary to come with its source or an offer of it. The release installers, targeted for December 2026-January 2027 ([Documentation ownership](documentation-ownership.md)), must do so. The Forge `.pkg` that CI has built since 2026-11-20 carries neither the licence text nor a source offer yet ([Forge's macOS build and installer](forge-macos-build.md)). Since `aac0b67` it is published as the public pre-release `forge-macos-latest`, whose notes link `LICENSE`, `THIRD_PARTY_NOTICES.md` and the source at the commit built ([Forge's macOS test build is a rolling public pre-release](forge-macos-rolling-prerelease.md)).
 
 Not legal advice: this records the licence files as of `294207c`.
 

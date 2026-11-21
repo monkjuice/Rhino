@@ -1,7 +1,7 @@
 ---
 title: Forge's macOS build and installer
 type: guide
-summary: Since 2026-11-20 a GitHub-hosted macos-15 runner builds Forge's app, VST3 and AU universal (arm64 and x86_64, macOS 11 and up), packs them into one Rhino Forge.pkg signed ad hoc and not notarized, keeps it 30 days as the run's artifact, then installs it on the runner and runs auval; whoever installs it must allow it once under Privacy & Security. Verified end to end on the runner on 2026-11-20 (3333e60), after clang refused `file = {}` and `pkgbuild --analyze` wrote no BundleIsRelocatable key; not yet installed on a real Mac.
+summary: Since 2026-11-20 a GitHub-hosted macos-15 runner builds Forge's app, VST3 and AU universal (arm64 and x86_64, macOS 11 and up), packs them into one Rhino Forge.pkg signed ad hoc and not notarized, keeps it 30 days as the run's artifact, then installs it on the runner and runs auval; from main a green run also publishes it as a public pre-release. Whoever installs it must allow it once under Privacy & Security. Verified end to end on the runner on 2026-11-20 (3333e60), after clang refused `file = {}` and `pkgbuild --analyze` wrote no BundleIsRelocatable key; not yet installed on a real Mac.
 tags: [forge, build, macos, ci, packaging, release]
 sources: []
 updated: 2026-11-20
@@ -28,11 +28,13 @@ Added on 2026-11-20 (commits `1672601`, `f23ae56`, `22c7b03`) so that someone wi
 - up to 60 `error:` and `CMake Error` lines from `configure.log` and `build.log`. clang compiles a universal file once per architecture, so every error appears twice, and `awk '!seen[$0]++'` drops the second copy. make's own `Error N` lines are not matched.
 - the last 30 lines of `package.log` and of `install.log`, when they exist.
 
-Downloading the package still needs a signed-in browser or a token. Asking the user to read a failed step's log in a signed-in browser was the fastest diagnosis (run 3, below). The annotation is for when nobody is at a browser.
+Asking the user to read a failed step's log in a signed-in browser was the fastest diagnosis (run 3, below). The annotation is for when nobody is at a browser.
 
 ## Getting and installing it
 
-How a person downloads the package, what installs where, the one-time Open Anyway and building it on a Mac are in the *Get Forge on macOS* section of `instruments/rhino-forge/README.md` (since `f17df10`). This page does not repeat them ([Documentation ownership](documentation-ownership.md)).
+A run's artifact downloads only for someone signed in to GitHub, even on a public repository. So since `aac0b67` a `publish` job replaces the public pre-release `forge-macos-latest` with every green package from `main` ([Forge's macOS test build is a rolling public pre-release](forge-macos-rolling-prerelease.md)).
+
+How a person downloads the package, what installs where, the one-time Open Anyway and building it on a Mac are in the *Get Forge on macOS* section of `instruments/rhino-forge/README.md` (since `f17df10`; the pre-release links since `aac0b67`). This page does not repeat them ([Documentation ownership](documentation-ownership.md)).
 
 ## The package
 
@@ -48,14 +50,14 @@ No wavetable files ship. Presets embed their tables as `TABLE` nodes, the ten bu
 
 ## Signing and what is still missing
 
-The package is signed ad hoc only, with no Developer ID and no notarization. Whoever installs it must allow it once under System Settings > Privacy & Security > Open Anyway. A Developer ID ($99 a year) and notarization are the production step still to do. The package also carries no licence text and no source offer, both of which the AGPL asks of a distributed binary. It is a test build, not the production installer targeted for December 2026 to January 2027 ([Documentation ownership](documentation-ownership.md#release-stage-wording)).
+The package is signed ad hoc only, with no Developer ID and no notarization. Whoever installs it must allow it once under System Settings > Privacy & Security > Open Anyway. A Developer ID ($99 a year) and notarization are the production step still to do. The package itself carries no licence text and no source offer, both of which the AGPL asks of a distributed binary. The pre-release's notes link `LICENSE`, `THIRD_PARTY_NOTICES.md` and the source at the commit built. It is a test build, not the production installer targeted for December 2026 to January 2027 ([Documentation ownership](documentation-ownership.md#release-stage-wording)).
 
 ## Gotchas
 
 - **GitHub retired the `macos-14` image.** A run on it is cancelled within two seconds, and its only annotation reads "The configuration 'macos-14-arm64-us-default' is not supported". The pinned JUCE is 8.0.13 (read from the pinned commit's `CMakeLists.txt` on GitHub), which builds with the macOS 15 SDK.
 - **clang refuses what MSVC accepts.** The first macos-15 run stopped on `currentPresetFile = {};`, an assignment that is ambiguous for a `juce::File` ([clang refuses `= {}` on a juce::File](juce-file-assign-empty-braces.md)). A Windows build proves nothing about the macOS build.
 - **`pkgbuild --analyze` may write no `BundleIsRelocatable` key.** On the `macos-15` runner it wrote none for any bundle. PlistBuddy's `Set` refuses a key that does not exist (`Set: Entry, ":0:BundleIsRelocatable", Does Not Exist`), so the package script stopped there. Set the key with `plutil -replace`, which adds a missing key.
-- The run warns that `actions/checkout@v4`, `actions/cache@v4` and `actions/setup-python@v5` target Node 20, which GitHub has deprecated and now runs on Node 24. This is harmless for now (2026-11-20).
+- The run warns that `actions/checkout@v4`, `actions/cache@v4`, `actions/setup-python@v5` and `actions/download-artifact@v4` target Node 20, which GitHub has deprecated and now runs on Node 24. This is harmless for now (2026-11-20).
 
 ## Status
 
@@ -70,7 +72,7 @@ The package is signed ad hoc only, with no Developer ID and no notarization. Who
 | Upload | 3 s |
 | Install and `auval` | 4 s |
 
-The artifact, a zip of the `.pkg`, is 47.2 MB. The package has **not yet been installed on a real Mac**; the user plans to try it on someone's laptop. Run 6 (`f17df10`) is confirming the stricter auval check from `c76231d`.
+The artifact, a zip of the `.pkg`, is 47.2 MB. The package has **not yet been installed on a real Mac**; the user plans to try it on someone's laptop. Run 6 (44839447083, `f17df10`) also passed under the stricter check from `c76231d`, so auval printed `AU VALIDATION SUCCEEDED`. Run 7 (44841968703, `aac0b67`) published the pre-release, and it downloads with no GitHub account (verified 2026-11-20; [Forge's macOS test build is a rolling public pre-release](forge-macos-rolling-prerelease.md#status)).
 
 How it got there:
 
@@ -87,10 +89,11 @@ Still open:
 - Forge's tests are not built or run on macOS.
 - The workflow's actions target Node 20 (a warning only).
 - Developer ID signing and notarization.
-- The licence text and a source offer in the package.
+- The licence text and a source offer in the package itself. The pre-release's notes link both.
 
 ## Related
 
+- [Forge's macOS test build is a rolling public pre-release](forge-macos-rolling-prerelease.md)
 - [Build and test Forge](build-and-test-forge.md)
 - [clang refuses `= {}` on a juce::File](juce-file-assign-empty-braces.md)
 - [Rhino Forge](forge.md)

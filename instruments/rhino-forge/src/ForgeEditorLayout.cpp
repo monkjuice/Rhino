@@ -53,29 +53,51 @@ void Editor::fitToScreen()
 {
     fittedToScreen = true;
     if (hostScale != 1.0f) return;
-    const auto* display = juce::Desktop::getInstance().getDisplays().getDisplayForRect(getScreenBounds());
+    auto& desktop = juce::Desktop::getInstance();
+    const auto* display = desktop.getDisplays().getDisplayForRect(getScreenBounds());
     if (display == nullptr) return;
 
-    // What the window around the panel takes. The standalone's title bar and
-    // frame are measured. A host's header above its plugin window is outside
-    // anything the panel can see, so at least this much is allowed for.
+    // Worked in points on the screen. JUCE's own units are those divided by its
+    // global scale, which the standalone sets below.
+    const auto global = static_cast<double>(desktop.getGlobalScaleFactor());
+    const auto standalone = getAudioProcessor()->wrapperType == juce::AudioProcessor::wrapperType_Standalone;
+
+    // What the window around the panel takes. The standalone's is its own
+    // title bar and border, and the native frame if it has one, read from the
+    // window rather than from its size, which is not settled while it is being
+    // built, which is when this runs. A host's header above its plugin window
+    // is outside anything the panel can see, so this much is allowed for.
     constexpr int hostHeaderAllowance = 60;
     auto* window = getTopLevelComponent();
-    auto chromeWidth = window->getWidth() - getWidth();
-    auto chromeHeight = window->getHeight() - getHeight();
-    if (auto* peer = window->getPeer())
+    juce::BorderSize<int> around {hostHeaderAllowance, 0, 0, 0};
+    if (auto* resizable = dynamic_cast<juce::ResizableWindow*>(window); standalone && resizable != nullptr)
     {
-        const auto frame = peer->getFrameSize();
-        chromeWidth += frame.getLeftAndRight();
-        chromeHeight += frame.getTopAndBottom();
+        around = resizable->getContentComponentBorder();
+        if (auto* peer = window->getPeer())
+            if (const auto frame = peer->getFrameSizeIfPresent()) around = around.addedTo(*frame);
     }
-    chromeHeight = std::max(chromeHeight, hostHeaderAllowance);
 
-    const auto area = display->userBounds.toNearestInt();
-    const auto fit = ui::fitPanel(area.getWidth() - chromeWidth, area.getHeight() - chromeHeight);
+    // Room left over around the window, so it does not sit hard against the
+    // menu bar and the Dock. A 13-inch Mac asked for it.
+    constexpr int breathingRoom = 32;
+    const auto area = (display->userBounds * global).toNearestInt();
+    const auto fit = ui::fitPanel(
+        area.getWidth() - juce::roundToInt(around.getLeftAndRight() * global) - breathingRoom,
+        area.getHeight() - juce::roundToInt(around.getTopAndBottom() * global) - breathingRoom);
     if (fit.scale >= 1.0f && fit.width == getWidth() && fit.height == getHeight()) return;
     setSize(fit.width, fit.height);
-    juce::AudioProcessorEditor::setScaleFactor(fit.scale);
+
+    // The standalone's window holds its content to the editor's resize limits
+    // in its own units, without the editor's transform, so a panel shrunk by a
+    // transform still got a window the minimum's full height: the bottom of it
+    // went under the Dock. Scaling everything JUCE draws instead keeps the
+    // limits and the panel in the same units. A plugin's wrappers do account
+    // for the transform, and a global scale would reach every other window the
+    // host's copy of JUCE has, so a plugin keeps the editor's own.
+    if (standalone)
+        desktop.setGlobalScaleFactor(fit.scale);
+    else
+        juce::AudioProcessorEditor::setScaleFactor(fit.scale);
 }
 
 void Editor::resized()

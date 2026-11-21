@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ForgeModules.h"
+#include <algorithm>
 #include <limits>
 
 // Where the window puts things: what size the panel may be, where the title
@@ -23,6 +24,32 @@ inline constexpr int maxPanelHeight = 1180;
 // wants width, and height is what a plugin window inside a host has least of.
 inline constexpr int defaultPanelWidth = 1440;
 inline constexpr int defaultPanelHeight = 900;
+
+// The size the panel opens at in an area of the screen, and the scale the
+// whole of it is drawn at there. The default size wherever it fits; otherwise
+// the largest the limits allow within the area, and where even the minimum is
+// too big, that shrunk as a whole until it fits. A 13-inch Mac shows 1440 by
+// 900 points with a menu bar and a Dock in them, which leaves less height than
+// the minimum: the keyboard and everything under it opened off the screen.
+// Never scaled up. An area with no size, a screen not known, opens at the
+// default.
+struct PanelFit
+{
+    int width = defaultPanelWidth;
+    int height = defaultPanelHeight;
+    float scale = 1.0f;
+};
+
+inline PanelFit fitPanel(int availableWidth, int availableHeight)
+{
+    if (availableWidth <= 0 || availableHeight <= 0) return {};
+    PanelFit fit;
+    fit.width = std::clamp(availableWidth, minPanelWidth, defaultPanelWidth);
+    fit.height = std::clamp(availableHeight, minPanelHeight, defaultPanelHeight);
+    fit.scale = std::min({1.0f, static_cast<float>(availableWidth) / static_cast<float>(fit.width),
+                          static_cast<float>(availableHeight) / static_cast<float>(fit.height)});
+    return fit;
+}
 
 // Eighty-eight since 2026-10-25, up from eighty: the keys were short for their
 // width and their names had no room to be read. The eight pixels come off the

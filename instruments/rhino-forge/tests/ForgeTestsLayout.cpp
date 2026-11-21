@@ -1630,6 +1630,36 @@ void rackCaptionsFitSuite()
     }
     require(checked > 0, "the rack's captions were on screen to be read");
 }
+
+// The size and scale the panel opens at on a screen, ui::fitPanel.
+void panelFitSuite()
+{
+    using namespace rhino::forge::ui;
+    const auto roomy = fitPanel(2400, 1300);
+    require(roomy.width == defaultPanelWidth && roomy.height == defaultPanelHeight && roomy.scale == 1.0f,
+            "a screen with room opens the panel at its default size, unscaled");
+
+    const auto between = fitPanel(1300, 860);
+    require(between.width == 1300 && between.height == 860 && between.scale == 1.0f,
+            "a screen between the minimum and the default opens the panel at the size it has, unscaled");
+
+    // A 13-inch Mac at 1440 by 900 points, less the menu bar, the Dock and a
+    // title bar: the case that opened with the keyboard off the screen.
+    const auto laptop = fitPanel(1440, 778);
+    require(laptop.height == minPanelHeight && laptop.width == 1440,
+            "a screen shorter than the minimum lays the panel out at the minimum height");
+    require(laptop.scale < 1.0f && laptop.height * laptop.scale <= 778.0f + 0.01f
+                && laptop.width * laptop.scale <= 1440.0f + 0.01f,
+            "and shrinks it as a whole until it fits");
+
+    const auto narrow = fitPanel(1000, 1000);
+    require(narrow.width == minPanelWidth && narrow.width * narrow.scale <= 1000.0f + 0.01f,
+            "a screen narrower than the minimum shrinks the panel to its width");
+
+    const auto unknown = fitPanel(0, 0);
+    require(unknown.width == defaultPanelWidth && unknown.height == defaultPanelHeight && unknown.scale == 1.0f,
+            "no screen to measure opens at the default");
+}
 }
 
 void layoutTests()
@@ -1642,5 +1672,6 @@ void layoutTests()
     captionsKeepTheirSizeSuite();
     matrixGrowsWithRoutingsSuite();
     rackCaptionsFitSuite();
+    panelFitSuite();
 }
 }

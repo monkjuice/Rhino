@@ -36,6 +36,48 @@ juce::Rectangle<int> Editor::moduleAreaFor(const ui::Module& module) const
     return ui::moduleBounds(getLocalBounds(), module);
 }
 
+void Editor::parentHierarchyChanged()
+{
+    // Called each time the panel moves between parents; only once it is in a
+    // window on the desktop is there a screen to fit.
+    if (!fittedToScreen && getPeer() != nullptr) fitToScreen();
+}
+
+void Editor::setScaleFactor(float newScale)
+{
+    hostScale = newScale;
+    juce::AudioProcessorEditor::setScaleFactor(newScale);
+}
+
+void Editor::fitToScreen()
+{
+    fittedToScreen = true;
+    if (hostScale != 1.0f) return;
+    const auto* display = juce::Desktop::getInstance().getDisplays().getDisplayForRect(getScreenBounds());
+    if (display == nullptr) return;
+
+    // What the window around the panel takes. The standalone's title bar and
+    // frame are measured. A host's header above its plugin window is outside
+    // anything the panel can see, so at least this much is allowed for.
+    constexpr int hostHeaderAllowance = 60;
+    auto* window = getTopLevelComponent();
+    auto chromeWidth = window->getWidth() - getWidth();
+    auto chromeHeight = window->getHeight() - getHeight();
+    if (auto* peer = window->getPeer())
+    {
+        const auto frame = peer->getFrameSize();
+        chromeWidth += frame.getLeftAndRight();
+        chromeHeight += frame.getTopAndBottom();
+    }
+    chromeHeight = std::max(chromeHeight, hostHeaderAllowance);
+
+    const auto area = display->userBounds.toNearestInt();
+    const auto fit = ui::fitPanel(area.getWidth() - chromeWidth, area.getHeight() - chromeHeight);
+    if (fit.scale >= 1.0f && fit.width == getWidth() && fit.height == getHeight()) return;
+    setSize(fit.width, fit.height);
+    juce::AudioProcessorEditor::setScaleFactor(fit.scale);
+}
+
 void Editor::resized()
 {
     // A taller expanded rack may reveal every slot; a later compact resize can

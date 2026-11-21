@@ -34,6 +34,13 @@ public:
     // than in paint().
     void paintOverChildren(juce::Graphics&) override;
     void resized() override;
+    // The first time the panel lands in a window, it is fitted to the screen
+    // that window is on (ui::fitPanel). A panel with no window, as in the
+    // tests, keeps its default size.
+    void parentHierarchyChanged() override;
+    // A host that scales the editor, as Windows hosts do for the display's
+    // DPI, has chosen its size, so the fit stands aside for it.
+    void setScaleFactor(float newScale) override;
     // The parts of the panel that move on their own: the readings in the
     // module headers, the displays, the rack, the matrix table and the ARP
     // plate's well. It is what the 24 Hz tick repaints; everything else
@@ -703,6 +710,12 @@ private:
     void showValueBubble(Control&);
     void fadeValueBubble();
     void timerCallback() override;
+
+    // See parentHierarchyChanged. Fitted once: what the player does to the
+    // window afterwards is theirs.
+    void fitToScreen();
+    bool fittedToScreen = false;
+    float hostScale = 1.0f;
     // The preset browser, made the first time LOAD or SAVE opens it and kept:
     // closing hides it, so it opens again on the folder it was showing. It
     // stands over the modules, below the title bar and above the keys, so the

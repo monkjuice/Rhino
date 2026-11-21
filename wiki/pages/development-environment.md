@@ -4,7 +4,7 @@ type: guide
 summary: What the Windows development machine offers (shells, CMake, Python, ffmpeg, PDF tools, the reference manuals) and the habits it demands.
 tags: [both, environment, windows, tooling]
 sources: []
-updated: 2026-10-21
+updated: 2026-11-20
 ---
 
 # Development environment and reference material
@@ -61,7 +61,8 @@ Read the figures too: the screenshots carry layout the prose never states, such 
 - **Git Bash rewrites a Windows tool's slash options as paths.** dumpbin's `/nologo` arrived as a path on 2026-10-12.
   Set `MSYS_NO_PATHCONV=1`, or run the tool from PowerShell.
 - **Commit messages go through a file in PowerShell 5.1.** A `git commit -m @'...'@` message that contains double
-  quotes is split into extra arguments, and git fails with "pathspec ... did not match". Write the message to a file in
+  quotes is split into extra arguments, and git fails with "pathspec ... did not match" and commits nothing. It happened
+  again on 2026-11-20, with "pathspec 'lock' did not match". Write the message to a file in
   the scratchpad and run `git commit -F <file>`. Do not hide the commit's stderr with `2>$null`: on 2026-10-03 that hid
   the failure until `git push` reported "Everything up-to-date".
 - **Anchor identifier renames at both ends.** A regex rename of `SpectralMarkers\b` to `SpectralMarkerPair` also

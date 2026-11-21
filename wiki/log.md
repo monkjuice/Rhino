@@ -1742,3 +1742,24 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/forge-macos-rolling-prerelease.md (the release replaced by 4ce11ab and carrying the window fit; the stricter check)
 - updated: pages/forge.md (status bullet)
 - updated: index.md (the macOS page's summary)
+
+## [2026-11-20] update | Forge's crash on quit: static fonts outlive JUCE's CoreText registry (fix pending)
+- source: the main agent's addendum (run 44846507141 on 792745a: exit 134, "mutex lock failed", no crash report; the cause read in JUCE 8.0.13's juce_Fonts_mac.mm), checked against the uncommitted FontStore in instruments/rhino-forge/ui/ForgeType.h and ui/ForgeChrome.h; the cause is confirmed, and the fix is recorded as written but not yet committed or verified. The font statics removed as an unconfirmed suspect in the previous entry turn out to be the cause, by way of the registry's mutex
+- created: pages/static-juce-font-aborts-quit-on-macos.md (symptom, the destruction order, the FontStore fix, the rule, CI as the regression test, Rhino not checked)
+- updated: pages/forge-macos-build.md (the crash reproduced and its cause in Status; the runner writes no crash reports; summary)
+- updated: pages/forge-macos-rolling-prerelease.md (792745a published nothing; the release stays at 4ce11ab's build)
+- updated: pages/forge-editor.md (rule: no static juce::Font or Typeface::Ptr; Related)
+- updated: pages/plugin-static-images-deadlock-on-unload.md (Related: the font counterpart)
+- updated: pages/orphaned-build-processes.md (TaskStop on a build stranded three cl.exe holding ForgeChrome.h)
+- updated: pages/forge.md (status bullet)
+- updated: index.md (Gotchas: the new page; the macOS page's summary)
+
+## [2026-11-20] update | Forge's quit fix committed and verified on the runner (195b93d)
+- source: the main agent's addendum (run 44849124968 on 195b93d: exit 0, the pre-release replaced at 195b93d, 2026-11-21T01:21:20Z); the window fit and the quit fix still await the real Mac
+- updated: pages/static-juce-font-aborts-quit-on-macos.md (the fix's commit; Verified on the runner and on Windows; summary)
+- updated: pages/forge-macos-build.md (the crash fixed and verified in Status; both fixes awaiting the real Mac in Still open; summary)
+- updated: pages/forge-macos-rolling-prerelease.md (the release now at 195b93d, carrying both fixes)
+- updated: pages/forge-editor.md (the font rule names the commit)
+- updated: pages/forge.md (status bullet)
+- updated: pages/development-environment.md (the PowerShell -m here-string with double quotes failed again, committing nothing)
+- updated: index.md (summaries of the macOS page and the font gotcha)

@@ -4,7 +4,7 @@ type: gotcha
 summary: An object or source file that another process holds is usually another session's build, an idle MSBuild node or an orphaned cl.exe.
 tags: [both, build, windows]
 sources: []
-updated: 2026-10-13
+updated: 2026-11-20
 ---
 
 # Build locks from MSBuild nodes and orphaned compilers
@@ -23,7 +23,12 @@ Another process has the file open. Three owners have been found on the developme
 
 1. **Another agent session's build.** A `cmake.exe --build native/build` that you did not start belongs to a second session working in the same tree. Its parent shell's command line names that session's own `shell-snapshots/snapshot-bash-<id>.sh`. The other build need not be an agent's: the user builds from their own terminal too. Two builds in one tree write the same objects: on 2026-10-13 an agent's Forge test and VST3 builds ran while the user was building `instruments/rhino-forge/build` themselves, and both failed with `C1083` and `D8040`. A plain re-run once the other build had finished succeeded, so wait rather than fix code.
 2. **Idle MSBuild nodes.** `MSBuild.exe ... /nodemode:1 /nodeReuse:true` with a dead parent is a reusable node, not an orphan. The next build picks it up, so a `cl.exe` under it may be compiling *your* build. Tens of seconds of CPU (`(Get-Process -Id <pid>).CPU`) means it is working. These idle nodes cause the short-lived `.obj` lock.
-3. **Orphaned compilers.** A `cl.exe` or `Tracker.exe` whose MSBuild parent has died holds the sources it was reading, and nothing will ever close those handles. On 2026-09-22 nine came from an agent's tool timeout during a full Forge rebuild, which takes about eight minutes. The timeout killed MSBuild and stranded its compilers.
+3. **Orphaned compilers.** A `cl.exe` or `Tracker.exe` whose MSBuild parent has died holds the sources it was reading, and nothing will ever close those handles. On 2026-09-22 nine came from an agent's tool timeout during a full Forge rebuild, which takes about eight minutes. The timeout killed MSBuild and stranded its compilers. On 2026-11-20, stopping a background Forge build with the agent's TaskStop did the same:
+   - Three `cl.exe` were left hung under a `Tracker.exe` whose MSBuild was gone, their CPU flat.
+   - They held `ui/ForgeChrome.h`, so an edit to it failed with `EPERM`.
+   - They were proven to be that build's by their start time and their parent chain to the stopped MSBuild, and then ended.
+
+   So stopping a build does not stop its compilers.
 
 ## Confirm
 

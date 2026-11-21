@@ -1,7 +1,7 @@
 ---
 title: Forge's macOS build and installer
 type: guide
-summary: Since 2026-11-20 a GitHub-hosted macos-15 runner builds Forge's app, VST3 and AU universal (arm64 and x86_64, macOS 11 and up), packs them into one Rhino Forge.pkg signed ad hoc and not notarized, keeps it 30 days as the run's artifact, then installs it on the runner and runs auval; from main a green run also publishes it as a public pre-release. Whoever installs it must allow it once under Privacy & Security. Verified end to end on the runner on 2026-11-20 (3333e60), after clang refused `file = {}` and `pkgbuild --analyze` wrote no BundleIsRelocatable key. On the first real Mac it installed, but the window was too tall (fixed in 251b554) and every quit crashed. The crash's cause is unknown and the runner has not reproduced it; a CI quit check that reads the app's exit status keeps a crashing build from being published.
+summary: Since 2026-11-20 a GitHub-hosted macos-15 runner builds Forge's app, VST3 and AU universal (arm64 and x86_64, macOS 11 and up), packs them into one Rhino Forge.pkg signed ad hoc and not notarized, keeps it 30 days as the run's artifact, then installs it on the runner and runs auval; from main a green run also publishes it as a public pre-release. Whoever installs it must allow it once under Privacy & Security. Verified end to end on the runner on 2026-11-20 (3333e60), after clang refused `file = {}` and `pkgbuild --analyze` wrote no BundleIsRelocatable key. On the first real Mac it installed, but the window was too tall (fixed in 251b554) and every quit crashed. A CI quit check that reads the app's exit status, since the runner writes no crash reports, reproduced the crash: static fonts outliving JUCE's CoreText registry. The fix, 195b93d, passed it, and the pre-release carries both fixes; neither has been confirmed on the real Mac yet.
 tags: [forge, build, macos, ci, packaging, release]
 sources: []
 updated: 2026-11-20
@@ -64,7 +64,7 @@ The package is signed ad hoc only, with no Developer ID and no notarization. Who
 - **GitHub retired the `macos-14` image.** A run on it is cancelled within two seconds, and its only annotation reads "The configuration 'macos-14-arm64-us-default' is not supported". The pinned JUCE is 8.0.13 (read from the pinned commit's `CMakeLists.txt` on GitHub), which builds with the macOS 15 SDK.
 - **clang refuses what MSVC accepts.** The first macos-15 run stopped on `currentPresetFile = {};`, an assignment that is ambiguous for a `juce::File` ([clang refuses `= {}` on a juce::File](juce-file-assign-empty-braces.md)). A Windows build proves nothing about the macOS build.
 - **`pkgbuild --analyze` may write no `BundleIsRelocatable` key.** On the `macos-15` runner it wrote none for any bundle. PlistBuddy's `Set` refuses a key that does not exist (`Set: Entry, ":0:BundleIsRelocatable", Does Not Exist`), so the package script stopped there. Set the key with `plutil -replace`, which adds a missing key.
-- **A runner may write no crash reports.** The first quit check (`4ce11ab`) looked only for a report under `~/Library/Logs/DiagnosticReports`, so it may have been unable to fail. Read the process's exit status instead (`792745a`), which needs the binary started directly, not through `open`.
+- **The runner writes no crash reports.** The first quit check (`4ce11ab`) looked only for a report under `~/Library/Logs/DiagnosticReports`, and passed a build that aborts on every quit. Read the process's exit status instead (`792745a`), which needs the binary started directly, not through `open`.
 - The run warns that `actions/checkout@v4`, `actions/cache@v4`, `actions/setup-python@v5` and `actions/download-artifact@v4` target Node 20, which GitHub has deprecated and now runs on Node 24. This is harmless for now (2026-11-20).
 
 ## Status
@@ -94,20 +94,16 @@ How it got there:
 
 **On a real Mac, 2026-11-20.** The first install was on a 13-inch MacBook (2560×1600 panel, macOS in Spanish). The installer worked once past Gatekeeper (above). It showed two problems:
 
-- **The window did not fit.** Everything from the keyboard down opened off the screen. Fixed in `251b554`, which fits the first window to the screen and scales the panel down where even its minimum does not fit ([Forge editor (panel)](forge-editor.md#fitting-the-first-window-to-the-screen)). The pre-release has carried the fix since run 44845567288 (`4ce11ab`), but the fit has not yet been seen on a real Mac.
-- **Every quit crashed** ("Rhino Forge se ha cerrado inesperadamente", that is, quit unexpectedly). The cause is **unknown**, and the runner has not reproduced it.
-  - Run 44845567288 opened and quit the app in 27 s, with no crash report and no warning that it failed to quit. But that check may have been unable to fail (Gotchas).
-  - `792745a` also checks the exit status. Its run is in progress.
-  - Differences that could explain a crash the runner does not see:
-    - On the Mac the window was closed with its close button, not an Apple Event quit, although both reach `JUCEApplication::quit` in JUCE's standalone.
-    - The app was used there: notes were played, and LOAD may have been opened, which starts the preset lister thread ([Forge preset browser and bank](forge-preset-browser.md#listing-on-a-thread)).
-    - A real audio device was running.
-    - That Mac probably ran macOS 14 or older, going by the Gatekeeper wording, against the runner's 15.
-  - The crash report from that Mac ("Informe...") has been asked for, and would settle it.
+- **The window did not fit.** Everything from the keyboard down opened off the screen. Fixed in `251b554`, which fits the first window to the screen and scales the panel down where even its minimum does not fit ([Forge editor (panel)](forge-editor.md#fitting-the-first-window-to-the-screen)). The pre-release has carried the fix since run 44845567288 (`4ce11ab`).
+- **Every quit crashed** ("Rhino Forge se ha cerrado inesperadamente", that is, quit unexpectedly). Fixed in `195b93d` and verified on the runner.
+  - Run 44845567288 (`4ce11ab`) passed the first quit check, which looked only for a crash report.
+  - Run 44846507141 (`792745a`) then reproduced the crash through the exit status: 134, `std::system_error: mutex lock failed`. It wrote no report, so the first check had been blind.
+  - The cause: Forge's static fonts outlive the mutex of JUCE's CoreText typeface registry ([A static juce::Font aborts every quit on macOS](static-juce-font-aborts-quit-on-macos.md)).
+  - Run 44849124968 (`195b93d`) quit with status 0 and published the pre-release, which now carries both the window fit and the quit fix. The release is at `195b93d`, published 2026-11-21T01:21:20Z, with a 47.4 MB `.pkg`.
 
 Still open:
 
-- The crash on quit.
+- Neither the window fit nor the quit fix has been confirmed on the real Mac. That waits for a reinstall from the pre-release.
 - Forge's tests are not built or run on macOS.
 - The workflow's actions target Node 20 (a warning only).
 - Developer ID signing and notarization.
@@ -117,6 +113,7 @@ Still open:
 
 - [Forge's macOS test build is a rolling public pre-release](forge-macos-rolling-prerelease.md)
 - [Forge editor (panel)](forge-editor.md)
+- [A static juce::Font aborts every quit on macOS](static-juce-font-aborts-quit-on-macos.md)
 - [Build and test Forge](build-and-test-forge.md)
 - [clang refuses `= {}` on a juce::File](juce-file-assign-empty-braces.md)
 - [Rhino Forge](forge.md)

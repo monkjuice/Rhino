@@ -59,3 +59,4 @@ The user's original freeze, deleting Forge from the rack after opening its windo
 - [Forge editor (panel)](forge-editor.md)
 - [Profile paint on a software image](profile-paint-on-a-software-image.md)
 - [The executable is RhinoDAW, not Rhino](executable-named-rhinodaw.md), the other NVIDIA driver trap
+- [A static juce::Font aborts every quit on macOS](static-juce-font-aborts-quit-on-macos.md), the same lesson for fonts

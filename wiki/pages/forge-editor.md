@@ -1,10 +1,10 @@
 ---
 title: Forge editor (panel)
 type: component
-summary: One Editor class across twenty files builds the panel from declared modules and decides what is visible in one place.
-tags: [forge, ui, layout]
+summary: One Editor class across twenty files builds the panel from declared modules, decides what is visible in one place, and fits its first window to the screen, scaling the whole panel down where even its minimum does not fit.
+tags: [forge, ui, layout, macos]
 sources: []
-updated: 2026-10-25
+updated: 2026-11-20
 ---
 
 # Forge editor (panel)
@@ -24,6 +24,33 @@ The panel is one `Editor` (`src/ForgeEditor.h`) defined across twenty `.cpp` fil
 - **Title room.** A banked module with no drag handle draws its title and starts its cards past it, at `bankTitleGutterOf(module)` = max(34, 9 px per title letter − 4). Until 2026-10-22 such titles were held to three characters. The layout test now measures the title at the header font (14.5) against that gutter rather than counting letters. At 1180 px wide, FILTER's card "2" ends just short of the part number A-06.
 
 **Adding a control** is its parameter in `src/ForgeParameters.cpp` plus a line in `ui/ForgeModules.h`. The layout test (`tests/ForgeTestsLayout.cpp`) fails if the two disagree in either direction, if a control or enable lacks a real tooltip in `ui/ForgeTooltips.h`, or if a module escapes or overlaps at any allowed size, swept in 20 px steps (about 800 sizes between 1180×820 and 2000×1180). A parameter set by dragging on a display rather than from a cell must be listed in `displayParameters` (`ui/ForgeModules.h`) for that test to find it. As of `bbc2b85` these are the spectral oscillator's four markers, Start, End, LoopStart and LoopEnd ([Forge spectral oscillator](forge-spectral.md)); since 2026-10-13 the LFO module's `lfo{n}Type` and `lfo{n}Direction`, chosen from dropdowns in its display's footer, are listed too ([Forge LFOs](forge-lfos.md)). A parameter whose control is painted on the chassis rather than declared in any module is listed in `chassisParameters()` beside it, and needs a tooltip like any other; since 2026-10-13 that is `arpSlot`, the ARP plate's buttons ([Forge ARP plate, slots and waterfall](forge-arp-plate.md)).
+
+## Fitting the first window to the screen
+
+The panel opens at 1440×900 with a minimum of 1180×820 (`ui/ForgePlacement.h`). On the first real Mac (2026-11-20), a 13-inch MacBook, the keyboard and everything under it opened off the screen. Such a Mac shows 1440×900 points by default, and less the menu bar, the Dock and the title bar it leaves about 780 points of height. That is under even the minimum, so resizing could not help. Since `251b554`, the panel shrinks to fit.
+
+**The arithmetic.** `ui::fitPanel(availableWidth, availableHeight)` is a pure function returning a `PanelFit {width, height, scale}`:
+
+- the default size where it fits
+- otherwise, each dimension clamped between the minimum and the default to what is available
+- `scale = min(1, available / size)`, so the panel shrinks as a whole when even the minimum is too big. It never scales up.
+- for an area with no size, the default, unscaled
+
+`panelFitSuite` (`forge_layout`) covers a roomy screen, a size between the minimum and the default, the 13-inch case (1440×778 gives the minimum height, scaled), a screen narrower than the minimum, and no screen.
+
+**When it runs.** `Editor::parentHierarchyChanged` (`src/ForgeEditorLayout.cpp`) calls `fitToScreen()` once, the first time the editor has a peer, meaning it is in a window on the desktop.
+
+1. It takes the display under the editor (`getDisplayForRect(getScreenBounds())`, `userBounds`; `userArea` is deprecated in JUCE 8.0.13).
+2. It subtracts the window's chrome: the top-level component's size less the editor's, plus the peer's frame. At least 60 points of height are allowed for a host's header, which the editor cannot see.
+3. It calls `setSize(fit)` and then `AudioProcessorEditor::setScaleFactor(fit.scale)`.
+
+The scale goes through `setScaleFactor`, not `setTransform`, because `AudioProcessorEditor` asserts that its transform equals the host's scale transform. JUCE's standalone window and plugin wrappers size themselves from the editor's transformed bounds (`getLocalArea(editor, ...)` in `juce_StandaloneFilterWindow.h`), so the scale reaches the window.
+
+**Choices:**
+
+- **At the first window, not in the constructor.** Headless editors in the tests have no peer, so they keep the default size and the pixel tests stay deterministic.
+- **Once.** A later resize by the player stays the player's.
+- **A host's scale wins.** `Editor` overrides `setScaleFactor` to remember the host's scale. If a host has set one other than 1, as Windows hosts do for DPI, the fit leaves the size to the host.
 
 ## Pages
 
@@ -69,6 +96,7 @@ The tick repaints only the live regions and every ordinary knob shares one size:
 ## Related
 
 - [Rhino Forge](forge.md)
+- [Forge's macOS build and installer](forge-macos-build.md)
 - [Forge modulation: matrix, envelopes, LFOs and macros](forge-modulation.md)
 - [Forge LFOs](forge-lfos.md)
 - [Forge's FX strips are per-type plans in a pure header](forge-fx-strip-plans.md)

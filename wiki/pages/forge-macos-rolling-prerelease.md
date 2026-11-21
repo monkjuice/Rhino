@@ -59,7 +59,7 @@ Checked afterwards with no authentication:
 - The release API for `forge-macos-latest` reports the title above, `prerelease` true, `target_commitish` `aac0b67c8a2a...`, and one asset, `Rhino-Forge-macOS.pkg`, of 47.4 MB.
 - The asset URL redirects to `release-assets.githubusercontent.com` and returns 200 with that file name, so anyone can download it without a GitHub account.
 
-The package has still not been installed on a real Mac. `actions/download-artifact@v4` carries the same Node 20 deprecation warning as the other actions ([Forge's macOS build and installer](forge-macos-build.md#gotchas)).
+Since `4ce11ab` the build job also opens and quits the installed app. Since `792745a` it fails on a non-zero exit status as well as on a crash report, so a build that crashes on quit on the runner is not published. The first real Mac crashed on every quit, but the runner has not reproduced it. Run 44845567288 (`4ce11ab`) passed and replaced the release, which now carries the window fit from `251b554` ([Forge's macOS build and installer](forge-macos-build.md#status)). `actions/download-artifact@v4` carries the same Node 20 deprecation warning as the other actions ([Forge's macOS build and installer](forge-macos-build.md#gotchas)).
 
 ## Related
 

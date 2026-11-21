@@ -1727,3 +1727,18 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/forge-macos-rolling-prerelease.md (Status verified, with the run and the outside check; download-artifact's Node 20 warning; summary)
 - updated: pages/forge-macos-build.md (run 7 verified in Status; download-artifact added to the Node 20 gotcha)
 - updated: index.md (the pre-release page's summary)
+
+## [2026-11-20] update | Forge on the first real Mac: the window fitted to the screen (251b554), a CI quit check (4ce11ab)
+- source: the main agent's brief, checked against instruments/rhino-forge/ui/ForgePlacement.h (fitPanel), src/ForgeEditorLayout.cpp (parentHierarchyChanged, setScaleFactor, fitToScreen) and .github/workflows/forge-macos.yml (Open and quit the app); the crash on quit is recorded as unconfirmed, its suspect named, pending the next addendum
+- updated: pages/forge-editor.md (new section: fitting the first window to the screen, fitPanel's rules, when and how it runs, why setScaleFactor, the decisions; summary, tags)
+- updated: pages/forge-macos-build.md (the quit step and quit.log; the Gatekeeper wording and ways past it; the real-Mac findings in Status; the crash on quit in Still open; summary)
+- updated: pages/forge-macos-rolling-prerelease.md (a crash on quit now blocks publishing; the release stays at aac0b67)
+- updated: pages/forge.md (status bullet)
+- updated: index.md (summaries of the macOS page and the Forge editor)
+
+## [2026-11-20] update | Forge's crash on quit not reproduced on the runner; the quit check reads the exit status (792745a)
+- source: the main agent's addendum (run 44845567288 on 4ce11ab green, publishing the window fit), checked against .github/workflows/forge-macos.yml (Open and quit the app); the crash stays unconfirmed, and the font statics named as its suspect in the previous entry were removed at the coordinator's direction, since nothing confirms them
+- updated: pages/forge-macos-build.md (the quit step as of 792745a: the binary started directly, the exit status read, the killed flag; a gotcha that a runner may write no crash reports; the crash's cause unknown, with the differences between the runner and the Mac and the report asked for; the fit published but unseen on a Mac; summary)
+- updated: pages/forge-macos-rolling-prerelease.md (the release replaced by 4ce11ab and carrying the window fit; the stricter check)
+- updated: pages/forge.md (status bullet)
+- updated: index.md (the macOS page's summary)
